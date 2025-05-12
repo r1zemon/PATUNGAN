@@ -1,3 +1,4 @@
+
 // 'use server';
 /**
  * @fileOverview Summarizes the bill for each person based on the split items.
@@ -44,7 +45,7 @@ Your job is to create a summary of each person and their total amount owed.
 
 Here is the item list:
 {{#each items}}
-- {{name}}: ${{price}} (Assigned to: {{分配给}})
+- {{name}}: \${{price}} (Assigned to: {{#if 分配给.length}}{{#each 分配给}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}{{else}}N/A{{/if}})
 {{/each}}
 
 Here is the list of people involved: {{people}}
@@ -64,3 +65,4 @@ const summarizeBillFlow = ai.defineFlow(
     return output!;
   }
 );
+

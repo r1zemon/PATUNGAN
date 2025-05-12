@@ -1,3 +1,4 @@
+
 // Scans a receipt image and extracts item details.
 //
 // - scanReceipt - Extracts item details from a receipt image.
@@ -41,6 +42,14 @@ const scanReceiptPrompt = ai.definePrompt({
 Receipt Image: {{media url=receiptDataUri}}
 
 Return the items in JSON format.`,
+  config: {
+    safetySettings: [
+      { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_ONLY_HIGH' },
+      { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_ONLY_HIGH' },
+      { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_ONLY_HIGH' },
+      { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_ONLY_HIGH' },
+    ],
+  },
 });
 
 const scanReceiptFlow = ai.defineFlow(
@@ -51,6 +60,11 @@ const scanReceiptFlow = ai.defineFlow(
   },
   async input => {
     const {output} = await scanReceiptPrompt(input);
-    return output!;
+    if (!output) {
+      console.error("ScanReceiptFlow: Genkit prompt returned null/undefined output.");
+      throw new Error("Receipt scanning returned no valid data from AI model.");
+    }
+    return output;
   }
 );
+

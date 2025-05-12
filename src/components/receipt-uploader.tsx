@@ -8,20 +8,50 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { FileImage, Loader2, ScanLine } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
 interface ReceiptUploaderProps {
-  onScan: (formData: FormData) => void;
+  onScan: (dataUri: string) => void;
   isScanning: boolean;
 }
+
+// Helper to convert File to Base64 Data URI
+const fileToDataUri = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      resolve(reader.result as string);
+    };
+    reader.onerror = (error) => {
+      reject(error);
+    };
+    reader.readAsDataURL(file);
+  });
+};
 
 export function ReceiptUploader({ onScan, isScanning }: ReceiptUploaderProps) {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { toast } = useToast();
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
+      const allowedTypes = ["image/jpeg", "image/png", "image/webp"];
+      if (!allowedTypes.includes(file.type)) {
+        toast({
+          variant: "destructive",
+          title: "Invalid File Type",
+          description: "Please upload an image (JPEG, PNG, WebP).",
+        });
+        setSelectedFile(null);
+        setPreviewUrl(null);
+        if (fileInputRef.current) {
+            fileInputRef.current.value = ""; // Reset file input
+        }
+        return;
+      }
       setSelectedFile(file);
       const reader = new FileReader();
       reader.onloadend = () => {
@@ -34,12 +64,22 @@ export function ReceiptUploader({ onScan, isScanning }: ReceiptUploaderProps) {
     }
   };
 
-  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!selectedFile) return;
-    const formData = new FormData();
-    formData.append("receiptImage", selectedFile);
-    onScan(formData);
+
+    try {
+      const dataUri = await fileToDataUri(selectedFile);
+      onScan(dataUri);
+    } catch (error) {
+      console.error("Error converting file to Data URI in ReceiptUploader:", error);
+      const message = error instanceof Error ? error.message : "Failed to read file.";
+      toast({
+        variant: "destructive",
+        title: "File Processing Error",
+        description: `Could not process the file: ${message}`,
+      });
+    }
   };
 
   const triggerFileInput = () => {

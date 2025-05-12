@@ -4,45 +4,20 @@ import { scanReceipt, ScanReceiptOutput } from "@/ai/flows/scan-receipt";
 import { summarizeBill, SummarizeBillOutput, SummarizeBillInput } from "@/ai/flows/summarize-bill";
 import type { SplitItem, Person } from "./types";
 
-// Helper to convert File to Base64 Data URI
-const fileToDataUri = (file: File): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      resolve(reader.result as string);
-    };
-    reader.onerror = (error) => {
-      reject(error);
-    };
-    reader.readAsDataURL(file);
-  });
-};
-
 export async function handleScanReceiptAction(
-  formData: FormData
+  receiptDataUri: string
 ): Promise<{ success: boolean; data?: ScanReceiptOutput; error?: string }> {
-  const file = formData.get("receiptImage") as File;
-
-  if (!file || file.size === 0) {
-    return { success: false, error: "No file uploaded." };
+  if (!receiptDataUri) {
+    return { success: false, error: "No receipt image data provided." };
   }
 
-  const allowedTypes = ["image/jpeg", "image/png", "image/webp"];
-  if (!allowedTypes.includes(file.type)) {
-    return { success: false, error: "Invalid file type. Please upload an image (JPEG, PNG, WebP)." };
-  }
-  
-  let receiptDataUri: string;
-  try {
-    receiptDataUri = await fileToDataUri(file);
-  } catch (error) {
-    console.error("Error converting file to Data URI in handleScanReceiptAction:", error);
-    const message = error instanceof Error ? error.message : "Failed to read file.";
-    return { success: false, error: `File processing error: ${message}` };
+  // Basic validation for data URI format (can be more robust)
+  if (!receiptDataUri.startsWith("data:image/")) {
+    return { success: false, error: "Invalid image data format." };
   }
 
   try {
-    console.log("handleScanReceiptAction: Calling scanReceipt flow...");
+    console.log("handleScanReceiptAction: Calling scanReceipt flow with data URI...");
     const result = await scanReceipt({ receiptDataUri });
     
     if (result && result.items !== undefined) {
@@ -61,7 +36,12 @@ export async function handleScanReceiptAction(
         // Attempt to get more details from Genkit or underlying errors
         if (error.cause) {
             try {
-                errorMessage += ` (Cause: ${JSON.stringify(error.cause)})`;
+                // Check if cause is an object and has a message property
+                if (typeof error.cause === 'object' && error.cause !== null && 'message' in error.cause) {
+                     errorMessage += ` (Cause: ${(error.cause as Error).message})`;
+                } else {
+                    errorMessage += ` (Cause: ${JSON.stringify(error.cause)})`;
+                }
             } catch (e) {
                 errorMessage += ` (Cause: ${String(error.cause)})`;
             }
@@ -104,6 +84,23 @@ export async function handleSummarizeBillAction(
   } catch (error)
    {
     console.error("Error summarizing bill:", error);
-    return { success: false, error: "Failed to summarize bill. Please try again." };
+    let errorMessage = "Failed to summarize bill. Please try again.";
+    if (error instanceof Error) {
+        errorMessage = `Summarize bill failed: ${error.message}`;
+         if (error.cause) {
+            try {
+                if (typeof error.cause === 'object' && error.cause !== null && 'message' in error.cause) {
+                     errorMessage += ` (Cause: ${(error.cause as Error).message})`;
+                } else {
+                    errorMessage += ` (Cause: ${JSON.stringify(error.cause)})`;
+                }
+            } catch (e) {
+                errorMessage += ` (Cause: ${String(error.cause)})`;
+            }
+        }
+    } else if (typeof error === 'string') {
+        errorMessage = `Summarize bill failed: ${error}`;
+    }
+    return { success: false, error: errorMessage };
   }
 }

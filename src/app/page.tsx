@@ -31,12 +31,12 @@ export default function SplitBillPage() {
 
   const { toast } = useToast();
 
-  const handleScanReceipt = async (formData: FormData) => {
+  const handleScanReceipt = async (receiptDataUri: string) => {
     setIsScanning(true);
     setError(null);
     setBillSummary(null); // Reset summary when new receipt is scanned
 
-    const result = await handleScanReceiptAction(formData);
+    const result = await handleScanReceiptAction(receiptDataUri);
     if (result.success && result.data) {
       const newScannedItems: ScannedItem[] = result.data.items.map((item, index) => ({
         id: `scanned_${Date.now()}_${index}`, // Simple unique ID

@@ -27,19 +27,51 @@ export async function handleScanReceiptAction(
     return { success: false, error: "No file uploaded." };
   }
 
-  // Validate file type (optional, but good practice)
   const allowedTypes = ["image/jpeg", "image/png", "image/webp"];
   if (!allowedTypes.includes(file.type)) {
     return { success: false, error: "Invalid file type. Please upload an image (JPEG, PNG, WebP)." };
   }
   
+  let receiptDataUri: string;
   try {
-    const receiptDataUri = await fileToDataUri(file);
-    const result = await scanReceipt({ receiptDataUri });
-    return { success: true, data: result };
+    receiptDataUri = await fileToDataUri(file);
   } catch (error) {
-    console.error("Error scanning receipt:", error);
-    return { success: false, error: "Failed to scan receipt. Please try again." };
+    console.error("Error converting file to Data URI in handleScanReceiptAction:", error);
+    const message = error instanceof Error ? error.message : "Failed to read file.";
+    return { success: false, error: `File processing error: ${message}` };
+  }
+
+  try {
+    console.log("handleScanReceiptAction: Calling scanReceipt flow...");
+    const result = await scanReceipt({ receiptDataUri });
+    
+    if (result && result.items !== undefined) {
+      console.log(`handleScanReceiptAction: Scan successful, ${result.items.length} items found.`);
+      return { success: true, data: result };
+    } else {
+      console.error("handleScanReceiptAction: scanReceipt returned an unexpected structure:", result);
+      return { success: false, error: "Received unexpected data from scanner. Please try again." };
+    }
+  } catch (error) { 
+    console.error("handleScanReceiptAction: Critical error during scanReceipt call:", error);
+    
+    let errorMessage = "Failed to scan receipt due to an unexpected server error. Please try again.";
+    if (error instanceof Error) {
+        errorMessage = `Scan failed: ${error.message}`;
+        // Attempt to get more details from Genkit or underlying errors
+        if (error.cause) {
+            try {
+                errorMessage += ` (Cause: ${JSON.stringify(error.cause)})`;
+            } catch (e) {
+                errorMessage += ` (Cause: ${String(error.cause)})`;
+            }
+        }
+    } else if (typeof error === 'string') {
+        errorMessage = `Scan failed: ${error}`;
+    }
+    
+    console.error("handleScanReceiptAction: Final error message to client:", errorMessage);
+    return { success: false, error: errorMessage };
   }
 }
 
@@ -65,7 +97,6 @@ export async function handleSummarizeBillAction(
      // This is a soft check, the AI might handle it, but it's good to be aware.
      // console.warn("Some items with price are not assigned to anyone.");
   }
-
 
   try {
     const result = await summarizeBill({ items: itemsForAI, people: peopleNamesForAI });

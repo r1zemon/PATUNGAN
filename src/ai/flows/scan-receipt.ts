@@ -1,4 +1,3 @@
-
 // Scans a receipt image and extracts item details.
 //
 // - scanReceipt - Extracts item details from a receipt image.
@@ -30,7 +29,17 @@ const ScanReceiptOutputSchema = z.object({
 export type ScanReceiptOutput = z.infer<typeof ScanReceiptOutputSchema>;
 
 export async function scanReceipt(input: ScanReceiptInput): Promise<ScanReceiptOutput> {
-  return scanReceiptFlow(input);
+  console.log("scanReceipt (wrapper): Calling scanReceiptFlow.");
+  try {
+    const result = await scanReceiptFlow(input);
+    console.log("scanReceipt (wrapper): scanReceiptFlow completed.");
+    return result;
+  } catch (e) {
+    console.error("scanReceipt (wrapper): Error calling scanReceiptFlow. This should ideally not happen if flow handles its errors.", e);
+    // This path should ideally not be hit if scanReceiptFlow correctly handles all its internal errors and returns ScanReceiptOutput.
+    // If it is hit, it means a more fundamental error occurred in Genkit or the flow definition.
+    return { items: [] }; // Fallback to ensure type consistency
+  }
 }
 
 const scanReceiptPrompt = ai.definePrompt({
@@ -43,12 +52,14 @@ If the image is not a receipt, or if no items can be clearly identified, return 
 
 Receipt Image: {{media url=receiptDataUri}}`,
   config: {
+    // model: ai.getModel(), // Uses default model from genkit.ts
     safetySettings: [
       { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_ONLY_HIGH' },
       { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_ONLY_HIGH' },
       { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_ONLY_HIGH' },
       { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_ONLY_HIGH' },
     ],
+    // temperature: 0.1, // For potentially more deterministic JSON output
   },
 });
 
@@ -59,39 +70,49 @@ const scanReceiptFlow = ai.defineFlow(
     outputSchema: ScanReceiptOutputSchema,
   },
   async (input): Promise<ScanReceiptOutput> => {
+    console.log(`ScanReceiptFlow: Started. Input receiptDataUri (first 100 chars): ${input.receiptDataUri.substring(0,100)}...`);
     try {
-      // Call the Genkit prompt.
-      // `output` will be `ScanReceiptOutput | undefined`.
-      // It's `undefined` if the model's response can't be parsed into `ScanReceiptOutputSchema`.
+      console.log("ScanReceiptFlow: Attempting to call scanReceiptPrompt...");
       const { output } = await scanReceiptPrompt(input);
+      console.log("ScanReceiptFlow: Received raw output from prompt. Attempting to stringify:", typeof output);
+      
+      // Log carefully as output might be undefined or complex
+      try {
+        console.log("ScanReceiptFlow: Raw output object:", JSON.stringify(output, null, 2));
+      } catch (stringifyError) {
+        console.warn("ScanReceiptFlow: Could not stringify raw output. Output:", output);
+      }
 
       if (output && Array.isArray(output.items)) {
-        // Successfully parsed, and `items` is an array (as per schema).
+        console.log(`ScanReceiptFlow: Successfully parsed output. Number of items: ${output.items.length}`);
         return output;
       } else {
-        // This covers cases where:
-        // 1. `output` is undefined (e.g., parsing failed, model returned non-JSON or malformed JSON).
-        // 2. `output` is an object, but `output.items` is not an array (model didn't adhere strictly for the `items` field,
-        //    though Zod schema validation should ideally lead to `output` being undefined in such cases).
-        //    This acts as a safeguard.
         console.warn(
-          "ScanReceiptFlow: Prompt returned undefined output, or 'items' field was not a valid array. Defaulting to an empty items list. Received output structure (if any):",
-          output // Log the actual problematic output if it's not undefined
+          "ScanReceiptFlow: Prompt returned undefined, null, or malformed output (expected 'items' array). Defaulting to empty items list. Received output (logged above)."
         );
-        return { items: [] }; // Adhere to ScanReceiptOutput schema by returning an empty list.
+        return { items: [] };
       }
     } catch (flowError) {
-      // This catches errors from the `scanReceiptPrompt(input)` call itself,
-      // e.g., network issues, Google AI API errors, quota issues, or unexpected errors within Genkit's processing.
-      console.error(
-        "ScanReceiptFlow: An error occurred during prompt execution or result processing. Defaulting to an empty items list. Error:",
-        flowError
-      );
-      // Return a "graceful failure" state (empty items list).
-      // This aligns with the prompt's instruction to return empty items for unreadable/invalid receipts
-      // and provides a better user experience than a generic error.
-      return { items: [] }; // Adhere to ScanReceiptOutput schema
+      console.error("ScanReceiptFlow: Caught error during prompt execution or result processing. Defaulting to empty items list.");
+      if (flowError instanceof Error) {
+        console.error("Flow Error Message:", flowError.message);
+        console.error("Flow Error Stack:", flowError.stack);
+        if (flowError.cause) {
+          try {
+            console.error("Flow Error Cause:", JSON.stringify(flowError.cause, null, 2));
+          } catch (e) {
+            console.error("Flow Error Cause (could not stringify JSON):", flowError.cause);
+          }
+        }
+      } else {
+        // Attempt to log non-Error objects
+        try {
+          console.error("Full Flow Error Object (non-Error type):", JSON.stringify(flowError, null, 2));
+        } catch (e) {
+          console.error("Full Flow Error Object (non-Error type, could not stringify JSON):", flowError);
+        }
+      }
+      return { items: [] }; 
     }
   }
 );
-

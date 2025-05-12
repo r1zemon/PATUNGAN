@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect } from "react";
@@ -34,17 +35,17 @@ export default function SplitBillPage() {
   const handleScanReceipt = async (receiptDataUri: string) => {
     setIsScanning(true);
     setError(null);
-    setBillSummary(null); // Reset summary when new receipt is scanned
+    setBillSummary(null); 
 
     const result = await handleScanReceiptAction(receiptDataUri);
     if (result.success && result.data) {
-      const newScannedItems: ScannedItem[] = result.data.items.map((item, index) => ({
-        id: `scanned_${Date.now()}_${index}`, // Simple unique ID
-        name: item.name,
-        price: item.price,
+      // result.data.items are of type {id, name, unitPrice, quantity}
+      const newSplitItems: SplitItem[] = result.data.items.map(item => ({
+        ...item, // id, name, unitPrice, quantity
+        assignedTo: [], // Initialize with empty assignments
       }));
-      setSplitItems(newScannedItems.map(item => ({ ...item, assignedToIds: [] })));
-      toast({ title: "Receipt Scanned", description: `${newScannedItems.length} items found.` });
+      setSplitItems(newSplitItems);
+      toast({ title: "Receipt Scanned", description: `${newSplitItems.length} item lines found.` });
     } else {
       setError(result.error || "Failed to scan receipt.");
       toast({ variant: "destructive", title: "Scan Failed", description: result.error || "Could not process the receipt." });
@@ -56,15 +57,16 @@ export default function SplitBillPage() {
     setSplitItems((prevItems) =>
       prevItems.map((item) => (item.id === updatedItem.id ? updatedItem : item))
     );
-    setBillSummary(null); // Invalidate summary if items change
+    setBillSummary(null); 
   };
 
   const handleAddItem = () => {
     const newItem: SplitItem = {
       id: `manual_${Date.now()}`,
       name: "New Item",
-      price: 0,
-      assignedToIds: [],
+      unitPrice: 0,
+      quantity: 1,
+      assignedTo: [],
     };
     setSplitItems(prevItems => [...prevItems, newItem]);
     setBillSummary(null);
@@ -78,6 +80,19 @@ export default function SplitBillPage() {
   const handleCalculateSummary = async () => {
     setIsCalculating(true);
     setError(null);
+
+    // Validate if all items are fully assigned or if user wants to proceed with unassigned items
+    const partiallyAssignedItems = splitItems.filter(item => {
+        const totalAssignedCount = item.assignedTo.reduce((sum, assignment) => sum + assignment.count, 0);
+        return totalAssignedCount > 0 && totalAssignedCount < item.quantity;
+    });
+
+    if (partiallyAssignedItems.length > 0) {
+        // For now, we'll let the AI handle potentially unassigned portions.
+        // A confirmation dialog could be added here in a future iteration.
+        console.warn("Some items are partially assigned:", partiallyAssignedItems.map(i => i.name));
+    }
+
 
     const result = await handleSummarizeBillAction(splitItems, people);
     if (result.success && result.data) {
@@ -101,7 +116,7 @@ export default function SplitBillPage() {
             </h1>
           </div>
           <p className="text-lg text-muted-foreground max-w-xl mx-auto">
-            Effortlessly scan your receipts, assign items, and split the bill among friends.
+            Effortlessly scan your receipts, assign item quantities, and split the bill among friends.
           </p>
         </header>
 
@@ -116,7 +131,7 @@ export default function SplitBillPage() {
           <Card className="shadow-xl overflow-hidden">
             <CardHeader className="bg-card/50 border-b">
               <CardTitle className="text-2xl font-semibold">1. Scan Your Receipt</CardTitle>
-              <CardDescription>Upload an image of your receipt to automatically extract items.</CardDescription>
+              <CardDescription>Upload an image of your receipt to automatically extract item lines.</CardDescription>
             </CardHeader>
             <CardContent className="p-6">
               <ReceiptUploader onScan={handleScanReceipt} isScanning={isScanning} />
@@ -126,8 +141,8 @@ export default function SplitBillPage() {
           {splitItems.length > 0 && (
             <Card className="shadow-xl overflow-hidden">
               <CardHeader className="bg-card/50 border-b">
-                <CardTitle className="text-2xl font-semibold">2. Edit & Assign Items</CardTitle>
-                <CardDescription>Review scanned items, make corrections, and assign them to people for splitting.</CardDescription>
+                <CardTitle className="text-2xl font-semibold">2. Edit &amp; Assign Item Quantities</CardTitle>
+                <CardDescription>Review scanned items, make corrections, and assign how many units of each item each person takes.</CardDescription>
               </CardHeader>
               <CardContent className="p-6">
                 <ItemEditor

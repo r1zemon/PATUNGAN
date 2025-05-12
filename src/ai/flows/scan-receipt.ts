@@ -58,18 +58,40 @@ const scanReceiptFlow = ai.defineFlow(
     inputSchema: ScanReceiptInputSchema,
     outputSchema: ScanReceiptOutputSchema,
   },
-  async input => {
-    const {output} = await scanReceiptPrompt(input);
-    if (!output) {
-      console.error("ScanReceiptFlow: Genkit prompt returned null/undefined output. This might be due to the model failing to adhere to the schema or an internal error.");
-      throw new Error("Receipt scanning returned no valid data from AI model.");
+  async (input): Promise<ScanReceiptOutput> => {
+    try {
+      // Call the Genkit prompt.
+      // `output` will be `ScanReceiptOutput | undefined`.
+      // It's `undefined` if the model's response can't be parsed into `ScanReceiptOutputSchema`.
+      const { output } = await scanReceiptPrompt(input);
+
+      if (output && Array.isArray(output.items)) {
+        // Successfully parsed, and `items` is an array (as per schema).
+        return output;
+      } else {
+        // This covers cases where:
+        // 1. `output` is undefined (e.g., parsing failed, model returned non-JSON or malformed JSON).
+        // 2. `output` is an object, but `output.items` is not an array (model didn't adhere strictly for the `items` field,
+        //    though Zod schema validation should ideally lead to `output` being undefined in such cases).
+        //    This acts as a safeguard.
+        console.warn(
+          "ScanReceiptFlow: Prompt returned undefined output, or 'items' field was not a valid array. Defaulting to an empty items list. Received output structure (if any):",
+          output // Log the actual problematic output if it's not undefined
+        );
+        return { items: [] }; // Adhere to ScanReceiptOutput schema by returning an empty list.
+      }
+    } catch (flowError) {
+      // This catches errors from the `scanReceiptPrompt(input)` call itself,
+      // e.g., network issues, Google AI API errors, quota issues, or unexpected errors within Genkit's processing.
+      console.error(
+        "ScanReceiptFlow: An error occurred during prompt execution or result processing. Defaulting to an empty items list. Error:",
+        flowError
+      );
+      // Return a "graceful failure" state (empty items list).
+      // This aligns with the prompt's instruction to return empty items for unreadable/invalid receipts
+      // and provides a better user experience than a generic error.
+      return { items: [] }; // Adhere to ScanReceiptOutput schema
     }
-    // Ensure items is always an array, even if the model somehow misses it despite the schema (defensive)
-    if (!Array.isArray(output.items)) {
-        console.warn("ScanReceiptFlow: Output items is not an array, defaulting to empty array.", output);
-        output.items = [];
-    }
-    return output;
   }
 );
 

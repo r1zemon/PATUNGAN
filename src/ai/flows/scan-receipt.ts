@@ -37,11 +37,11 @@ const scanReceiptPrompt = ai.definePrompt({
   name: 'scanReceiptPrompt',
   input: {schema: ScanReceiptInputSchema},
   output: {schema: ScanReceiptOutputSchema},
-  prompt: `You are an expert receipt scanner. Please extract the items and their prices from the following receipt image.
+  prompt: `You are an expert receipt scanner. Your task is to analyze the provided receipt image and extract a list of items, including their names and prices.
+Please adhere strictly to the output JSON schema provided.
+If the image is not a receipt, or if no items can be clearly identified, return an empty list of items by outputting: {"items": []}.
 
-Receipt Image: {{media url=receiptDataUri}}
-
-Return the items in JSON format.`,
+Receipt Image: {{media url=receiptDataUri}}`,
   config: {
     safetySettings: [
       { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_ONLY_HIGH' },
@@ -61,8 +61,13 @@ const scanReceiptFlow = ai.defineFlow(
   async input => {
     const {output} = await scanReceiptPrompt(input);
     if (!output) {
-      console.error("ScanReceiptFlow: Genkit prompt returned null/undefined output.");
+      console.error("ScanReceiptFlow: Genkit prompt returned null/undefined output. This might be due to the model failing to adhere to the schema or an internal error.");
       throw new Error("Receipt scanning returned no valid data from AI model.");
+    }
+    // Ensure items is always an array, even if the model somehow misses it despite the schema (defensive)
+    if (!Array.isArray(output.items)) {
+        console.warn("ScanReceiptFlow: Output items is not an array, defaulting to empty array.", output);
+        output.items = [];
     }
     return output;
   }

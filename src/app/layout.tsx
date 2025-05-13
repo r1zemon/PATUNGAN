@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'SplitBillScan',
-  description: 'Scan receipts and split bills easily.',
+  title: 'Patungan - Split Bills Easily',
+  description: 'Patungan is the simple way to split bills among friends. Keep your group spending fair and stress-free!',
 };
 
 export default function RootLayout({

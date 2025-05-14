@@ -7,6 +7,7 @@ import type { SplitItem, Person, RawBillSummary, TaxTipSplitStrategy } from "./t
 import { supabase } from "./supabaseClient";
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
+import type { PostgrestSingleResponse, PostgrestResponse } from "@supabase/supabase-js";
 
 interface AppScannedItem {
   id: string;
@@ -59,11 +60,14 @@ export async function signupUserAction(formData: FormData) {
 
   if (profileError) {
     console.error("Error creating profile:", profileError);
+    // Attempt to delete the auth user if profile creation fails to keep things clean
+    // This is optional and can be complex to handle perfectly (e.g., what if this delete fails?)
+    // await supabase.auth.admin.deleteUser(authData.user.id); // Requires admin privileges, not for client-callable actions
     return { success: false, error: `Pengguna berhasil dibuat, tetapi gagal membuat profil: ${profileError.message}` };
   }
   
   revalidatePath('/', 'layout'); 
-  revalidatePath('/app', 'layout'); // Revalidate app page too for header
+  revalidatePath('/app', 'layout'); 
   return { success: true, user: authData.user };
 }
 
@@ -122,7 +126,7 @@ export async function logoutUserAction() {
     return { success: false, error: error.message };
   }
   revalidatePath('/', 'layout');
-  revalidatePath('/app', 'layout'); // Ensure app header also updates
+  revalidatePath('/app', 'layout'); 
   return { success: true };
 }
 
@@ -267,8 +271,8 @@ export async function handleSummarizeBillAction(
     .eq('id', billId);
 
   if (billUpdateError) {
-    console.error("Error updating bill details:", billUpdateError);
-    return { success: false, error: `Gagal memperbarui detail tagihan: ${billUpdateError.message}` };
+    console.error("Error updating bill details in DB:", billUpdateError);
+    return { success: false, error: `Gagal memperbarui detail tagihan di database: ${billUpdateError.message}` };
   }
 
   const itemsForAI: SummarizeBillInput["items"] = splitItems.map(item => ({
@@ -299,19 +303,31 @@ export async function handleSummarizeBillAction(
     const rawSummary: RawBillSummary = await summarizeBill(summarizeBillInput);
     
     let calculatedGrandTotal = 0;
-    const participantSharePromises = people.map(person => {
+    const participantSharePromises: Promise<PostgrestSingleResponse<any> | { error: null }>[] = people.map(person => {
       const share = rawSummary[person.name];
       if (typeof share === 'number') {
         calculatedGrandTotal += share;
         return supabase.from('bill_participants').update({ total_share_amount: share }).eq('id', person.id);
       }
-      return Promise.resolve();
+      // Return a resolved promise with a structure that won't cause issues in Promise.all error checking
+      return Promise.resolve({ error: null }); 
     });
-    await Promise.all(participantSharePromises);
     
-    await supabase.from('settlements').delete().eq('bill_id', billId);
+    const participantUpdateResponses = await Promise.all(participantSharePromises);
+    for (const response of participantUpdateResponses) {
+      if (response && response.error) {
+        console.error("Error updating participant share in DB:", response.error);
+        return { success: false, error: `Gagal memperbarui bagian partisipan di database: ${response.error.message}` };
+      }
+    }
     
-    const settlementPromises = [];
+    const { error: deleteSettlementsError } = await supabase.from('settlements').delete().eq('bill_id', billId);
+    if (deleteSettlementsError) {
+        console.error("Error deleting old settlements from DB:", deleteSettlementsError);
+        return { success: false, error: `Gagal menghapus penyelesaian lama dari database: ${deleteSettlementsError.message}` };
+    }
+    
+    const settlementPromises: Promise<PostgrestResponse<any>>[] = [];
     for (const person of people) {
       const share = rawSummary[person.name];
       if (person.id !== payerParticipantId && typeof share === 'number' && share > 0) {
@@ -325,9 +341,21 @@ export async function handleSummarizeBillAction(
         );
       }
     }
-    await Promise.all(settlementPromises);
-
-    await supabase.from('bills').update({ grand_total: calculatedGrandTotal }).eq('id', billId);
+    if (settlementPromises.length > 0) {
+        const settlementInsertResponses = await Promise.all(settlementPromises);
+        for (const response of settlementInsertResponses) {
+          if (response.error) { 
+            console.error("Error inserting settlement to DB:", response.error);
+            return { success: false, error: `Gagal menyimpan penyelesaian ke database: ${response.error.message}` };
+          }
+        }
+    }
+    
+    const { error: grandTotalUpdateError } = await supabase.from('bills').update({ grand_total: calculatedGrandTotal }).eq('id', billId);
+    if (grandTotalUpdateError) {
+        console.error("Error updating grand total in DB:", grandTotalUpdateError);
+        return { success: false, error: `Gagal memperbarui total keseluruhan di database: ${grandTotalUpdateError.message}` };
+    }
 
     return { success: true, data: rawSummary };
   } catch (error) {
@@ -350,3 +378,4 @@ export async function handleSummarizeBillAction(
     return { success: false, error: errorMessage };
   }
 }
+

@@ -12,7 +12,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
 import { Separator } from "@/components/ui/separator";
-import { Coins, LogOut, Settings, UserCircle } from "lucide-react";
+import { Coins, LogOut, Settings, UserCircle, Power } from "lucide-react";
 import Link from "next/link";
 import {
   DropdownMenu,
@@ -54,8 +54,11 @@ export default function SplitBillAppPage() {
 
     const result = await handleScanReceiptAction(receiptDataUri);
     if (result.success && result.data) {
-      const newSplitItems: SplitItem[] = result.data.items.map(item => ({
-        ...item, 
+      const newSplitItems: SplitItem[] = result.data.items.map((item: ScannedItem, index: number) => ({ // Added type for item
+        id: `scanned_${Date.now()}_${index}`, // Ensure unique ID generation as before
+        name: item.name,
+        unitPrice: item.unitPrice,
+        quantity: item.quantity,
         assignedTo: [], 
       }));
       setSplitItems(newSplitItems);
@@ -63,7 +66,7 @@ export default function SplitBillAppPage() {
       if (newSplitItems.length > 0) {
         setCurrentStep(2);
       } else {
-        toast({ variant: "default", title: "No items found", description: "The receipt scan didn't find any items. Try adding them manually or scanning again." });
+        toast({ variant: "default", title: "No items found", description: "The receipt scan didn't find any items. Try adding them manually or scanning/capturing again." });
         // Stay on step 1 or allow manual add
       }
     } else {
@@ -90,7 +93,7 @@ export default function SplitBillAppPage() {
     };
     setSplitItems(prevItems => [...prevItems, newItem]);
     setBillSummary(null);
-    if (currentStep < 2 && splitItems.length === 0) { // also transition if it's the first item
+    if (currentStep < 2 && splitItems.length === 0) { 
         setCurrentStep(2);
     }
   };
@@ -120,9 +123,9 @@ export default function SplitBillAppPage() {
     if (unassignedItems.length > 0) {
         const unassignedItemNames = unassignedItems.map(i => i.name).join(", ");
         toast({
-            variant: "default", // Changed from warning to default or secondary
+            variant: "default", 
             title: "Unassigned Units",
-            description: `Some units for: ${unassignedItemNames} are not fully assigned. They will be excluded from individual totals but included in any overall bill calculation if applicable.`,
+            description: `Some units for: ${unassignedItemNames} are not fully assigned. They will be excluded from individual totals.`,
             duration: 7000,
         });
     }
@@ -199,6 +202,7 @@ export default function SplitBillAppPage() {
         <main className="space-y-8">
           {error && (
             <Alert variant="destructive" className="shadow-md">
+              <Power className="h-4 w-4" />
               <AlertTitle>Error</AlertTitle>
               <AlertDescription>{error}</AlertDescription>
             </Alert>
@@ -208,7 +212,7 @@ export default function SplitBillAppPage() {
           <Card className="shadow-xl overflow-hidden bg-card/90 backdrop-blur-sm">
             <CardHeader className="bg-card/60 border-b">
               <CardTitle className="text-xl sm:text-2xl font-semibold">1. Scan Your Receipt</CardTitle>
-              <CardDescription>Upload an image of your receipt to automatically extract item lines. You can also add items manually in the next step.</CardDescription>
+              <CardDescription>Use your camera to scan a receipt or upload an image file. You can also add items manually in the next step.</CardDescription>
             </CardHeader>
             <CardContent className="p-4 sm:p-6">
               <ReceiptUploader onScan={handleScanReceipt} isScanning={isScanning} />
@@ -260,5 +264,3 @@ export default function SplitBillAppPage() {
     </div>
   );
 }
-
-    

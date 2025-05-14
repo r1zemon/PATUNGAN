@@ -13,6 +13,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
 import { id as IndonesianLocale } from "date-fns/locale";
+import { cn } from "@/lib/utils";
 
 
 export default function SignupPage() {
@@ -62,10 +63,15 @@ export default function SignupPage() {
               <PopoverTrigger asChild>
                 <Button
                   variant={"outline"}
-                  className={`w-full justify-start text-left font-normal pl-10 ${!dateOfBirth && "text-muted-foreground"}`}
+                  className={cn(
+                    "w-full justify-start text-left font-normal",
+                    !dateOfBirth && "text-muted-foreground"
+                  )}
                 >
-                  <CalendarDays className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                  {dateOfBirth ? format(dateOfBirth, "PPP", { locale: IndonesianLocale }) : <span>Pilih tanggal lahir</span>}
+                  <div className="flex items-center">
+                    <CalendarDays className="mr-2 h-5 w-5 text-muted-foreground" />
+                    {dateOfBirth ? format(dateOfBirth, "PPP", { locale: IndonesianLocale }) : <span>Pilih tanggal lahir</span>}
+                  </div>
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-auto p-0">
@@ -149,3 +155,4 @@ export default function SignupPage() {
     </div>
   );
 }
+

@@ -54,12 +54,25 @@ export default function SplitBillAppPage() {
   const [currentUser, setCurrentUser] = useState({ name: "Guest User", avatarUrl: "" }); 
 
   const { toast } = useToast();
-  
+
+  // State for input display values to manage "0" clearing UX
+  const [taxInputDisplayValue, setTaxInputDisplayValue] = useState<string>(billDetails.taxAmount.toString());
+  const [tipInputDisplayValue, setTipInputDisplayValue] = useState<string>(billDetails.tipAmount.toString());
+
   useEffect(() => {
     if (people.length > 0 && !billDetails.payerId) {
       setBillDetails(prev => ({ ...prev, payerId: people[0].id }));
     }
   }, [people, billDetails.payerId]);
+
+  // Sync display values when billDetails.taxAmount or billDetails.tipAmount change from other sources (e.g., resetApp)
+  useEffect(() => {
+    setTaxInputDisplayValue(billDetails.taxAmount.toString());
+  }, [billDetails.taxAmount]);
+
+  useEffect(() => {
+    setTipInputDisplayValue(billDetails.tipAmount.toString());
+  }, [billDetails.tipAmount]);
 
   const itemsForSummary = useMemo(() => {
     return splitItems.filter(item => item.quantity > 0 && item.unitPrice >= 0);
@@ -73,6 +86,7 @@ export default function SplitBillAppPage() {
       tipAmount: 0,
       taxTipSplitStrategy: "SPLIT_EQUALLY",
     });
+    // The useEffects above will update taxInputDisplayValue and tipInputDisplayValue
     setDetailedBillSummary(null);
     setError(null);
     setCurrentStep(1);
@@ -150,7 +164,6 @@ export default function SplitBillAppPage() {
     setIsCalculating(true);
     setError(null);
 
-    // Use the memoized itemsForSummary
     if (itemsForSummary.length === 0) {
         setError("Tidak ada item valid untuk diringkas. Mohon tambahkan item dengan kuantitas dan harga.");
         toast({ variant: "destructive", title: "Ringkasan Gagal", description: "Tidak ada item valid untuk diringkas." });
@@ -182,7 +195,7 @@ export default function SplitBillAppPage() {
     }
 
     const result = await handleSummarizeBillAction(
-      itemsForSummary, // Use the memoized itemsForSummary
+      itemsForSummary, 
       people, 
       payerName,
       billDetails.taxAmount,
@@ -283,7 +296,6 @@ export default function SplitBillAppPage() {
             </Alert>
           )}
 
-          {/* Step 1: Scan Receipt */}
           <Card className="shadow-xl overflow-hidden bg-card/90 backdrop-blur-sm hover:shadow-2xl transition-shadow duration-300 ease-in-out">
             <CardHeader className="bg-card/60 border-b">
               <CardTitle className="text-xl sm:text-2xl font-semibold">1. Pindai Struk Anda</CardTitle>
@@ -298,7 +310,6 @@ export default function SplitBillAppPage() {
             </CardContent>
           </Card>
 
-          {/* Step 2: Edit Items, Assign, Payer, Tax/Tip */}
           {(currentStep >= 2 || splitItems.length > 0) && (
             <Card className="shadow-xl overflow-hidden bg-card/90 backdrop-blur-sm hover:shadow-2xl transition-shadow duration-300 ease-in-out">
               <CardHeader className="bg-card/60 border-b">
@@ -312,8 +323,8 @@ export default function SplitBillAppPage() {
                   onUpdateItem={handleUpdateItem}
                   onAddItem={handleAddItem}
                   onDeleteItem={handleDeleteItem}
-                  onCalculateSummary={handleCalculateSummary} // This prop is not used by ItemEditor anymore based on previous change.
-                  isCalculating={isCalculating} // This prop is not used by ItemEditor anymore based on previous change.
+                  onCalculateSummary={handleCalculateSummary}
+                  isCalculating={isCalculating}
                 />
                 
                 <Separator />
@@ -348,8 +359,20 @@ export default function SplitBillAppPage() {
                           id="taxAmount" 
                           type="number" 
                           placeholder="Contoh: 15000"
-                          value={billDetails.taxAmount}
-                          onChange={(e) => handleBillDetailsChange("taxAmount", parseFloat(e.target.value) || 0)}
+                          value={taxInputDisplayValue}
+                          onFocus={() => {
+                            if (billDetails.taxAmount === 0) {
+                              setTaxInputDisplayValue("");
+                            }
+                          }}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setTaxInputDisplayValue(val);
+                            handleBillDetailsChange("taxAmount", parseFloat(val) || 0);
+                          }}
+                          onBlur={() => {
+                            setTaxInputDisplayValue(billDetails.taxAmount.toString());
+                          }}
                           className="pl-10"
                         />
                       </div>
@@ -362,8 +385,20 @@ export default function SplitBillAppPage() {
                           id="tipAmount" 
                           type="number" 
                           placeholder="Contoh: 10000"
-                          value={billDetails.tipAmount}
-                          onChange={(e) => handleBillDetailsChange("tipAmount", parseFloat(e.target.value) || 0)}
+                          value={tipInputDisplayValue}
+                           onFocus={() => {
+                            if (billDetails.tipAmount === 0) {
+                              setTipInputDisplayValue("");
+                            }
+                          }}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setTipInputDisplayValue(val);
+                            handleBillDetailsChange("tipAmount", parseFloat(val) || 0);
+                          }}
+                          onBlur={() => {
+                            setTipInputDisplayValue(billDetails.tipAmount.toString());
+                          }}
                           className="pl-10"
                         />
                       </div>
@@ -411,7 +446,6 @@ export default function SplitBillAppPage() {
             </Card>
           )}
           
-          {/* Step 3: Bill Summary */}
           {currentStep >= 3 && detailedBillSummary && (
              <Card className="shadow-xl overflow-hidden bg-card/90 backdrop-blur-sm hover:shadow-2xl transition-shadow duration-300 ease-in-out">
               <CardHeader className="bg-card/60 border-b flex flex-row items-center justify-between">
@@ -435,3 +469,4 @@ export default function SplitBillAppPage() {
     </div>
   );
 }
+

@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 interface ReceiptUploaderProps {
   onScan: (dataUri: string) => void;
   isScanning: boolean;
+  onClearPreview?: () => void; // New prop
 }
 
 // Helper to convert File to Base64 Data URI
@@ -31,7 +32,7 @@ const fileToDataUri = (file: File): Promise<string> => {
   });
 };
 
-export function ReceiptUploader({ onScan, isScanning }: ReceiptUploaderProps) {
+export function ReceiptUploader({ onScan, isScanning, onClearPreview }: ReceiptUploaderProps) {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null); // For file preview or captured image
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -47,9 +48,6 @@ export function ReceiptUploader({ onScan, isScanning }: ReceiptUploaderProps) {
   useEffect(() => {
     const startCamera = async () => {
       if (isCameraMode) {
-        // Do not clear previewUrl here if it's from a capture,
-        // only clear it if switching modes or deselecting a file.
-        // setSelectedFile(null); // Clear any selected file
         try {
           const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
           streamRef.current = stream;
@@ -102,6 +100,7 @@ export function ReceiptUploader({ onScan, isScanning }: ReceiptUploaderProps) {
         setSelectedFile(null);
         setPreviewUrl(null);
         if (fileInputRef.current) fileInputRef.current.value = "";
+        onClearPreview?.(); // Also clear parent state if invalid file was attempted
         return;
       }
       setSelectedFile(file); // File selected, not from camera
@@ -113,6 +112,7 @@ export function ReceiptUploader({ onScan, isScanning }: ReceiptUploaderProps) {
     } else {
       setSelectedFile(null);
       setPreviewUrl(null);
+      onClearPreview?.(); // Clear parent state if selection is removed
     }
   };
 
@@ -126,6 +126,7 @@ export function ReceiptUploader({ onScan, isScanning }: ReceiptUploaderProps) {
     setPreviewUrl(null); // Clear preview when toggling mode
     setHasCameraPermission(null); 
     if (fileInputRef.current) fileInputRef.current.value = "";
+    onClearPreview?.(); // Clear parent state when toggling mode
   };
 
   const handleCaptureImage = () => {
@@ -153,17 +154,17 @@ export function ReceiptUploader({ onScan, isScanning }: ReceiptUploaderProps) {
 
   const handleRetakePhoto = () => {
     setPreviewUrl(null); // Clear the preview
+    onClearPreview?.(); // Notify parent to reset state
     // Camera stream should still be active if isCameraMode is true
-    toast({ title: "Pratinjau Dihapus", description: "Silakan ambil foto baru." });
   };
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (isScanning) return;
 
-    if (previewUrl) { // This condition covers both captured camera image and selected file preview
+    if (previewUrl) { 
         onScan(previewUrl);
-    } else if (selectedFile && !isCameraMode) { // Fallback for file if previewUrl somehow failed but file is selected
+    } else if (selectedFile && !isCameraMode) { 
         try {
             const dataUri = await fileToDataUri(selectedFile);
             onScan(dataUri);
@@ -198,10 +199,9 @@ export function ReceiptUploader({ onScan, isScanning }: ReceiptUploaderProps) {
 
       {isCameraMode ? (
         <div className="space-y-4">
-          {/* Show video feed only if there's no preview from camera capture */}
           <div className={cn(
               "bg-muted rounded-md overflow-hidden", 
-              (!hasCameraPermission || (isCameraMode && previewUrl)) && "hidden" // Hide if no permission OR if there's a preview from camera
+              (!hasCameraPermission || (isCameraMode && previewUrl)) && "hidden" 
           )}>
             <video ref={videoRef} className="w-full aspect-video rounded-md" autoPlay muted playsInline />
           </div>
@@ -215,7 +215,6 @@ export function ReceiptUploader({ onScan, isScanning }: ReceiptUploaderProps) {
               </AlertDescription>
             </Alert>
           )}
-          {/* Show capture button only if there's permission and NO preview from camera */}
           {hasCameraPermission && !previewUrl && (
             <Button type="button" onClick={handleCaptureImage} disabled={isScanning || !hasCameraPermission} className="w-full">
               <CircleDot className="mr-2" /> Ambil Gambar
@@ -239,7 +238,7 @@ export function ReceiptUploader({ onScan, isScanning }: ReceiptUploaderProps) {
             type="button"
             variant="outline"
             onClick={triggerFileInput}
-            disabled={isScanning || previewUrl !== null} // Disable if there's a preview from file upload
+            disabled={isScanning || previewUrl !== null} 
             className="w-full flex items-center justify-center gap-2 py-6 border-dashed border-2 hover:border-primary transition-colors duration-200"
             aria-label="Pilih gambar struk"
           >
@@ -264,19 +263,17 @@ export function ReceiptUploader({ onScan, isScanning }: ReceiptUploaderProps) {
            <p className="text-sm text-muted-foreground">
             {isCameraMode && !selectedFile ? "Pratinjau gambar yang diambil." : "Pratinjau file yang dipilih."}
           </p>
-          {/* Show Retake Photo button only if in camera mode and preview is from camera */}
           {isCameraMode && !selectedFile && ( 
             <Button type="button" variant="outline" size="sm" onClick={handleRetakePhoto} disabled={isScanning}>
               <Trash2 className="mr-2 h-4 w-4" /> Ambil Ulang Foto
             </Button>
           )}
-           {/* Show Clear Selection button only if in file upload mode and a file is selected (previewUrl is not null) */}
           {!isCameraMode && selectedFile && previewUrl && (
              <Button type="button" variant="outline" size="sm" onClick={() => {
                 setSelectedFile(null);
                 setPreviewUrl(null);
                 if (fileInputRef.current) fileInputRef.current.value = "";
-                toast({ title: "Pilihan Dihapus", description: "Silakan pilih file baru." });
+                onClearPreview?.(); // Notify parent to reset state
              }} disabled={isScanning}>
               <Trash2 className="mr-2 h-4 w-4" /> Hapus Pilihan File
             </Button>

@@ -45,6 +45,14 @@ export default function SplitBillAppPage() {
   const [currentUser, setCurrentUser] = useState({ name: "Guest User", avatarUrl: "" }); 
 
   const { toast } = useToast();
+  
+  const resetApp = () => {
+    setSplitItems([]);
+    setBillSummary(null);
+    setError(null);
+    setCurrentStep(1);
+    toast({ title: "Reset", description: "App state has been reset."});
+  }
 
   const handleScanReceipt = async (receiptDataUri: string) => {
     setIsScanning(true);
@@ -54,8 +62,8 @@ export default function SplitBillAppPage() {
 
     const result = await handleScanReceiptAction(receiptDataUri);
     if (result.success && result.data) {
-      const newSplitItems: SplitItem[] = result.data.items.map((item: ScannedItem, index: number) => ({ // Added type for item
-        id: `scanned_${Date.now()}_${index}`, // Ensure unique ID generation as before
+      const newSplitItems: SplitItem[] = result.data.items.map((item: ScannedItem, index: number) => ({ 
+        id: `scanned_${Date.now()}_${index}`, 
         name: item.name,
         unitPrice: item.unitPrice,
         quantity: item.quantity,
@@ -67,7 +75,6 @@ export default function SplitBillAppPage() {
         setCurrentStep(2);
       } else {
         toast({ variant: "default", title: "No items found", description: "The receipt scan didn't find any items. Try adding them manually or scanning/capturing again." });
-        // Stay on step 1 or allow manual add
       }
     } else {
       setError(result.error || "Failed to scan receipt.");
@@ -143,13 +150,6 @@ export default function SplitBillAppPage() {
     setIsCalculating(false);
   };
   
-  const resetApp = () => {
-    setSplitItems([]);
-    setBillSummary(null);
-    setError(null);
-    setCurrentStep(1);
-    toast({ title: "Reset", description: "App state has been reset."});
-  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-secondary/10 to-background">
@@ -215,7 +215,11 @@ export default function SplitBillAppPage() {
               <CardDescription>Use your camera to scan a receipt or upload an image file. You can also add items manually in the next step.</CardDescription>
             </CardHeader>
             <CardContent className="p-4 sm:p-6">
-              <ReceiptUploader onScan={handleScanReceipt} isScanning={isScanning} />
+              <ReceiptUploader 
+                onScan={handleScanReceipt} 
+                isScanning={isScanning} 
+                onClearPreview={resetApp} 
+              />
             </CardContent>
           </Card>
 
@@ -264,3 +268,4 @@ export default function SplitBillAppPage() {
     </div>
   );
 }
+

@@ -60,16 +60,11 @@ export async function signupUserAction(formData: FormData) {
 
   if (profileError) {
     console.error("Error creating profile:", profileError);
-    // Attempt to delete the auth user if profile creation fails to keep things clean
-    // This is optional and can be complex to handle perfectly (e.g., what if this delete fails?)
-    // await supabase.auth.admin.deleteUser(authData.user.id); // Requires admin privileges, not for client-callable actions
     return { success: false, error: `Pengguna berhasil dibuat, tetapi gagal membuat profil: ${profileError.message}` };
   }
   
   revalidatePath('/', 'layout'); 
-  // After signup, user is redirected to /login, so /app revalidation isn't immediately critical
-  // but doesn't hurt. The landing page header needs update if they navigate there.
-  revalidatePath('/login', 'page'); // To ensure login page is fresh if they were there before.
+  revalidatePath('/login', 'page'); 
   return { success: true, user: authData.user };
 }
 
@@ -90,8 +85,6 @@ export async function loginUserAction(formData: FormData) {
     return { success: false, error: error.message };
   }
   
-  // After login, user is redirected to /app.
-  // Revalidate / and /app to ensure headers and content reflect logged-in state.
   revalidatePath('/', 'layout');
   revalidatePath('/app', 'layout');
   return { success: true, user: data.user };
@@ -99,29 +92,31 @@ export async function loginUserAction(formData: FormData) {
 
 
 export async function getCurrentUserAction(): Promise<{ user: import('@supabase/supabase-js').User | null; profile: any | null; error?: string }> {
-  const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+  const { data: sessionAuthData, error: sessionError } = await supabase.auth.getSession();
 
   if (sessionError) {
     console.error("Error getting session:", sessionError);
     return { user: null, profile: null, error: sessionError.message };
   }
 
-  if (!session || !session.user) {
+  if (!sessionAuthData || !sessionAuthData.session || !sessionAuthData.session.user) {
     return { user: null, profile: null };
   }
+
+  const user = sessionAuthData.session.user;
 
   const { data: profileData, error: profileError } = await supabase
     .from('profiles')
     .select('*')
-    .eq('id', session.user.id)
+    .eq('id', user.id)
     .single();
 
   if (profileError && profileError.code !== 'PGRST116') { 
     console.error("Error fetching profile:", profileError);
-    return { user: session.user, profile: null, error: profileError.message };
+    return { user: user, profile: null, error: profileError.message };
   }
 
-  return { user: session.user, profile: profileData };
+  return { user: user, profile: profileData };
 }
 
 export async function logoutUserAction() {
@@ -137,25 +132,33 @@ export async function logoutUserAction() {
 
 
 export async function createBillAction(billName?: string): Promise<{ success: boolean; billId?: string; error?: string }> {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) {
+  const { data: userAuthData, error: authError } = await supabase.auth.getUser();
+
+  if (authError) {
+    console.error("Error getting user for createBillAction:", authError);
+    return { success: false, error: `Gagal mendapatkan sesi pengguna: ${authError.message}` };
+  }
+
+  if (!userAuthData || !userAuthData.user) {
      return { success: false, error: "Pengguna tidak terautentikasi. Tidak dapat membuat tagihan." };
   }
   
-  const { data, error } = await supabase
+  const user = userAuthData.user;
+  
+  const { data: billData, error: billInsertError } = await supabase
     .from('bills')
     .insert([{ name: billName || "Tagihan Baru", user_id: user.id }])
     .select('id')
     .single();
 
-  if (error) {
-    console.error("Error creating bill:", error);
-    return { success: false, error: error.message };
+  if (billInsertError) {
+    console.error("Error creating bill:", billInsertError);
+    return { success: false, error: billInsertError.message };
   }
-  if (!data || !data.id) {
-    return { success: false, error: "Failed to create bill or retrieve ID." };
+  if (!billData || !billData.id) {
+    return { success: false, error: "Gagal membuat tagihan atau mengambil ID." };
   }
-  return { success: true, billId: data.id };
+  return { success: true, billId: billData.id };
 }
 
 export async function addParticipantAction(billId: string, personName: string): Promise<{ success: boolean; person?: Person; error?: string }> {
@@ -252,7 +255,7 @@ export async function handleSummarizeBillAction(
   tipAmount: number,
   taxTipSplitStrategy: TaxTipSplitStrategy
 ): Promise<{ success: boolean; data?: RawBillSummary; error?: string }> {
-  if (!splitItems.length || !people.length) {
+  if (!splitItems.length && !people.length) {
     return { success: false, error: "Tidak ada item atau orang untuk diringkas." };
   }
   if (!payerParticipantId) {
@@ -315,17 +318,18 @@ export async function handleSummarizeBillAction(
       const share = rawSummary[person.name];
       if (typeof share === 'number') {
         calculatedGrandTotal += share;
-        const { error } = await supabase.from('bill_participants').update({ total_share_amount: share }).eq('id', person.id);
-        if (error) return { personId: person.id, error }; // Return error object for specific handling
+        const { error: updateError } = await supabase.from('bill_participants').update({ total_share_amount: share }).eq('id', person.id);
+        if (updateError) return { personId: person.id, error: updateError };
       }
-      return { personId: person.id, error: null }; // Indicate success or no update needed
+      return { personId: person.id, error: null };
     });
     
     const participantUpdateResults = await Promise.all(participantSharePromises);
     for (const result of participantUpdateResults) {
       if (result.error) {
-        console.error(`Error updating participant share for ${result.personId} in DB:`, result.error);
-        return { success: false, error: `Gagal memperbarui bagian untuk partisipan ${people.find(p=>p.id === result.personId)?.name || result.personId} di database: ${result.error.message}` };
+        const personName = people.find(p=>p.id === result.personId)?.name || result.personId;
+        console.error(`Error updating participant share for ${personName} in DB:`, result.error);
+        return { success: false, error: `Gagal memperbarui bagian untuk partisipan ${personName} di database: ${result.error.message}` };
       }
     }
     
@@ -403,9 +407,10 @@ export async function updateUserProfileAction(userId: string, updates: { full_na
     return { success: false, error: error.message, data: null };
   }
 
-  revalidatePath('/app', 'layout'); // Revalidate app layout where profile might be shown
-  revalidatePath('/', 'layout'); // Revalidate landing page header
-  // Potentially revalidate a specific profile page if it exists, e.g., /app/profile
+  revalidatePath('/app', 'layout'); 
+  revalidatePath('/', 'layout'); 
   
   return { success: true, data, error: null };
 }
+
+    

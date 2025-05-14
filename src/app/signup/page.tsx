@@ -43,9 +43,9 @@ export default function SignupPage() {
     if (result.success) {
       toast({
         title: "Pendaftaran Berhasil!",
-        description: "Anda akan diarahkan ke halaman utama.",
+        description: "Silakan masuk dengan akun baru Anda.",
       });
-      router.push("/app"); 
+      router.push("/login"); 
     } else {
       toast({
         variant: "destructive",

@@ -67,7 +67,9 @@ export async function signupUserAction(formData: FormData) {
   }
   
   revalidatePath('/', 'layout'); 
-  revalidatePath('/app', 'layout'); 
+  // After signup, user is redirected to /login, so /app revalidation isn't immediately critical
+  // but doesn't hurt. The landing page header needs update if they navigate there.
+  revalidatePath('/login', 'page'); // To ensure login page is fresh if they were there before.
   return { success: true, user: authData.user };
 }
 
@@ -88,6 +90,8 @@ export async function loginUserAction(formData: FormData) {
     return { success: false, error: error.message };
   }
   
+  // After login, user is redirected to /app.
+  // Revalidate / and /app to ensure headers and content reflect logged-in state.
   revalidatePath('/', 'layout');
   revalidatePath('/app', 'layout');
   return { success: true, user: data.user };
@@ -127,16 +131,20 @@ export async function logoutUserAction() {
   }
   revalidatePath('/', 'layout');
   revalidatePath('/app', 'layout'); 
+  revalidatePath('/login', 'page');
   return { success: true };
 }
 
 
 export async function createBillAction(billName?: string): Promise<{ success: boolean; billId?: string; error?: string }> {
   const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+     return { success: false, error: "Pengguna tidak terautentikasi. Tidak dapat membuat tagihan." };
+  }
   
   const { data, error } = await supabase
     .from('bills')
-    .insert([{ name: billName || "Tagihan Baru", user_id: user?.id || null }])
+    .insert([{ name: billName || "Tagihan Baru", user_id: user.id }])
     .select('id')
     .single();
 
@@ -303,21 +311,21 @@ export async function handleSummarizeBillAction(
     const rawSummary: RawBillSummary = await summarizeBill(summarizeBillInput);
     
     let calculatedGrandTotal = 0;
-    const participantSharePromises: Promise<PostgrestSingleResponse<any> | { error: null }>[] = people.map(person => {
+    const participantSharePromises = people.map(async (person) => {
       const share = rawSummary[person.name];
       if (typeof share === 'number') {
         calculatedGrandTotal += share;
-        return supabase.from('bill_participants').update({ total_share_amount: share }).eq('id', person.id);
+        const { error } = await supabase.from('bill_participants').update({ total_share_amount: share }).eq('id', person.id);
+        if (error) return { personId: person.id, error }; // Return error object for specific handling
       }
-      // Return a resolved promise with a structure that won't cause issues in Promise.all error checking
-      return Promise.resolve({ error: null }); 
+      return { personId: person.id, error: null }; // Indicate success or no update needed
     });
     
-    const participantUpdateResponses = await Promise.all(participantSharePromises);
-    for (const response of participantUpdateResponses) {
-      if (response && response.error) {
-        console.error("Error updating participant share in DB:", response.error);
-        return { success: false, error: `Gagal memperbarui bagian partisipan di database: ${response.error.message}` };
+    const participantUpdateResults = await Promise.all(participantSharePromises);
+    for (const result of participantUpdateResults) {
+      if (result.error) {
+        console.error(`Error updating participant share for ${result.personId} in DB:`, result.error);
+        return { success: false, error: `Gagal memperbarui bagian untuk partisipan ${people.find(p=>p.id === result.personId)?.name || result.personId} di database: ${result.error.message}` };
       }
     }
     
@@ -379,3 +387,25 @@ export async function handleSummarizeBillAction(
   }
 }
 
+// Action to update profile
+export async function updateUserProfileAction(userId: string, updates: { full_name?: string; username?: string; avatar_url?: string; phone_number?: string }) {
+  if (!userId) return { success: false, error: "User ID is required." };
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .update(updates)
+    .eq('id', userId)
+    .select()
+    .single();
+
+  if (error) {
+    console.error("Error updating profile:", error);
+    return { success: false, error: error.message, data: null };
+  }
+
+  revalidatePath('/app', 'layout'); // Revalidate app layout where profile might be shown
+  revalidatePath('/', 'layout'); // Revalidate landing page header
+  // Potentially revalidate a specific profile page if it exists, e.g., /app/profile
+  
+  return { success: true, data, error: null };
+}

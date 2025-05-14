@@ -96,7 +96,7 @@ Item Details:
     {{#if 分配给.length}}
       {{#each 分配给}}
       - {{personName}}: {{count}} unit(s)
-      {{/unless}}
+      {{/each}}
     {{else}}
       - Not assigned to anyone.
     {{/if}}

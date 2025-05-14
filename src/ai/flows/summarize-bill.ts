@@ -22,7 +22,7 @@ const ItemDetailSchema = z.object({
   name: z.string().describe('The name of the item.'),
   unitPrice: z.number().describe('The price for a single unit of this item.'),
   quantity: z.number().describe('The total quantity of this item on the bill line (e.g., if the line was "3x Apples", quantity is 3).'),
-  分配给: z.array(AssignedPersonSchema).describe('A list of people assigned to this item and how many units each person is responsible for.'),
+  assignedTo: z.array(AssignedPersonSchema).describe('A list of people assigned to this item and how many units each person is responsible for.'), // Changed from 分配给
 });
 
 const SummarizeBillInputSchema = z.object({
@@ -38,7 +38,6 @@ const SummarizeBillInputSchema = z.object({
 
 export type SummarizeBillInput = z.infer<typeof SummarizeBillInputSchema>;
 
-// Define the AI output schema as an array of objects
 const BillShareEntrySchema = z.object({
   personName: z.string().describe("The name of the person."),
   totalShare: z.number().describe("The person's total calculated fair share of the bill, rounded to two decimal places. This should be a positive number or zero."),
@@ -46,22 +45,82 @@ const BillShareEntrySchema = z.object({
 
 const AiOutputSchema = z.array(BillShareEntrySchema).describe('An array where each entry contains a personName and their totalShare.');
 
-
-export type SummarizeBillOutput = RawBillSummary; // Alias to RawBillSummary, the flow will transform AiOutputSchema to this.
-
+// This is the type the summarizeBill wrapper function (and the app) will ultimately consume.
+export type SummarizeBillOutput = RawBillSummary;
 
 export async function summarizeBill(input: SummarizeBillInput): Promise<SummarizeBillOutput> {
-  // Basic validation
   if (input.people.length === 0) {
-    return {}; // Or throw error
+    console.warn("summarizeBill (wrapper): No people provided, returning empty summary.");
+    return {};
   }
-  return summarizeBillFlow(input);
+
+  // Call the flow, which should return an array of {personName, totalShare}
+  const aiResultArray = await summarizeBillFlow(input);
+
+  const transformedSummary: RawBillSummary = {};
+  if (aiResultArray && Array.isArray(aiResultArray)) {
+    aiResultArray.forEach(entry => {
+      if (entry && typeof entry.personName === 'string' && typeof entry.totalShare === 'number') {
+        // Ensure totalShare is positive and rounded
+        transformedSummary[entry.personName] = parseFloat(Math.max(0, entry.totalShare).toFixed(2));
+      } else {
+        console.warn("summarizeBill (wrapper): Invalid entry in AI output array:", entry);
+      }
+    });
+  } else {
+    console.warn("summarizeBill (wrapper): AI output was not an array or was null/undefined.");
+  }
+
+  // Ensure all people from the input list are in the final summary, defaulting to 0 if not present
+  const finalSummary: RawBillSummary = {};
+  let allPeopleCovered = true;
+  input.people.forEach(personName => {
+    if (transformedSummary[personName] !== undefined) {
+      finalSummary[personName] = transformedSummary[personName];
+    } else {
+      finalSummary[personName] = 0; // Default to 0 if AI didn't include them
+      allPeopleCovered = false; // Mark if someone was missing from AI output
+    }
+  });
+
+  // Fallback logic if AI output was empty or problematic (e.g., didn't cover all people)
+  const wasAiOutputProblematic = Object.keys(transformedSummary).length === 0 || !allPeopleCovered;
+
+  if (wasAiOutputProblematic) {
+    console.warn("summarizeBill (wrapper): AI output was incomplete or empty. Attempting basic fallback calculation.");
+    const numberOfPeople = input.people.length;
+    if (numberOfPeople > 0) {
+        input.people.forEach(personName => {
+            let itemSubtotal = 0;
+            input.items.forEach(item => {
+                item.assignedTo.forEach(assignment => {
+                    if (assignment.personName === personName) {
+                        itemSubtotal += item.unitPrice * assignment.count;
+                    }
+                });
+            });
+
+            let taxTipShare = 0;
+            const totalTaxTip = (input.taxAmount || 0) + (input.tipAmount || 0);
+            if (input.taxTipSplitStrategy === "SPLIT_EQUALLY") {
+                taxTipShare = totalTaxTip / numberOfPeople;
+            } else if (input.taxTipSplitStrategy === "PAYER_PAYS_ALL" && personName === input.payerName) {
+                taxTipShare = totalTaxTip;
+            }
+            // Overwrite or fill finalSummary for this person with fallback
+            finalSummary[personName] = parseFloat(Math.max(0, itemSubtotal + taxTipShare).toFixed(2));
+        });
+    }
+  }
+  
+  console.log("summarizeBill (wrapper): Final processed summary:", JSON.stringify(finalSummary));
+  return finalSummary;
 }
 
 const summarizeBillPrompt = ai.definePrompt({
   name: 'summarizeBillPrompt',
   input: {schema: SummarizeBillInputSchema},
-  output: {schema: AiOutputSchema}, // AI will output an array of objects
+  output: {schema: AiOutputSchema}, // AI must output an array of objects as per this schema
   prompt: `You are a bill splitting expert. Your task is to calculate each person's total fair share of a bill.
 The bill includes items, and potentially tax and a tip.
 
@@ -93,8 +152,8 @@ Item Details:
   - Unit Price: {{unitPrice}}
   - Total Quantity on Bill: {{quantity}}
   - Assigned Units:
-    {{#if 分配给.length}}
-      {{#each 分配给}}
+    {{#if assignedTo.length}}
+      {{#each assignedTo}}
       - {{personName}}: {{count}} unit(s)
       {{/each}}
     {{else}}
@@ -108,14 +167,14 @@ Tax Amount: {{taxAmount}}
 Tip Amount: {{tipAmount}}
 Tax/Tip Split Strategy: {{taxTipSplitStrategy}}
 
-Provide the final JSON output as an array of objects, each with "personName" and "totalShare".
+Provide the final JSON output STRICTLY as an array of objects, each with "personName" and "totalShare".
 Example:
 [
   { "personName": "Alice", "totalShare": 25.00 },
   { "personName": "Bob", "totalShare": 30.50 },
   { "personName": "Charlie", "totalShare": 5.00 }
 ]
-If a person has no items and tax/tip is split equally, their share is their portion of tax/tip. If tax/tip is paid by payer and they have no items, their share is 0.
+If a person has no items and tax/tip is split equally, their share is their portion of tax/tip. If tax/tip is paid by payer and they have no items, their share is 0. Ensure all people in 'People Involved' are in the output array.
 `,
   config: {
     temperature: 0.0, // For precise calculation
@@ -128,66 +187,41 @@ If a person has no items and tax/tip is split equally, their share is their port
   }
 });
 
+// This flow's implementation now directly returns what its outputSchema (AiOutputSchema) defines.
 const summarizeBillFlow = ai.defineFlow(
   {
     name: 'summarizeBillFlow',
     inputSchema: SummarizeBillInputSchema,
-    outputSchema: AiOutputSchema, // Flow now internally expects an array of objects from the prompt
+    outputSchema: AiOutputSchema, // Flow's output schema is an array of objects
   },
-  async (input: SummarizeBillInput): Promise<SummarizeBillOutput> => { // Returns RawBillSummary
+  async (input: SummarizeBillInput): Promise<z.infer<typeof AiOutputSchema>> => { // Return type matches outputSchema
     console.log("summarizeBillFlow: Input received:", JSON.stringify(input));
-    const {output: aiGeneratedOutputArray} = await summarizeBillPrompt(input); // This is Array<{personName: string, totalShare: number}> | undefined
+    const {output: aiGeneratedOutputArray} = await summarizeBillPrompt(input);
     
-    const transformedSummary: RawBillSummary = {};
-    if (aiGeneratedOutputArray) {
-      aiGeneratedOutputArray.forEach(entry => {
-        if (entry && typeof entry.personName === 'string' && typeof entry.totalShare === 'number') {
-          transformedSummary[entry.personName] = entry.totalShare;
-        } else {
-          console.warn("summarizeBillFlow: Invalid entry in AI output array:", entry);
+    if (aiGeneratedOutputArray && Array.isArray(aiGeneratedOutputArray)) {
+      // Basic validation of the array structure from AI
+      const validatedArray = aiGeneratedOutputArray
+        .filter(entry => entry && typeof entry.personName === 'string' && typeof entry.totalShare === 'number')
+        .map(entry => ({
+          personName: entry.personName,
+          totalShare: parseFloat(Math.max(0, entry.totalShare).toFixed(2)) // Ensure positive and rounded
+        }));
+
+      // Ensure all people from input are represented in the output array, even if with 0 share
+      // This is important if the AI forgets someone.
+      const peopleInOutput = new Set(validatedArray.map(p => p.personName));
+      input.people.forEach(inputPersonName => {
+        if (!peopleInOutput.has(inputPersonName)) {
+          validatedArray.push({ personName: inputPersonName, totalShare: 0 });
         }
       });
+      
+      console.log("summarizeBillFlow: AI generated valid array output, after ensuring all people covered:", JSON.stringify(validatedArray));
+      return validatedArray;
     } else {
-      console.warn("summarizeBillFlow: AI output array was null or undefined.");
+      console.warn("summarizeBillFlow: AI output was not a valid array or was null/undefined. Returning default array with 0 shares for all people.");
+      // Construct a default array matching the schema if AI fails badly
+      return input.people.map(name => ({ personName: name, totalShare: 0 }));
     }
-    
-    // Ensure all people from the input list are in the output, defaulting to 0 if not present from AI
-    // and ensure positive values as per schema description.
-    const result: SummarizeBillOutput = {};
-    const numberOfPeople = input.people.length;
-
-    input.people.forEach(personName => {
-      let calculatedShare = transformedSummary[personName] ?? 0; // Use transformed summary
-      
-      // Fallback logic / simple calculation if AI fails or to verify basic cases
-      // This is a simplified client-side calculation for robustness, AI should ideally handle all complexities.
-      if ((!aiGeneratedOutputArray || aiGeneratedOutputArray.length === 0) && numberOfPeople > 0 && Object.keys(transformedSummary).length === 0) {
-        console.warn("AI output was effectively empty, attempting basic calculation for person:", personName);
-        let itemSubtotal = 0;
-        input.items.forEach(item => {
-          item.分配给.forEach(assignment => {
-            if (assignment.personName === personName) {
-              itemSubtotal += item.unitPrice * assignment.count;
-            }
-          });
-        });
-
-        let taxTipShare = 0;
-        const totalTaxTip = (input.taxAmount || 0) + (input.tipAmount || 0);
-        if (input.taxTipSplitStrategy === "SPLIT_EQUALLY" && numberOfPeople > 0) {
-          taxTipShare = totalTaxTip / numberOfPeople;
-        } else if (input.taxTipSplitStrategy === "PAYER_PAYS_ALL" && personName === input.payerName) {
-          taxTipShare = totalTaxTip;
-        }
-        calculatedShare = itemSubtotal + taxTipShare;
-      }
-      
-      // Ensure positive and two decimal places
-      result[personName] = parseFloat(Math.max(0, calculatedShare).toFixed(2));
-    });
-    
-    console.log("summarizeBillFlow: Processed output (transformed to Record<string, number>):", JSON.stringify(result));
-    return result; // Return the RawBillSummary format
   }
 );
-

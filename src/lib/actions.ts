@@ -80,7 +80,7 @@ export async function handleSummarizeBillAction(
     name: item.name,
     unitPrice: item.unitPrice,
     quantity: item.quantity, 
-    分配给: item.assignedTo.map(assignment => ({
+    assignedTo: item.assignedTo.map(assignment => ({ // Changed from 分配给
       personName: peopleMap.get(assignment.personId) || "Unknown Person",
       count: assignment.count,
     })).filter(a => a.personName !== "Unknown Person" && a.count > 0),
@@ -98,6 +98,7 @@ export async function handleSummarizeBillAction(
   };
 
   try {
+    // summarizeBill now returns RawBillSummary directly after internal transformation
     const result: RawBillSummary = await summarizeBill(summarizeBillInput);
     return { success: true, data: result };
   } catch (error) {

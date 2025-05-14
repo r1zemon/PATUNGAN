@@ -1,3 +1,4 @@
+
 // src/app/login/page.tsx
 "use client";
 
@@ -26,23 +27,33 @@ export default function LoginPage() {
   const handleLogin = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setIsLoading(true);
-    const formData = new FormData(event.currentTarget);
-    const result = await loginUserAction(formData);
+    try {
+      const formData = new FormData(event.currentTarget);
+      const result = await loginUserAction(formData);
 
-    if (result.success) {
-      toast({
-        title: "Login Berhasil!",
-        description: "Anda akan diarahkan ke halaman utama.",
-      });
-      router.push("/app");
-    } else {
+      if (result.success) {
+        toast({
+          title: "Login Berhasil!",
+          description: "Anda akan diarahkan ke halaman utama.",
+        });
+        router.push("/app");
+      } else {
+        toast({
+          variant: "destructive",
+          title: "Login Gagal",
+          description: result.error || "Email atau kata sandi salah.",
+        });
+      }
+    } catch (error) {
+      console.error("Login failed unexpectedly:", error);
       toast({
         variant: "destructive",
         title: "Login Gagal",
-        description: result.error || "Email atau kata sandi salah.",
+        description: "Terjadi kesalahan yang tidak terduga. Silakan coba lagi."
       });
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   };
 
   return (

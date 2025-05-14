@@ -96,7 +96,7 @@ Item Details:
     {{/if}}
 {{/each}}
 
-People Involved: {{#join people ", "}}{{/join}}
+People Involved: {{#each people}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}
 Payer: {{payerName}}
 Tax Amount: {{taxAmount}}
 Tip Amount: {{tipAmount}}
@@ -166,3 +166,4 @@ const summarizeBillFlow = ai.defineFlow(
     return result;
   }
 );
+

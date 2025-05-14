@@ -22,7 +22,7 @@ const ItemDetailSchema = z.object({
   name: z.string().describe('The name of the item.'),
   unitPrice: z.number().describe('The price for a single unit of this item.'),
   quantity: z.number().describe('The total quantity of this item on the bill line (e.g., if the line was "3x Apples", quantity is 3).'),
-  assignedTo: z.array(AssignedPersonSchema).describe('A list of people assigned to this item and how many units each person is responsible for.'), // Changed from 分配给
+  assignedTo: z.array(AssignedPersonSchema).describe('A list of people assigned to this item and how many units each person is responsible for.'),
 });
 
 const SummarizeBillInputSchema = z.object({
@@ -126,7 +126,7 @@ The bill includes items, and potentially tax and a tip.
 
 Inputs provided:
 - List of items: For each item, its name, unit price, total quantity, and a list of people assigned to it with the count of units they took.
-- List of all people involved: Names of everyone sharing the bill.
+- List of all people involved: Names of everyone sharing the bill. (Total number of people: {{people.length}})
 - Payer's name: The person who initially paid the entire bill.
 - Tax amount: Total tax for the bill. (Defaults to 0 if not provided)
 - Tip amount: Total tip for the bill. (Defaults to 0 if not provided)
@@ -135,15 +135,16 @@ Inputs provided:
     - "SPLIT_EQUALLY": Tax and tip are split equally among all people involved.
 
 Calculation Steps:
-1.  For each person, calculate their subtotal for items: Sum of (item.unitPrice * count_assigned_to_person_for_that_item) for all items they were assigned.
-2.  Calculate the total shared cost: taxAmount + tipAmount.
-3.  Distribute the total shared cost (tax + tip) based on 'taxTipSplitStrategy':
-    a.  If "PAYER_PAYS_ALL":
-        - Each person's share of tax/tip is 0, EXCEPT for the payerName, whose share of tax/tip is (taxAmount + tipAmount).
-    b.  If "SPLIT_EQUALLY":
-        - If there are N people in the 'people' list, each person's share of tax/tip is (taxAmount + tipAmount) / N.
-4.  For each person, calculate their total fair share: (Their subtotal for items) + (Their share of tax/tip from step 3).
-5.  The output MUST be a JSON array of objects. Each object must contain 'personName' (string) and 'totalShare' (number, positive or zero, rounded to two decimal places).
+1.  For each person, calculate their subtotal for items by summing (item.unitPrice * count_assigned_to_person_for_that_item) for all items they were assigned. Let's call this 'PersonItemSubtotal'.
+2.  Determine each person's share of tax and tip:
+    a.  If 'taxTipSplitStrategy' is "PAYER_PAYS_ALL":
+        - For the 'payerName': Their 'PersonTaxTipShare' is (taxAmount + tipAmount).
+        - For all other people: Their 'PersonTaxTipShare' is 0.
+    b.  If 'taxTipSplitStrategy' is "SPLIT_EQUALLY":
+        - Let N be the total number of people in the 'people' list (which is {{people.length}}).
+        - For EACH person in the 'people' list: Their 'PersonTaxTipShare' is (taxAmount + tipAmount) / N.
+3.  For EACH person, calculate their 'totalShare': 'PersonItemSubtotal' + 'PersonTaxTipShare'.
+4.  The output MUST be a JSON array of objects. Each object must contain 'personName' (string) and 'totalShare' (number, rounded to two decimal places, positive or zero).
     Include an entry for ALL people provided in the 'people' input list, even if their totalShare is 0.
 
 Item Details:
@@ -161,7 +162,7 @@ Item Details:
     {{/if}}
 {{/each}}
 
-People Involved: {{#each people}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}
+People Involved: {{#each people}}{{this}}{{#unless @last}}, {{/unless}}{{/each}} (Count: {{people.length}})
 Payer: {{payerName}}
 Tax Amount: {{taxAmount}}
 Tip Amount: {{tipAmount}}
@@ -225,3 +226,4 @@ const summarizeBillFlow = ai.defineFlow(
     }
   }
 );
+

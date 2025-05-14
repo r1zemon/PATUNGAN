@@ -56,7 +56,7 @@ export interface Database {
           id: string
           name: string
           total_share_amount: number | null
-          // user_profile_id: string | null // Kolom opsional jika partisipan adalah user terdaftar
+          // user_profile_id: string | null 
         }
         Insert: {
           bill_id: string
@@ -97,10 +97,10 @@ export interface Database {
           name: string | null
           payer_participant_id: string | null
           tax_amount: number | null
-          tax_tip_split_strategy: string | null // "PAYER_PAYS_ALL" | "SPLIT_EQUALLY"
+          tax_tip_split_strategy: string | null 
           tip_amount: number | null
           updated_at: string | null
-          user_id: string | null // FK to auth.users
+          user_id: string | null 
         }
         Insert: {
           created_at?: string | null
@@ -182,11 +182,11 @@ export interface Database {
         Row: {
           avatar_url: string | null
           full_name: string | null
-          id: string // FK to auth.users
+          id: string 
           updated_at: string | null
           username: string | null
-          email: string | null // Opsional, bisa juga tidak disimpan di sini
-          date_of_birth: string | null // YYYY-MM-DD format
+          email: string | null 
+          // date_of_birth: string | null // Dihapus
           phone_number: string | null
         }
         Insert: {
@@ -196,7 +196,7 @@ export interface Database {
           updated_at?: string | null
           username?: string | null
           email?: string | null
-          date_of_birth?: string | null
+          // date_of_birth?: string | null // Dihapus
           phone_number?: string | null
         }
         Update: {
@@ -206,14 +206,14 @@ export interface Database {
           updated_at?: string | null
           username?: string | null
           email?: string | null
-          date_of_birth?: string | null
+          // date_of_birth?: string | null // Dihapus
           phone_number?: string | null
         }
         Relationships: [
           {
             foreignKeyName: "profiles_id_fkey"
             columns: ["id"]
-            referencedRelation: "users" // Ini mengacu pada auth.users
+            referencedRelation: "users" 
             referencedColumns: ["id"]
           }
         ]
@@ -282,10 +282,3 @@ export interface Database {
     }
   }
 }
-// Akhir dari tipe yang di-generate (atau contoh)
-// Anda bisa meng-copy paste output dari `supabase gen types typescript --linked > src/lib/database.types.ts` di sini.
-// Jika CLI belum digunakan, tipe dasar di atas adalah placeholder.
-// Saya telah memperbarui tipe `profiles` untuk mencakup `date_of_birth` dan `phone_number`.
-// Ingatlah untuk menjalankan `supabase gen types typescript --linked > src/lib/database.types.ts` setelah membuat perubahan skema di Supabase.
-
-```

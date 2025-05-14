@@ -1,3 +1,4 @@
+
 "use server";
 
 import { scanReceipt, ScanReceiptOutput, ReceiptItem as AiReceiptItem } from "@/ai/flows/scan-receipt";
@@ -19,7 +20,6 @@ export async function signupUserAction(formData: FormData) {
   const password = formData.get('password') as string;
   const fullName = formData.get('fullName') as string;
   const username = formData.get('username') as string;
-  const dateOfBirth = formData.get('dateOfBirth') as string; // Dapatkan sebagai string
   const phoneNumber = formData.get('phone') as string;
 
   if (!email || !password || !fullName || !username) {
@@ -30,7 +30,6 @@ export async function signupUserAction(formData: FormData) {
     email,
     password,
     options: {
-      // Data ini bisa digunakan oleh trigger di Supabase atau untuk akses awal
       data: { 
         full_name: fullName,
         username: username,
@@ -48,27 +47,23 @@ export async function signupUserAction(formData: FormData) {
     return { success: false, error: "Gagal mendapatkan data pengguna setelah pendaftaran." };
   }
 
-  // Insert into public.profiles table
   const { error: profileError } = await supabase
     .from('profiles')
     .insert({ 
       id: authData.user.id, 
       full_name: fullName,
       username: username,
-      // email: email, // Anda bisa memilih untuk menyimpan email di profil juga
-      date_of_birth: dateOfBirth || null, // Simpan sebagai string tanggal atau null
+      email: email, 
       phone_number: phoneNumber || null
-      // avatar_url akan dihandle terpisah jika ada upload
     });
 
   if (profileError) {
     console.error("Error creating profile:", profileError);
-    // Jika pembuatan profil gagal, idealnya pengguna auth juga dihapus atau ada mekanisme kompensasi
-    // Untuk saat ini, kita akan laporkan errornya
     return { success: false, error: `Pengguna berhasil dibuat, tetapi gagal membuat profil: ${profileError.message}` };
   }
   
-  revalidatePath('/', 'layout'); // Revalidate all paths to update header
+  revalidatePath('/', 'layout'); 
+  revalidatePath('/app', 'layout'); // Revalidate app page too for header
   return { success: true, user: authData.user };
 }
 
@@ -90,6 +85,7 @@ export async function loginUserAction(formData: FormData) {
   }
   
   revalidatePath('/', 'layout');
+  revalidatePath('/app', 'layout');
   return { success: true, user: data.user };
 }
 
@@ -112,9 +108,8 @@ export async function getCurrentUserAction(): Promise<{ user: import('@supabase/
     .eq('id', session.user.id)
     .single();
 
-  if (profileError && profileError.code !== 'PGRST116') { // PGRST116: no rows found, not necessarily an error if profile creation is pending/failed
+  if (profileError && profileError.code !== 'PGRST116') { 
     console.error("Error fetching profile:", profileError);
-    // Return user even if profile fetch fails, but log error
     return { user: session.user, profile: null, error: profileError.message };
   }
 
@@ -127,11 +122,11 @@ export async function logoutUserAction() {
     return { success: false, error: error.message };
   }
   revalidatePath('/', 'layout');
+  revalidatePath('/app', 'layout'); // Ensure app header also updates
   return { success: true };
 }
 
 
-// Action untuk membuat bill baru
 export async function createBillAction(billName?: string): Promise<{ success: boolean; billId?: string; error?: string }> {
   const { data: { user } } = await supabase.auth.getUser();
   
@@ -151,7 +146,6 @@ export async function createBillAction(billName?: string): Promise<{ success: bo
   return { success: true, billId: data.id };
 }
 
-// Action untuk menambah partisipan ke bill
 export async function addParticipantAction(billId: string, personName: string): Promise<{ success: boolean; person?: Person; error?: string }> {
   if (!billId || !personName.trim()) {
     return { success: false, error: "Bill ID and person name are required." };
@@ -173,7 +167,6 @@ export async function addParticipantAction(billId: string, personName: string): 
   return { success: true, person: { id: data.id, name: data.name } };
 }
 
-// Action untuk menghapus partisipan dari bill
 export async function removeParticipantAction(participantId: string): Promise<{ success: boolean; error?: string }> {
   if (!participantId) {
     return { success: false, error: "Participant ID is required." };

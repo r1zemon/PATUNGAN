@@ -8,12 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { User, Mail, Lock, Eye, EyeOff, CalendarDays, Phone, ArrowLeft, UserCircle, Loader2 } from "lucide-react";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Calendar } from "@/components/ui/calendar";
-import { format } from "date-fns";
-import { id as IndonesianLocale } from "date-fns/locale";
-import { cn } from "@/lib/utils";
+import { User, Mail, Lock, Eye, EyeOff, Phone, ArrowLeft, UserCircle, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { signupUserAction } from "@/lib/actions";
 
@@ -21,7 +16,6 @@ import { signupUserAction } from "@/lib/actions";
 export default function SignupPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [dateOfBirth, setDateOfBirth] = useState<Date | undefined>();
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
   const { toast } = useToast();
@@ -44,15 +38,6 @@ export default function SignupPage() {
       return;
     }
     
-    // Append dateOfBirth to formData if selected
-    if (dateOfBirth) {
-      // Format date to YYYY-MM-DD or a format Supabase DATE type accepts
-      formData.set('dateOfBirth', format(dateOfBirth, "yyyy-MM-dd"));
-    } else {
-      formData.delete('dateOfBirth'); // Ensure it's not sent if undefined
-    }
-
-
     const result = await signupUserAction(formData);
 
     if (result.success) {
@@ -108,36 +93,6 @@ export default function SignupPage() {
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                 <Input id="email" name="email" type="email" placeholder="contoh@email.com" className="pl-10" required />
               </div>
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="dob">Tanggal Lahir (Opsional)</Label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant={"outline"}
-                    className={cn(
-                      "w-full justify-start text-left font-normal pl-10", // Added pl-10 for icon alignment
-                      !dateOfBirth && "text-muted-foreground"
-                    )}
-                  >
-                    <CalendarDays className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                    {dateOfBirth ? format(dateOfBirth, "PPP", { locale: IndonesianLocale }) : <span>Pilih tanggal lahir</span>}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0">
-                  <Calendar
-                    mode="single"
-                    selected={dateOfBirth}
-                    onSelect={setDateOfBirth}
-                    initialFocus
-                    captionLayout="dropdown-buttons"
-                    fromYear={1950}
-                    toYear={new Date().getFullYear() - 10} 
-                    locale={IndonesianLocale}
-                    name="dateOfBirth"
-                  />
-                </PopoverContent>
-              </Popover>
             </div>
             <div className="space-y-1">
               <Label htmlFor="phone">Nomor Telepon (Opsional)</Label>

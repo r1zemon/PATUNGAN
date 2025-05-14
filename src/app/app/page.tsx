@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import type { SplitItem, Person, BillDetails, TaxTipSplitStrategy, RawBillSummary, DetailedBillSummaryData } from "@/lib/types";
 import { handleScanReceiptAction, handleSummarizeBillAction } from "@/lib/actions";
 import { ReceiptUploader } from "@/components/receipt-uploader";
@@ -16,7 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useToast } from "@/hooks/use-toast";
 import { Separator } from "@/components/ui/separator";
-import { Coins, LogOut, Settings, UserCircle, Power, Info, Percent, Landmark, UserCheck } from "lucide-react";
+import { Coins, LogOut, Settings, UserCircle, Power, Info, Percent, Landmark, UserCheck, Loader2 } from "lucide-react";
 import Link from "next/link";
 import {
   DropdownMenu,
@@ -60,6 +60,10 @@ export default function SplitBillAppPage() {
       setBillDetails(prev => ({ ...prev, payerId: people[0].id }));
     }
   }, [people, billDetails.payerId]);
+
+  const itemsForSummary = useMemo(() => {
+    return splitItems.filter(item => item.quantity > 0 && item.unitPrice >= 0);
+  }, [splitItems]);
 
   const resetApp = () => {
     setSplitItems([]);
@@ -146,7 +150,7 @@ export default function SplitBillAppPage() {
     setIsCalculating(true);
     setError(null);
 
-    const itemsForSummary = splitItems.filter(item => item.quantity > 0 && item.unitPrice >= 0);
+    // Use the memoized itemsForSummary
     if (itemsForSummary.length === 0) {
         setError("Tidak ada item valid untuk diringkas. Mohon tambahkan item dengan kuantitas dan harga.");
         toast({ variant: "destructive", title: "Ringkasan Gagal", description: "Tidak ada item valid untuk diringkas." });
@@ -178,7 +182,7 @@ export default function SplitBillAppPage() {
     }
 
     const result = await handleSummarizeBillAction(
-      itemsForSummary, 
+      itemsForSummary, // Use the memoized itemsForSummary
       people, 
       payerName,
       billDetails.taxAmount,
@@ -308,7 +312,8 @@ export default function SplitBillAppPage() {
                   onUpdateItem={handleUpdateItem}
                   onAddItem={handleAddItem}
                   onDeleteItem={handleDeleteItem}
-                  // onCalculateSummary will be handled by a button within this card now
+                  onCalculateSummary={handleCalculateSummary} // This prop is not used by ItemEditor anymore based on previous change.
+                  isCalculating={isCalculating} // This prop is not used by ItemEditor anymore based on previous change.
                 />
                 
                 <Separator />
@@ -430,7 +435,3 @@ export default function SplitBillAppPage() {
     </div>
   );
 }
-
-// Helper to get items ready for summary (memoized or regular function)
-// This is to avoid re-calculating this list multiple times for the disabled state of the button.
-const itemsForSummary = splitItems.filter(item => item.quantity > 0 && item.unitPrice >= 0);

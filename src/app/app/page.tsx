@@ -209,7 +209,7 @@ export default function SplitBillAppPage() {
           )}
 
           {/* Step 1: Scan Receipt */}
-          <Card className="shadow-xl overflow-hidden bg-card/90 backdrop-blur-sm">
+          <Card className="shadow-xl overflow-hidden bg-card/90 backdrop-blur-sm hover:shadow-2xl transition-shadow duration-300 ease-in-out">
             <CardHeader className="bg-card/60 border-b">
               <CardTitle className="text-xl sm:text-2xl font-semibold">1. Scan Your Receipt</CardTitle>
               <CardDescription>Use your camera to scan a receipt or upload an image file. You can also add items manually in the next step.</CardDescription>
@@ -221,7 +221,7 @@ export default function SplitBillAppPage() {
 
           {/* Step 2: Edit & Assign Items */}
           {(currentStep >= 2 || splitItems.length > 0) && (
-            <Card className="shadow-xl overflow-hidden bg-card/90 backdrop-blur-sm">
+            <Card className="shadow-xl overflow-hidden bg-card/90 backdrop-blur-sm hover:shadow-2xl transition-shadow duration-300 ease-in-out">
               <CardHeader className="bg-card/60 border-b">
                 <CardTitle className="text-xl sm:text-2xl font-semibold">2. Edit &amp; Assign Items</CardTitle>
                 <CardDescription>Review scanned items, make corrections, add new ones, and assign how many units of each item each person takes.</CardDescription>
@@ -242,7 +242,7 @@ export default function SplitBillAppPage() {
           
           {/* Step 3: Bill Summary */}
           {currentStep >= 3 && billSummary && (
-             <Card className="shadow-xl overflow-hidden bg-card/90 backdrop-blur-sm">
+             <Card className="shadow-xl overflow-hidden bg-card/90 backdrop-blur-sm hover:shadow-2xl transition-shadow duration-300 ease-in-out">
               <CardHeader className="bg-card/60 border-b flex flex-row items-center justify-between">
                 <div>
                   <CardTitle className="text-xl sm:text-2xl font-semibold">3. Bill Summary</CardTitle>
@@ -256,7 +256,7 @@ export default function SplitBillAppPage() {
             </Card>
           )}
         </main>
-        <footer className="mt-12 pt-8 border-t text-center text-sm text-muted-foreground">
+        <footer className="mt-12 pt-8 border-t border-border/40 text-center text-sm text-muted-foreground">
           <p>&copy; {new Date().getFullYear()} Patungan. All rights reserved.</p>
           <p>Powered by Next.js, Shadcn/UI, and Genkit.</p>
         </footer>

@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { FileImage, Loader2, ScanLine, Camera, UploadCloud, Power, CircleDot } from "lucide-react";
+import { FileImage, Loader2, ScanLine, Camera, UploadCloud, Power, CircleDot, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
@@ -47,8 +47,9 @@ export function ReceiptUploader({ onScan, isScanning }: ReceiptUploaderProps) {
   useEffect(() => {
     const startCamera = async () => {
       if (isCameraMode) {
-        setPreviewUrl(null); // Clear any previous preview
-        setSelectedFile(null); // Clear any selected file
+        // Do not clear previewUrl here if it's from a capture,
+        // only clear it if switching modes or deselecting a file.
+        // setSelectedFile(null); // Clear any selected file
         try {
           const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
           streamRef.current = stream;
@@ -61,8 +62,8 @@ export function ReceiptUploader({ onScan, isScanning }: ReceiptUploaderProps) {
           setHasCameraPermission(false);
           toast({
             variant: 'destructive',
-            title: 'Camera Access Denied',
-            description: 'Please enable camera permissions in your browser settings to use this app.',
+            title: 'Kamera Tidak Dapat Diakses',
+            description: 'Mohon aktifkan izin kamera di pengaturan browser Anda untuk menggunakan fitur ini.',
           });
           setIsCameraMode(false); // Fallback to file upload mode
         }
@@ -78,7 +79,6 @@ export function ReceiptUploader({ onScan, isScanning }: ReceiptUploaderProps) {
       }
       if (videoRef.current && videoRef.current.srcObject) {
         try {
-            // Explicitly cast to MediaStream if necessary, though srcObject can accept MediaStream | null
             const currentStream = videoRef.current.srcObject as MediaStream | null;
             currentStream?.getTracks().forEach(track => track.stop());
         } catch (e) {
@@ -96,15 +96,15 @@ export function ReceiptUploader({ onScan, isScanning }: ReceiptUploaderProps) {
       if (!allowedTypes.includes(file.type)) {
         toast({
           variant: "destructive",
-          title: "Invalid File Type",
-          description: "Please upload an image (JPEG, PNG, WebP).",
+          title: "Jenis File Tidak Valid",
+          description: "Mohon unggah file gambar (JPEG, PNG, WebP).",
         });
         setSelectedFile(null);
         setPreviewUrl(null);
         if (fileInputRef.current) fileInputRef.current.value = "";
         return;
       }
-      setSelectedFile(file);
+      setSelectedFile(file); // File selected, not from camera
       const reader = new FileReader();
       reader.onloadend = () => {
         setPreviewUrl(reader.result as string);
@@ -122,10 +122,9 @@ export function ReceiptUploader({ onScan, isScanning }: ReceiptUploaderProps) {
 
   const handleToggleMode = () => {
     setIsCameraMode(!isCameraMode);
-    // Reset states when toggling
     setSelectedFile(null);
-    setPreviewUrl(null);
-    setHasCameraPermission(null); // Will be re-checked by useEffect if switching to camera mode
+    setPreviewUrl(null); // Clear preview when toggling mode
+    setHasCameraPermission(null); 
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
@@ -140,41 +139,43 @@ export function ReceiptUploader({ onScan, isScanning }: ReceiptUploaderProps) {
       const context = canvas.getContext('2d');
       if (context) {
         context.drawImage(video, 0, 0, canvas.width, canvas.height);
-        const dataUri = canvas.toDataURL('image/jpeg'); // Use JPEG for smaller size
-        setPreviewUrl(dataUri);
-        setSelectedFile(null); // Clear any selected file
-        toast({ title: "Image Captured", description: "Review the image below or capture again." });
+        const dataUri = canvas.toDataURL('image/jpeg'); 
+        setPreviewUrl(dataUri); // Preview is from camera capture
+        setSelectedFile(null); // Ensure no file is considered selected
+        toast({ title: "Gambar Diambil", description: "Lihat gambar di bawah atau ambil ulang." });
       } else {
-        toast({ variant: "destructive", title: "Capture Error", description: "Could not process image from camera." });
+        toast({ variant: "destructive", title: "Gagal Mengambil Gambar", description: "Tidak dapat memproses gambar dari kamera." });
       }
     } else {
-      toast({ variant: "destructive", title: "Camera Not Ready", description: "Camera feed is not available or permission denied." });
+      toast({ variant: "destructive", title: "Kamera Belum Siap", description: "Feed kamera tidak tersedia atau izin ditolak." });
     }
+  };
+
+  const handleRetakePhoto = () => {
+    setPreviewUrl(null); // Clear the preview
+    // Camera stream should still be active if isCameraMode is true
+    toast({ title: "Pratinjau Dihapus", description: "Silakan ambil foto baru." });
   };
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (isScanning) return;
 
-    if (isCameraMode) {
-      if (previewUrl) { // previewUrl holds the captured image data URI
+    if (previewUrl) { // This condition covers both captured camera image and selected file preview
         onScan(previewUrl);
-      } else {
-        toast({ variant: "destructive", title: "No Image Captured", description: "Please capture an image from the camera first." });
-      }
-    } else { // File upload mode
-      if (!selectedFile) {
-        toast({ variant: "destructive", title: "No File Selected", description: "Please select a file to upload." });
-        return;
-      }
-      try {
-        const dataUri = await fileToDataUri(selectedFile);
-        onScan(dataUri);
-      } catch (error) {
-        console.error("Error converting file to Data URI:", error);
-        const message = error instanceof Error ? error.message : "Failed to read file.";
-        toast({ variant: "destructive", title: "File Error", description: `Could not process file: ${message}` });
-      }
+    } else if (selectedFile && !isCameraMode) { // Fallback for file if previewUrl somehow failed but file is selected
+        try {
+            const dataUri = await fileToDataUri(selectedFile);
+            onScan(dataUri);
+        } catch (error) {
+            console.error("Error converting file to Data URI:", error);
+            const message = error instanceof Error ? error.message : "Gagal membaca file.";
+            toast({ variant: "destructive", title: "Kesalahan File", description: `Tidak dapat memproses file: ${message}` });
+        }
+    } else if (isCameraMode && !previewUrl) {
+        toast({ variant: "destructive", title: "Tidak Ada Gambar", description: "Mohon ambil gambar dari kamera terlebih dahulu." });
+    } else if (!isCameraMode && !selectedFile) {
+        toast({ variant: "destructive", title: "Tidak Ada File", description: "Mohon pilih file untuk diunggah." });
     }
   };
   
@@ -191,33 +192,39 @@ export function ReceiptUploader({ onScan, isScanning }: ReceiptUploaderProps) {
           className="w-full sm:w-auto"
         >
           {isCameraMode ? <UploadCloud className="mr-2" /> : <Camera className="mr-2" />}
-          {isCameraMode ? "Switch to Upload File" : "Switch to Use Camera"}
+          {isCameraMode ? "Beralih ke Unggah File" : "Beralih ke Kamera"}
         </Button>
       </div>
 
       {isCameraMode ? (
         <div className="space-y-4">
-          <div className={cn("bg-muted rounded-md overflow-hidden", !hasCameraPermission && "hidden")}>
+          {/* Show video feed only if there's no preview from camera capture */}
+          <div className={cn(
+              "bg-muted rounded-md overflow-hidden", 
+              (!hasCameraPermission || (isCameraMode && previewUrl)) && "hidden" // Hide if no permission OR if there's a preview from camera
+          )}>
             <video ref={videoRef} className="w-full aspect-video rounded-md" autoPlay muted playsInline />
           </div>
+
           {hasCameraPermission === false && (
             <Alert variant="destructive">
               <Power className="h-4 w-4" />
-              <AlertTitle>Camera Access Required</AlertTitle>
+              <AlertTitle>Akses Kamera Diperlukan</AlertTitle>
               <AlertDescription>
-                Camera access was denied or is unavailable. Please enable permissions in your browser settings or try uploading a file.
+                Akses kamera ditolak atau tidak tersedia. Mohon aktifkan izin di pengaturan browser Anda atau coba unggah file.
               </AlertDescription>
             </Alert>
           )}
-          {hasCameraPermission && (
+          {/* Show capture button only if there's permission and NO preview from camera */}
+          {hasCameraPermission && !previewUrl && (
             <Button type="button" onClick={handleCaptureImage} disabled={isScanning || !hasCameraPermission} className="w-full">
-              <CircleDot className="mr-2" /> Capture Image
+              <CircleDot className="mr-2" /> Ambil Gambar
             </Button>
           )}
         </div>
       ) : (
         <div>
-          <Label htmlFor="receiptImage" className="sr-only">Upload Receipt</Label>
+          <Label htmlFor="receiptImage" className="sr-only">Unggah Struk</Label>
           <Input
             id="receiptImage"
             name="receiptImage"
@@ -232,31 +239,48 @@ export function ReceiptUploader({ onScan, isScanning }: ReceiptUploaderProps) {
             type="button"
             variant="outline"
             onClick={triggerFileInput}
-            disabled={isScanning}
+            disabled={isScanning || previewUrl !== null} // Disable if there's a preview from file upload
             className="w-full flex items-center justify-center gap-2 py-6 border-dashed border-2 hover:border-primary transition-colors duration-200"
-            aria-label="Choose receipt image"
+            aria-label="Pilih gambar struk"
           >
             <FileImage className="w-8 h-8 text-muted-foreground" />
             <span className="text-muted-foreground">
-              {selectedFile ? selectedFile.name : "Click to upload receipt image"}
+              {selectedFile ? selectedFile.name : "Klik untuk unggah gambar struk"}
             </span>
           </Button>
         </div>
       )}
 
       {previewUrl && (
-        <div className="mt-4 p-4 border rounded-md bg-muted/50 flex flex-col items-center space-y-2">
+        <div className="mt-4 p-4 border rounded-md bg-muted/50 flex flex-col items-center space-y-3">
           <Image
             src={previewUrl}
-            alt="Receipt preview"
+            alt="Pratinjau struk"
             width={200}
             height={300}
             className="rounded-md object-contain max-h-[300px] border"
             data-ai-hint="receipt photograph"
           />
            <p className="text-sm text-muted-foreground">
-            {isCameraMode ? "Captured image preview." : "Selected file preview."}
+            {isCameraMode && !selectedFile ? "Pratinjau gambar yang diambil." : "Pratinjau file yang dipilih."}
           </p>
+          {/* Show Retake Photo button only if in camera mode and preview is from camera */}
+          {isCameraMode && !selectedFile && ( 
+            <Button type="button" variant="outline" size="sm" onClick={handleRetakePhoto} disabled={isScanning}>
+              <Trash2 className="mr-2 h-4 w-4" /> Ambil Ulang Foto
+            </Button>
+          )}
+           {/* Show Clear Selection button only if in file upload mode and a file is selected (previewUrl is not null) */}
+          {!isCameraMode && selectedFile && previewUrl && (
+             <Button type="button" variant="outline" size="sm" onClick={() => {
+                setSelectedFile(null);
+                setPreviewUrl(null);
+                if (fileInputRef.current) fileInputRef.current.value = "";
+                toast({ title: "Pilihan Dihapus", description: "Silakan pilih file baru." });
+             }} disabled={isScanning}>
+              <Trash2 className="mr-2 h-4 w-4" /> Hapus Pilihan File
+            </Button>
+          )}
         </div>
       )}
       
@@ -268,7 +292,7 @@ export function ReceiptUploader({ onScan, isScanning }: ReceiptUploaderProps) {
         ) : (
           <ScanLine className="mr-2" />
         )}
-        {isScanning ? "Scanning..." : "Scan Receipt"}
+        {isScanning ? "Memindai..." : "Pindai Struk"}
       </Button>
     </form>
   );

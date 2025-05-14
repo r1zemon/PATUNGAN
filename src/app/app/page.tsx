@@ -16,7 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useToast } from "@/hooks/use-toast";
 import { Separator } from "@/components/ui/separator";
-import { Coins, LogOut, Settings, UserCircle, Power, Info, Percent, Landmark, UserCheck, Loader2, UserPlus, ArrowRight, Trash2, Users } from "lucide-react";
+import { Coins, LogOut, Settings, UserCircle, Power, Info, Percent, Landmark, UserCheck, Loader2, UserPlus, ArrowRight, Trash2, Users, ScanLine, PlusCircle, Edit2, ListChecks } from "lucide-react";
 import Link from "next/link";
 import {
   DropdownMenu,
@@ -398,10 +398,7 @@ export default function SplitBillAppPage() {
                   onScan={handleScanReceipt} 
                   isScanning={isScanning} 
                   onClearPreview={() => {
-                    setSplitItems([]); // Clear items if preview is cleared before actual scan
-                    // No need to call resetApp here as it would take back to step 1. 
-                    // User might just want to re-upload/re-take without losing people.
-                    // If they want full reset, they can use the header logo.
+                    setSplitItems([]); 
                   }}
                 />
               </CardContent>

@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { SplitItem, Person } from "@/lib/types";
@@ -49,11 +50,16 @@ export function ItemEditor({
           />
         ))}
       </div>
-      <div className="flex justify-between items-center mt-6 pt-6 border-t">
-         <Button onClick={onAddItem} variant="outline">
+      <div className="flex flex-col sm:flex-row justify-between items-center mt-6 pt-6 border-t gap-4">
+         <Button onClick={onAddItem} variant="outline" className="w-full sm:w-auto order-2 sm:order-1">
           <PlusCircle className="mr-2 h-4 w-4" /> Add Item
         </Button>
-        <Button onClick={onCalculateSummary} disabled={isCalculating || items.length === 0} size="lg">
+        <Button 
+          onClick={onCalculateSummary} 
+          disabled={isCalculating || items.length === 0} 
+          size="lg" 
+          className="w-full sm:w-auto order-1 sm:order-2"
+        >
           {isCalculating ? (
             <Loader2 className="animate-spin mr-2" />
           ) : (
@@ -65,3 +71,5 @@ export function ItemEditor({
     </div>
   );
 }
+
+    

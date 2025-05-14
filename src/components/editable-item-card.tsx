@@ -169,7 +169,7 @@ export function EditableItemCard({ item, people, onUpdateItem, onDeleteItem }: E
                 {totalAssignedCount > 0 ? `Assigned: ${totalAssignedCount} / ${itemDisplayQuantity} units` : `Assign ${itemDisplayQuantity} units`}
               </Button>
             </PopoverTrigger>
-            <PopoverContent className="w-80 p-0" align="start">
+            <PopoverContent className="w-[calc(100vw-2rem)] sm:w-80 max-w-sm p-0" align="start">
               <div className="p-4">
                 <h4 className="font-medium leading-none mb-1">Assign "{item.name}"</h4>
                 <p className="text-sm text-muted-foreground mb-3">
@@ -196,14 +196,14 @@ export function EditableItemCard({ item, people, onUpdateItem, onDeleteItem }: E
 
                     return (
                       <div key={person.id} className="flex items-center justify-between space-x-2">
-                        <Label htmlFor={`person-${person.id}-item-${item.id}`} className="font-normal flex-grow">
+                        <Label htmlFor={`person-${person.id}-item-${item.id}`} className="font-normal flex-grow truncate pr-2">
                           {person.name}
                         </Label>
                         <div className="flex items-center space-x-1">
                           <Button 
                             variant="ghost" 
                             size="icon" 
-                            className="h-7 w-7"
+                            className="h-7 w-7 flex-shrink-0"
                             onClick={() => handlePopoverAssignmentChange(person.id, -1)}
                             disabled={countForPerson === 0}
                           >
@@ -218,13 +218,13 @@ export function EditableItemCard({ item, people, onUpdateItem, onDeleteItem }: E
                                 const diff = newCount - countForPerson;
                                 handlePopoverAssignmentChange(person.id, diff);
                             }}
-                            className="w-12 h-7 text-center px-1"
+                            className="w-12 h-7 text-center px-1 flex-shrink-0"
                             aria-label={`Count for ${person.name}`}
                            />
                           <Button 
                             variant="ghost" 
                             size="icon" 
-                            className="h-7 w-7"
+                            className="h-7 w-7 flex-shrink-0"
                             onClick={() => handlePopoverAssignmentChange(person.id, 1)}
                             disabled={!canIncrement && countForPerson === 0 || popoverTotalAssignedCount >= itemDisplayQuantity && !(countForPerson > 0 && (popoverTotalAssignedCount - countForPerson + (countForPerson +1) <= itemDisplayQuantity) ) }
                           >
@@ -244,8 +244,8 @@ export function EditableItemCard({ item, people, onUpdateItem, onDeleteItem }: E
             </PopoverContent>
           </Popover>
           {assignedPeopleSummary && (
-            <p className={cn("text-xs text-muted-foreground mt-2 pl-1", totalAssignedCount > 0 && "text-accent-foreground")}>
-              Assigned to: {assignedPeopleSummary}
+            <p className={cn("text-xs text-muted-foreground mt-2 pl-1", totalAssignedCount > 0 && totalAssignedCount === itemDisplayQuantity ? "text-green-600 dark:text-green-500" : totalAssignedCount > 0 ? "text-primary-foreground" : "" )}>
+             Assigned to: {assignedPeopleSummary}
             </p>
           )}
            {totalAssignedCount < itemDisplayQuantity && totalAssignedCount > 0 && (
@@ -276,3 +276,5 @@ export function EditableItemCard({ item, people, onUpdateItem, onDeleteItem }: E
     </Card>
   );
 }
+
+    

@@ -38,10 +38,16 @@ const SummarizeBillInputSchema = z.object({
 
 export type SummarizeBillInput = z.infer<typeof SummarizeBillInputSchema>;
 
-// Output is a record of person name to their total calculated fair share of the bill.
-const SummarizeBillOutputSchema = z.record(z.string(), z.number()).describe('A summary of each person and their total fair share of the bill (items + their portion of tax/tip). Keys are person names from the input people list. All values should be positive or zero.');
+// Define the AI output schema as an array of objects
+const BillShareEntrySchema = z.object({
+  personName: z.string().describe("The name of the person."),
+  totalShare: z.number().describe("The person's total calculated fair share of the bill, rounded to two decimal places. This should be a positive number or zero."),
+});
 
-export type SummarizeBillOutput = RawBillSummary; // Alias to RawBillSummary
+const AiOutputSchema = z.array(BillShareEntrySchema).describe('An array where each entry contains a personName and their totalShare.');
+
+
+export type SummarizeBillOutput = RawBillSummary; // Alias to RawBillSummary, the flow will transform AiOutputSchema to this.
 
 
 export async function summarizeBill(input: SummarizeBillInput): Promise<SummarizeBillOutput> {
@@ -55,7 +61,7 @@ export async function summarizeBill(input: SummarizeBillInput): Promise<Summariz
 const summarizeBillPrompt = ai.definePrompt({
   name: 'summarizeBillPrompt',
   input: {schema: SummarizeBillInputSchema},
-  output: {schema: SummarizeBillOutputSchema},
+  output: {schema: AiOutputSchema}, // AI will output an array of objects
   prompt: `You are a bill splitting expert. Your task is to calculate each person's total fair share of a bill.
 The bill includes items, and potentially tax and a tip.
 
@@ -78,8 +84,8 @@ Calculation Steps:
     b.  If "SPLIT_EQUALLY":
         - If there are N people in the 'people' list, each person's share of tax/tip is (taxAmount + tipAmount) / N.
 4.  For each person, calculate their total fair share: (Their subtotal for items) + (Their share of tax/tip from step 3).
-5.  The output MUST be a JSON object where keys are the names of ALL people provided in the 'people' list, and values are their calculated total fair share (a positive number or zero).
-    Ensure all amounts are rounded to two decimal places.
+5.  The output MUST be a JSON array of objects. Each object must contain 'personName' (string) and 'totalShare' (number, positive or zero, rounded to two decimal places).
+    Include an entry for ALL people provided in the 'people' input list, even if their totalShare is 0.
 
 Item Details:
 {{#each items}}
@@ -90,7 +96,7 @@ Item Details:
     {{#if 分配给.length}}
       {{#each 分配给}}
       - {{personName}}: {{count}} unit(s)
-      {{/each}}
+      {{/unless}}
     {{else}}
       - Not assigned to anyone.
     {{/if}}
@@ -102,9 +108,14 @@ Tax Amount: {{taxAmount}}
 Tip Amount: {{tipAmount}}
 Tax/Tip Split Strategy: {{taxTipSplitStrategy}}
 
-Provide the final JSON output for each person's total fair share.
-Example: If Alice's items cost $20, and her share of (tax+tip) is $5, her total fair share is $25.
-If a person is in the 'people' list but has no assigned items and the tax/tip is split equally, their share would be their portion of the tax/tip. If tax/tip is paid by payer, their share is 0.
+Provide the final JSON output as an array of objects, each with "personName" and "totalShare".
+Example:
+[
+  { "personName": "Alice", "totalShare": 25.00 },
+  { "personName": "Bob", "totalShare": 30.50 },
+  { "personName": "Charlie", "totalShare": 5.00 }
+]
+If a person has no items and tax/tip is split equally, their share is their portion of tax/tip. If tax/tip is paid by payer and they have no items, their share is 0.
 `,
   config: {
     temperature: 0.0, // For precise calculation
@@ -121,11 +132,24 @@ const summarizeBillFlow = ai.defineFlow(
   {
     name: 'summarizeBillFlow',
     inputSchema: SummarizeBillInputSchema,
-    outputSchema: SummarizeBillOutputSchema,
+    outputSchema: AiOutputSchema, // Flow now internally expects an array of objects from the prompt
   },
-  async (input: SummarizeBillInput): Promise<SummarizeBillOutput> => {
+  async (input: SummarizeBillInput): Promise<SummarizeBillOutput> => { // Returns RawBillSummary
     console.log("summarizeBillFlow: Input received:", JSON.stringify(input));
-    const {output} = await summarizeBillPrompt(input);
+    const {output: aiGeneratedOutputArray} = await summarizeBillPrompt(input); // This is Array<{personName: string, totalShare: number}> | undefined
+    
+    const transformedSummary: RawBillSummary = {};
+    if (aiGeneratedOutputArray) {
+      aiGeneratedOutputArray.forEach(entry => {
+        if (entry && typeof entry.personName === 'string' && typeof entry.totalShare === 'number') {
+          transformedSummary[entry.personName] = entry.totalShare;
+        } else {
+          console.warn("summarizeBillFlow: Invalid entry in AI output array:", entry);
+        }
+      });
+    } else {
+      console.warn("summarizeBillFlow: AI output array was null or undefined.");
+    }
     
     // Ensure all people from the input list are in the output, defaulting to 0 if not present from AI
     // and ensure positive values as per schema description.
@@ -133,12 +157,12 @@ const summarizeBillFlow = ai.defineFlow(
     const numberOfPeople = input.people.length;
 
     input.people.forEach(personName => {
-      let calculatedShare = output?.[personName] ?? 0;
+      let calculatedShare = transformedSummary[personName] ?? 0; // Use transformed summary
       
       // Fallback logic / simple calculation if AI fails or to verify basic cases
       // This is a simplified client-side calculation for robustness, AI should ideally handle all complexities.
-      if (!output || Object.keys(output).length === 0 && numberOfPeople > 0) {
-        console.warn("AI output was empty or undefined, attempting basic calculation.");
+      if ((!aiGeneratedOutputArray || aiGeneratedOutputArray.length === 0) && numberOfPeople > 0 && Object.keys(transformedSummary).length === 0) {
+        console.warn("AI output was effectively empty, attempting basic calculation for person:", personName);
         let itemSubtotal = 0;
         input.items.forEach(item => {
           item.分配给.forEach(assignment => {
@@ -162,8 +186,8 @@ const summarizeBillFlow = ai.defineFlow(
       result[personName] = parseFloat(Math.max(0, calculatedShare).toFixed(2));
     });
     
-    console.log("summarizeBillFlow: Processed output:", JSON.stringify(result));
-    return result;
+    console.log("summarizeBillFlow: Processed output (transformed to Record<string, number>):", JSON.stringify(result));
+    return result; // Return the RawBillSummary format
   }
 );
 

@@ -16,7 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useToast } from "@/hooks/use-toast";
 import { Separator } from "@/components/ui/separator";
-import { Coins, LogOut, Settings, UserCircle, Power, Info, Percent, Landmark, UserCheck, Loader2 } from "lucide-react";
+import { Coins, LogOut, Settings, UserCircle, Power, Info, Percent, Landmark, UserCheck, Loader2, UserPlus, ArrowRight, Trash2, Users } from "lucide-react";
 import Link from "next/link";
 import {
   DropdownMenu,
@@ -27,17 +27,13 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-
-const DUMMY_PEOPLE: Person[] = [
-  { id: "person_1", name: "Alice" },
-  { id: "person_2", name: "Bob" },
-  { id: "person_3", name: "Charlie" },
-  { id: "person_4", name: "Diana" },
-];
+import { Badge } from "@/components/ui/badge";
 
 export default function SplitBillAppPage() {
+  const [people, setPeople] = useState<Person[]>([]);
+  const [personNameInput, setPersonNameInput] = useState<string>("");
+
   const [splitItems, setSplitItems] = useState<SplitItem[]>([]);
-  const [people] = useState<Person[]>(DUMMY_PEOPLE); 
   const [billDetails, setBillDetails] = useState<BillDetails>({
     payerId: null,
     taxAmount: 0,
@@ -49,23 +45,27 @@ export default function SplitBillAppPage() {
   const [isScanning, setIsScanning] = useState(false);
   const [isCalculating, setIsCalculating] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [currentStep, setCurrentStep] = useState(1);
+  const [currentStep, setCurrentStep] = useState(1); // Step 1: Add People
 
   const [currentUser, setCurrentUser] = useState({ name: "Guest User", avatarUrl: "" }); 
 
   const { toast } = useToast();
 
-  // State for input display values to manage "0" clearing UX
   const [taxInputDisplayValue, setTaxInputDisplayValue] = useState<string>(billDetails.taxAmount.toString());
   const [tipInputDisplayValue, setTipInputDisplayValue] = useState<string>(billDetails.tipAmount.toString());
 
+  // Update payerId if people list changes or payer is removed
   useEffect(() => {
-    if (people.length > 0 && !billDetails.payerId) {
-      setBillDetails(prev => ({ ...prev, payerId: people[0].id }));
+    if (people.length > 0) {
+      const payerExists = people.some(p => p.id === billDetails.payerId);
+      if (!billDetails.payerId || !payerExists) {
+        setBillDetails(prev => ({ ...prev, payerId: people[0].id }));
+      }
+    } else {
+      setBillDetails(prev => ({ ...prev, payerId: null }));
     }
   }, [people, billDetails.payerId]);
 
-  // Sync display values when billDetails.taxAmount or billDetails.tipAmount change from other sources (e.g., resetApp)
   useEffect(() => {
     setTaxInputDisplayValue(billDetails.taxAmount.toString());
   }, [billDetails.taxAmount]);
@@ -79,19 +79,57 @@ export default function SplitBillAppPage() {
   }, [splitItems]);
 
   const resetApp = () => {
+    setPeople([]);
+    setPersonNameInput("");
     setSplitItems([]);
     setBillDetails({
-      payerId: people.length > 0 ? people[0].id : null,
+      payerId: null,
       taxAmount: 0,
       tipAmount: 0,
       taxTipSplitStrategy: "SPLIT_EQUALLY",
     });
-    // The useEffects above will update taxInputDisplayValue and tipInputDisplayValue
     setDetailedBillSummary(null);
     setError(null);
-    setCurrentStep(1);
-    toast({ title: "Reset", description: "Status aplikasi telah direset."});
+    setCurrentStep(1); // Back to Add People step
+    toast({ title: "Status Aplikasi Direset", description: "Silakan mulai dengan menambahkan orang."});
   }
+
+  const handleAddPerson = () => {
+    if (personNameInput.trim() === "") {
+      toast({ variant: "destructive", title: "Nama Kosong", description: "Nama orang tidak boleh kosong." });
+      return;
+    }
+    if (people.some(p => p.name.toLowerCase() === personNameInput.trim().toLowerCase())) {
+      toast({ variant: "destructive", title: "Nama Duplikat", description: "Nama orang tersebut sudah ada dalam daftar." });
+      return;
+    }
+    const newPerson: Person = {
+      id: `person_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      name: personNameInput.trim(),
+    };
+    setPeople(prev => [...prev, newPerson]);
+    setPersonNameInput("");
+    toast({ title: "Orang Ditambahkan", description: `${newPerson.name} telah ditambahkan ke daftar.`});
+  };
+
+  const handleRemovePerson = (personIdToRemove: string) => {
+    setPeople(prev => prev.filter(p => p.id !== personIdToRemove));
+    // Optional: Clean up assignments if a person is removed
+    setSplitItems(prevItems => prevItems.map(item => ({
+      ...item,
+      assignedTo: item.assignedTo.filter(a => a.personId !== personIdToRemove)
+    })));
+    toast({ title: "Orang Dihapus", description: "Orang tersebut telah dihapus dari daftar."});
+  };
+  
+  const proceedToScanStep = () => {
+    if (people.length === 0) {
+      toast({ variant: "destructive", title: "Belum Ada Orang", description: "Mohon tambahkan minimal satu orang untuk melanjutkan." });
+      return;
+    }
+    setCurrentStep(2);
+  };
+
 
   const handleScanReceipt = async (receiptDataUri: string) => {
     setIsScanning(true);
@@ -111,9 +149,10 @@ export default function SplitBillAppPage() {
       setSplitItems(newSplitItems);
       toast({ title: "Struk Dipindai", description: `${newSplitItems.length} baris item ditemukan.` });
       if (newSplitItems.length > 0) {
-        setCurrentStep(2);
+        setCurrentStep(3); // Proceed to Edit Items step
       } else {
         toast({ variant: "default", title: "Tidak ada item ditemukan", description: "Pemindaian struk tidak menemukan item apapun. Coba tambahkan manual atau pindai/ambil foto ulang." });
+        // Stay on step 2, or allow manual add to proceed to step 3
       }
     } else {
       setError(result.error || "Gagal memindai struk.");
@@ -139,8 +178,8 @@ export default function SplitBillAppPage() {
     };
     setSplitItems(prevItems => [...prevItems, newItem]);
     setDetailedBillSummary(null);
-    if (currentStep < 2 && splitItems.length === 0) { 
-        setCurrentStep(2);
+    if (currentStep < 3 && people.length > 0) { 
+        setCurrentStep(3); // Ensure we are at least at item editing step
     }
   };
 
@@ -231,7 +270,7 @@ export default function SplitBillAppPage() {
       
       setDetailedBillSummary(detailedSummary);
       toast({ title: "Tagihan Diringkas", description: "Ringkasan berhasil dihitung." });
-      setCurrentStep(3);
+      setCurrentStep(4); // Proceed to Summary step
     } else {
       setError(result.error || "Gagal meringkas tagihan.");
       toast({ variant: "destructive", title: "Ringkasan Gagal", description: result.error || "Tidak dapat menghitung ringkasan." });
@@ -243,7 +282,7 @@ export default function SplitBillAppPage() {
     <div className="min-h-screen bg-gradient-to-br from-background via-secondary/10 to-background">
        <header className="py-4 px-4 sm:px-6 md:px-8 border-b sticky top-0 bg-background/80 backdrop-blur-md z-10">
         <div className="container mx-auto flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2 text-primary hover:text-primary/80 transition-colors">
+          <Link href="/app" onClick={(e) => { e.preventDefault(); resetApp(); }} className="flex items-center gap-2 text-primary hover:text-primary/80 transition-colors">
             <Coins className="h-8 w-8 text-primary-foreground bg-primary p-1.5 rounded-lg shadow-sm" />
             <h1 className="text-2xl font-bold tracking-tight text-foreground">
               Patungan
@@ -296,25 +335,92 @@ export default function SplitBillAppPage() {
             </Alert>
           )}
 
-          <Card className="shadow-xl overflow-hidden bg-card/90 backdrop-blur-sm hover:shadow-2xl transition-shadow duration-300 ease-in-out">
-            <CardHeader className="bg-card/60 border-b">
-              <CardTitle className="text-xl sm:text-2xl font-semibold">1. Pindai Struk Anda</CardTitle>
-              <CardDescription>Gunakan kamera untuk memindai struk atau unggah file gambar. Anda juga bisa menambahkan item manual di langkah berikutnya.</CardDescription>
-            </CardHeader>
-            <CardContent className="p-4 sm:p-6">
-              <ReceiptUploader 
-                onScan={handleScanReceipt} 
-                isScanning={isScanning} 
-                onClearPreview={resetApp} 
-              />
-            </CardContent>
-          </Card>
-
-          {(currentStep >= 2 || splitItems.length > 0) && (
+          {/* Step 1: Add People */}
+          {currentStep === 1 && (
             <Card className="shadow-xl overflow-hidden bg-card/90 backdrop-blur-sm hover:shadow-2xl transition-shadow duration-300 ease-in-out">
               <CardHeader className="bg-card/60 border-b">
-                <CardTitle className="text-xl sm:text-2xl font-semibold">2. Edit Item, Alokasi & Detail Pembayaran</CardTitle>
-                <CardDescription>Tinjau item yang dipindai, koreksi, tambahkan baru, alokasikan ke orang, tentukan pembayar, pajak, dan tip.</CardDescription>
+                <CardTitle className="text-xl sm:text-2xl font-semibold flex items-center"><Users className="mr-3 h-6 w-6"/>1. Tambah Orang</CardTitle>
+                <CardDescription>Masukkan nama orang-orang yang akan ikut patungan.</CardDescription>
+              </CardHeader>
+              <CardContent className="p-4 sm:p-6 space-y-4">
+                <div className="flex space-x-2">
+                  <Input
+                    type="text"
+                    placeholder="Nama Orang"
+                    value={personNameInput}
+                    onChange={(e) => setPersonNameInput(e.target.value)}
+                    onKeyPress={(e) => { if (e.key === 'Enter') handleAddPerson(); }}
+                    className="flex-grow"
+                  />
+                  <Button onClick={handleAddPerson} variant="outline">
+                    <UserPlus className="mr-2 h-4 w-4" /> Tambah
+                  </Button>
+                </div>
+                {people.length > 0 && (
+                  <div className="space-y-2">
+                    <h4 className="text-sm font-medium text-muted-foreground">Daftar Orang:</h4>
+                    <div className="flex flex-wrap gap-2">
+                      {people.map(person => (
+                        <Badge key={person.id} variant="secondary" className="py-1 px-3 text-sm flex items-center gap-2 shadow-sm">
+                          {person.name}
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-5 w-5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-full"
+                            onClick={() => handleRemovePerson(person.id)}
+                            aria-label={`Hapus ${person.name}`}
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+              <CardFooter>
+                <Button onClick={proceedToScanStep} disabled={people.length === 0} className="w-full" size="lg">
+                  Lanjut ke Scan Struk <ArrowRight className="ml-2" />
+                </Button>
+              </CardFooter>
+            </Card>
+          )}
+          
+          {/* Step 2: Scan Receipt */}
+          {currentStep >= 2 && (
+            <Card className="shadow-xl overflow-hidden bg-card/90 backdrop-blur-sm hover:shadow-2xl transition-shadow duration-300 ease-in-out">
+              <CardHeader className="bg-card/60 border-b">
+                <CardTitle className="text-xl sm:text-2xl font-semibold flex items-center"><ScanLine className="mr-3 h-6 w-6"/>2. Pindai Struk Anda</CardTitle>
+                <CardDescription>Gunakan kamera untuk memindai struk atau unggah file gambar. Anda juga bisa menambahkan item manual di langkah berikutnya.</CardDescription>
+              </CardHeader>
+              <CardContent className="p-4 sm:p-6">
+                <ReceiptUploader 
+                  onScan={handleScanReceipt} 
+                  isScanning={isScanning} 
+                  onClearPreview={() => {
+                    setSplitItems([]); // Clear items if preview is cleared before actual scan
+                    // No need to call resetApp here as it would take back to step 1. 
+                    // User might just want to re-upload/re-take without losing people.
+                    // If they want full reset, they can use the header logo.
+                  }}
+                />
+              </CardContent>
+               {currentStep === 2 && splitItems.length === 0 && (
+                <CardFooter className="border-t pt-4">
+                    <Button onClick={handleAddItem} variant="outline" className="w-full">
+                        <PlusCircle className="mr-2 h-4 w-4" /> Lewati Pindai & Tambah Item Manual
+                    </Button>
+                </CardFooter>
+            )}
+            </Card>
+          )}
+
+          {/* Step 3: Edit Items, Assign & Payment Details */}
+          {currentStep >= 3 && (
+            <Card className="shadow-xl overflow-hidden bg-card/90 backdrop-blur-sm hover:shadow-2xl transition-shadow duration-300 ease-in-out">
+              <CardHeader className="bg-card/60 border-b">
+                <CardTitle className="text-xl sm:text-2xl font-semibold flex items-center"><Edit2 className="mr-3 h-6 w-6"/>3. Edit Item, Alokasi & Detail Pembayaran</CardTitle>
+                <CardDescription>Tinjau item, koreksi, tambahkan baru, alokasikan ke orang, tentukan pembayar, pajak, dan tip.</CardDescription>
               </CardHeader>
               <CardContent className="p-4 sm:p-6 space-y-6">
                 <ItemEditor
@@ -323,7 +429,7 @@ export default function SplitBillAppPage() {
                   onUpdateItem={handleUpdateItem}
                   onAddItem={handleAddItem}
                   onDeleteItem={handleDeleteItem}
-                  onCalculateSummary={handleCalculateSummary}
+                  onCalculateSummary={handleCalculateSummary} // This button is now moved below
                   isCalculating={isCalculating}
                 />
                 
@@ -337,9 +443,10 @@ export default function SplitBillAppPage() {
                       <Select
                         value={billDetails.payerId || ""}
                         onValueChange={(value) => handleBillDetailsChange("payerId", value)}
+                        disabled={people.length === 0}
                       >
                         <SelectTrigger id="payer" className="w-full">
-                          <SelectValue placeholder="Pilih pembayar" />
+                          <SelectValue placeholder={people.length > 0 ? "Pilih pembayar" : "Tambah orang dulu"} />
                         </SelectTrigger>
                         <SelectContent>
                           {people.map(person => (
@@ -412,16 +519,16 @@ export default function SplitBillAppPage() {
                       onValueChange={(value) => handleBillDetailsChange("taxTipSplitStrategy", value as TaxTipSplitStrategy)}
                       className="flex flex-col sm:flex-row gap-4"
                     >
-                      <div className="flex items-center space-x-2 p-3 border rounded-md hover:bg-muted/50 transition-colors flex-1">
+                      <div className="flex items-center space-x-2 p-3 border rounded-md hover:bg-muted/50 transition-colors flex-1 cursor-pointer">
                         <RadioGroupItem value="PAYER_PAYS_ALL" id="payer_pays_all" />
-                        <Label htmlFor="payer_pays_all" className="font-normal leading-tight cursor-pointer">
+                        <Label htmlFor="payer_pays_all" className="font-normal leading-tight cursor-pointer flex-1">
                           Pembayar menanggung semua Pajak & Tip
                           <p className="text-xs text-muted-foreground">Total pajak dan tip akan ditambahkan hanya ke bagian pembayar.</p>
                         </Label>
                       </div>
-                      <div className="flex items-center space-x-2 p-3 border rounded-md hover:bg-muted/50 transition-colors flex-1">
+                      <div className="flex items-center space-x-2 p-3 border rounded-md hover:bg-muted/50 transition-colors flex-1 cursor-pointer">
                         <RadioGroupItem value="SPLIT_EQUALLY" id="split_equally" />
-                        <Label htmlFor="split_equally" className="font-normal leading-tight cursor-pointer">
+                        <Label htmlFor="split_equally" className="font-normal leading-tight cursor-pointer flex-1">
                           Bagi rata Pajak & Tip ke semua orang
                           <p className="text-xs text-muted-foreground">Total pajak dan tip akan dibagi rata di antara semua peserta.</p>
                         </Label>
@@ -431,7 +538,7 @@ export default function SplitBillAppPage() {
                 </div>
                  <Button 
                   onClick={handleCalculateSummary} 
-                  disabled={isCalculating || itemsForSummary.length === 0 || !billDetails.payerId} 
+                  disabled={isCalculating || itemsForSummary.length === 0 || !billDetails.payerId || people.length === 0} 
                   size="lg" 
                   className="w-full mt-6"
                 >
@@ -446,11 +553,12 @@ export default function SplitBillAppPage() {
             </Card>
           )}
           
-          {currentStep >= 3 && detailedBillSummary && (
+          {/* Step 4: Bill Summary */}
+          {currentStep >= 4 && detailedBillSummary && (
              <Card className="shadow-xl overflow-hidden bg-card/90 backdrop-blur-sm hover:shadow-2xl transition-shadow duration-300 ease-in-out">
               <CardHeader className="bg-card/60 border-b flex flex-row items-center justify-between">
                 <div>
-                  <CardTitle className="text-xl sm:text-2xl font-semibold">3. Ringkasan Tagihan</CardTitle>
+                  <CardTitle className="text-xl sm:text-2xl font-semibold flex items-center"><ListChecks className="mr-3 h-6 w-6"/>4. Ringkasan Tagihan</CardTitle>
                   <CardDescription>Ini dia siapa berutang apa. Gampang kan!</CardDescription>
                 </div>
                 <Button variant="outline" onClick={resetApp} size="sm">Buat Tagihan Baru</Button>
@@ -470,3 +578,4 @@ export default function SplitBillAppPage() {
   );
 }
 
+    

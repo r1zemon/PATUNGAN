@@ -8,6 +8,10 @@ import { supabase } from "./supabaseClient";
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import type { PostgrestSingleResponse, PostgrestResponse, User as SupabaseUser } from "@supabase/supabase-js";
+import type { Database } from '@/lib/database.types';
+
+type SettlementInsert = Database['public']['Tables']['settlements']['Insert'];
+
 
 interface AppScannedItem {
   id: string;
@@ -60,8 +64,6 @@ export async function signupUserAction(formData: FormData) {
 
   if (profileError) {
     console.error("Error creating profile:", profileError);
-    // Consider if you need to "undo" the auth.signUp if profile creation fails.
-    // For now, just returning the error.
     return { success: false, error: `Pengguna berhasil dibuat, tetapi gagal membuat profil: ${profileError.message}` };
   }
   
@@ -147,7 +149,7 @@ export async function createBillAction(billName?: string): Promise<{ success: bo
   const { data: userAuthData, error: authError } = await supabase.auth.getUser();
 
   if (authError) {
-    console.error("Error getting user for createBillAction:", authError);
+    console.error("Error getting user for createBillAction (authError):", authError);
     return { success: false, error: `Gagal mendapatkan sesi pengguna: ${authError.message}` };
   }
 
@@ -156,12 +158,11 @@ export async function createBillAction(billName?: string): Promise<{ success: bo
      return { success: false, error: "Gagal mendapatkan data autentikasi pengguna. Tidak dapat membuat tagihan." };
   }
   
-  if (!userAuthData.user) {
+  const user = userAuthData.user;
+  if (!user) {
      console.warn("createBillAction: User object within userAuthData is null.");
      return { success: false, error: "Pengguna tidak terautentikasi (data pengguna tidak ditemukan). Tidak dapat membuat tagihan." };
   }
-  
-  const user = userAuthData.user;
   
   const { data: billData, error: billInsertError } = await supabase
     .from('bills')
@@ -274,9 +275,6 @@ export async function handleSummarizeBillAction(
   taxTipSplitStrategy: TaxTipSplitStrategy
 ): Promise<{ success: boolean; data?: RawBillSummary; error?: string }> {
   if (splitItems.length === 0 && people.length === 0 && taxAmount === 0 && tipAmount === 0) {
-    // If everything is empty/zero, we can directly return zero shares for everyone
-    // or handle as appropriate (e.g., if there are people, they owe 0)
-    // For now, let's assume if people exist, they owe 0.
     if (people.length > 0) {
         const zeroSummary: RawBillSummary = {};
         people.forEach(p => zeroSummary[p.name] = 0);
@@ -284,11 +282,11 @@ export async function handleSummarizeBillAction(
     }
     return { success: false, error: "Tidak ada item, orang, pajak, atau tip untuk diringkas." };
   }
-  if (!payerParticipantId) {
-    return { success: false, error: "ID Pembayar tidak disediakan." };
-  }
   if (!billId) {
     return { success: false, error: "Bill ID tidak disediakan." };
+  }
+  if (!payerParticipantId) {
+    return { success: false, error: "ID Pembayar tidak disediakan." };
   }
   
   const payer = people.find(p => p.id === payerParticipantId);
@@ -319,10 +317,10 @@ export async function handleSummarizeBillAction(
     assignedTo: item.assignedTo.map(assignment => {
       const participant = people.find(p => p.id === assignment.personId);
       return {
-        personName: participant?.name || "Unknown Person", // Should ideally not happen if data is clean
+        personName: participant?.name || "Unknown Person", 
         count: assignment.count,
       };
-    }).filter(a => a.personName !== "Unknown Person" && a.count > 0), // Filter out invalid assignments
+    }).filter(a => a.personName !== "Unknown Person" && a.count > 0),
   }));
 
   const peopleNamesForAI: SummarizeBillInput["people"] = people.map(p => p.name);
@@ -345,14 +343,14 @@ export async function handleSummarizeBillAction(
       if (typeof share === 'number') {
         calculatedGrandTotal += share;
         const { error: updateError } = await supabase.from('bill_participants').update({ total_share_amount: share }).eq('id', person.id);
-        if (updateError) return { personId: person.id, error: updateError, success: false }; // Include success flag
+        if (updateError) return { personId: person.id, error: updateError, success: false };
       }
-      return { personId: person.id, error: null, success: true }; // Include success flag
+      return { personId: person.id, error: null, success: true };
     });
     
     const participantUpdateResults = await Promise.all(participantSharePromises);
     for (const result of participantUpdateResults) {
-      if (!result.success && result.error) { // Check success flag
+      if (!result.success && result.error) { 
         const personName = people.find(p=>p.id === result.personId)?.name || result.personId;
         console.error(`Error updating participant share for ${personName} in DB:`, result.error);
         return { success: false, error: `Gagal memperbarui bagian untuk partisipan ${personName} di database: ${result.error.message}` };
@@ -369,13 +367,14 @@ export async function handleSummarizeBillAction(
     for (const person of people) {
       const share = rawSummary[person.name];
       if (person.id !== payerParticipantId && typeof share === 'number' && share > 0) {
+        const settlementData: SettlementInsert = { // Explicitly typed
+          bill_id: billId,
+          from_participant_id: person.id,
+          to_participant_id: payerParticipantId,
+          amount: share
+        };
         settlementPromises.push(
-          supabase.from('settlements').insert({
-            bill_id: billId,
-            from_participant_id: person.id,
-            to_participant_id: payerParticipantId,
-            amount: share
-          })
+          supabase.from('settlements').insert(settlementData)
         );
       }
     }
@@ -438,5 +437,3 @@ export async function updateUserProfileAction(userId: string, updates: { full_na
   
   return { success: true, data, error: null };
 }
-
-    

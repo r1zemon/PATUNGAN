@@ -1,25 +1,143 @@
-
 "use server";
 
 import { scanReceipt, ScanReceiptOutput, ReceiptItem as AiReceiptItem } from "@/ai/flows/scan-receipt";
-import { summarizeBill, SummarizeBillInput } from "@/ai/flows/summarize-bill"; // RawBillSummary type comes from here implicitly
+import { summarizeBill, SummarizeBillInput } from "@/ai/flows/summarize-bill";
 import type { SplitItem, Person, RawBillSummary, TaxTipSplitStrategy } from "./types";
-import { supabase } from "./supabaseClient"; // Import Supabase client
+import { supabase } from "./supabaseClient";
+import { redirect } from 'next/navigation';
+import { revalidatePath } from 'next/cache';
 
 interface AppScannedItem {
-  id: string; // Ini akan menjadi ID client-side sementara sebelum disimpan ke DB
+  id: string;
   name: string;
   unitPrice: number;
   quantity: number;
 }
 
+export async function signupUserAction(formData: FormData) {
+  const email = formData.get('email') as string;
+  const password = formData.get('password') as string;
+  const fullName = formData.get('fullName') as string;
+  const username = formData.get('username') as string;
+  const dateOfBirth = formData.get('dateOfBirth') as string; // Dapatkan sebagai string
+  const phoneNumber = formData.get('phone') as string;
+
+  if (!email || !password || !fullName || !username) {
+    return { success: false, error: "Email, password, nama lengkap, dan username wajib diisi." };
+  }
+
+  const { data: authData, error: authError } = await supabase.auth.signUp({
+    email,
+    password,
+    options: {
+      // Data ini bisa digunakan oleh trigger di Supabase atau untuk akses awal
+      data: { 
+        full_name: fullName,
+        username: username,
+      }
+    }
+  });
+
+  if (authError) {
+    console.error("Error signing up (auth):", authError);
+    return { success: false, error: authError.message };
+  }
+
+  if (!authData.user) {
+    console.error("Signup successful but no user data returned.");
+    return { success: false, error: "Gagal mendapatkan data pengguna setelah pendaftaran." };
+  }
+
+  // Insert into public.profiles table
+  const { error: profileError } = await supabase
+    .from('profiles')
+    .insert({ 
+      id: authData.user.id, 
+      full_name: fullName,
+      username: username,
+      // email: email, // Anda bisa memilih untuk menyimpan email di profil juga
+      date_of_birth: dateOfBirth || null, // Simpan sebagai string tanggal atau null
+      phone_number: phoneNumber || null
+      // avatar_url akan dihandle terpisah jika ada upload
+    });
+
+  if (profileError) {
+    console.error("Error creating profile:", profileError);
+    // Jika pembuatan profil gagal, idealnya pengguna auth juga dihapus atau ada mekanisme kompensasi
+    // Untuk saat ini, kita akan laporkan errornya
+    return { success: false, error: `Pengguna berhasil dibuat, tetapi gagal membuat profil: ${profileError.message}` };
+  }
+  
+  revalidatePath('/', 'layout'); // Revalidate all paths to update header
+  return { success: true, user: authData.user };
+}
+
+export async function loginUserAction(formData: FormData) {
+  const email = formData.get('email') as string;
+  const password = formData.get('password') as string;
+
+  if (!email || !password) {
+    return { success: false, error: "Email dan password wajib diisi." };
+  }
+
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email,
+    password,
+  });
+
+  if (error) {
+    return { success: false, error: error.message };
+  }
+  
+  revalidatePath('/', 'layout');
+  return { success: true, user: data.user };
+}
+
+
+export async function getCurrentUserAction(): Promise<{ user: import('@supabase/supabase-js').User | null; profile: any | null; error?: string }> {
+  const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+
+  if (sessionError) {
+    console.error("Error getting session:", sessionError);
+    return { user: null, profile: null, error: sessionError.message };
+  }
+
+  if (!session || !session.user) {
+    return { user: null, profile: null };
+  }
+
+  const { data: profileData, error: profileError } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', session.user.id)
+    .single();
+
+  if (profileError && profileError.code !== 'PGRST116') { // PGRST116: no rows found, not necessarily an error if profile creation is pending/failed
+    console.error("Error fetching profile:", profileError);
+    // Return user even if profile fetch fails, but log error
+    return { user: session.user, profile: null, error: profileError.message };
+  }
+
+  return { user: session.user, profile: profileData };
+}
+
+export async function logoutUserAction() {
+  const { error } = await supabase.auth.signOut();
+  if (error) {
+    return { success: false, error: error.message };
+  }
+  revalidatePath('/', 'layout');
+  return { success: true };
+}
+
+
 // Action untuk membuat bill baru
 export async function createBillAction(billName?: string): Promise<{ success: boolean; billId?: string; error?: string }> {
-  // Untuk saat ini, user_id bisa null jika belum ada autentikasi
-  // Atau Anda bisa mengambil user_id dari sesi Supabase Auth jika sudah diimplementasikan
+  const { data: { user } } = await supabase.auth.getUser();
+  
   const { data, error } = await supabase
     .from('bills')
-    .insert([{ name: billName || null /* user_id: authUser?.id || null */ }])
+    .insert([{ name: billName || "Tagihan Baru", user_id: user?.id || null }])
     .select('id')
     .single();
 
@@ -42,7 +160,7 @@ export async function addParticipantAction(billId: string, personName: string): 
   const { data, error } = await supabase
     .from('bill_participants')
     .insert([{ bill_id: billId, name: personName.trim() }])
-    .select('id, name') // Ambil ID dan nama dari partisipan yang baru dibuat
+    .select('id, name')
     .single();
 
   if (error) {
@@ -52,8 +170,6 @@ export async function addParticipantAction(billId: string, personName: string): 
   if (!data) {
     return { success: false, error: "Failed to add participant or retrieve data." };
   }
-  // Kembalikan objek Person yang sesuai dengan tipe di frontend
-  // 'id' di sini adalah id dari tabel bill_participants
   return { success: true, person: { id: data.id, name: data.name } };
 }
 
@@ -123,10 +239,10 @@ export async function handleScanReceiptAction(
 }
 
 export async function handleSummarizeBillAction(
-  splitItems: SplitItem[], // SplitItem.id masih client-side, perlu di-map ke DB id jika item sudah disimpan
-  people: Person[], // Person.id sekarang adalah bill_participant.id dari DB
-  billId: string, // ID dari tabel bills
-  payerParticipantId: string, // ID dari tabel bill_participants untuk pembayar
+  splitItems: SplitItem[], 
+  people: Person[], 
+  billId: string,
+  payerParticipantId: string, 
   taxAmount: number,
   tipAmount: number,
   taxTipSplitStrategy: TaxTipSplitStrategy
@@ -147,7 +263,6 @@ export async function handleSummarizeBillAction(
   }
   const payerName = payer.name;
 
-  // Update Bill dengan Payer, Tax, Tip, Strategy
   const { error: billUpdateError } = await supabase
     .from('bills')
     .update({
@@ -163,7 +278,6 @@ export async function handleSummarizeBillAction(
     return { success: false, error: `Gagal memperbarui detail tagihan: ${billUpdateError.message}` };
   }
 
-  // Untuk AI, kita tetap menggunakan nama.
   const itemsForAI: SummarizeBillInput["items"] = splitItems.map(item => ({
     name: item.name,
     unitPrice: item.unitPrice,
@@ -182,7 +296,7 @@ export async function handleSummarizeBillAction(
   const summarizeBillInput: SummarizeBillInput = {
     items: itemsForAI,
     people: peopleNamesForAI,
-    payerName: payerName, // Nama pembayar untuk AI
+    payerName: payerName,
     taxAmount: taxAmount,
     tipAmount: tipAmount,
     taxTipSplitStrategy: taxTipSplitStrategy,
@@ -191,39 +305,36 @@ export async function handleSummarizeBillAction(
   try {
     const rawSummary: RawBillSummary = await summarizeBill(summarizeBillInput);
     
-    // Simpan total share ke bill_participants dan settlements ke tabel settlements
-    for (const person of people) {
-        const share = rawSummary[person.name];
-        if (typeof share === 'number') {
-            await supabase.from('bill_participants').update({ total_share_amount: share }).eq('id', person.id);
-        }
-    }
+    let calculatedGrandTotal = 0;
+    const participantSharePromises = people.map(person => {
+      const share = rawSummary[person.name];
+      if (typeof share === 'number') {
+        calculatedGrandTotal += share;
+        return supabase.from('bill_participants').update({ total_share_amount: share }).eq('id', person.id);
+      }
+      return Promise.resolve();
+    });
+    await Promise.all(participantSharePromises);
     
-    // Hapus settlement lama jika ada
     await supabase.from('settlements').delete().eq('bill_id', billId);
     
-    // Buat settlement baru
     const settlementPromises = [];
-    let calculatedGrandTotal = 0;
-    Object.entries(rawSummary).forEach(([personName, share]) => {
-        calculatedGrandTotal += share;
-        const participant = people.find(p => p.name === personName);
-        if (participant && participant.id !== payerParticipantId && share > 0) {
-            settlementPromises.push(
-                supabase.from('settlements').insert({
-                    bill_id: billId,
-                    from_participant_id: participant.id,
-                    to_participant_id: payerParticipantId,
-                    amount: share
-                })
-            );
-        }
-    });
+    for (const person of people) {
+      const share = rawSummary[person.name];
+      if (person.id !== payerParticipantId && typeof share === 'number' && share > 0) {
+        settlementPromises.push(
+          supabase.from('settlements').insert({
+            bill_id: billId,
+            from_participant_id: person.id,
+            to_participant_id: payerParticipantId,
+            amount: share
+          })
+        );
+      }
+    }
     await Promise.all(settlementPromises);
 
-    // Update grand_total di tabel bills
     await supabase.from('bills').update({ grand_total: calculatedGrandTotal }).eq('id', billId);
-
 
     return { success: true, data: rawSummary };
   } catch (error) {
@@ -246,12 +357,3 @@ export async function handleSummarizeBillAction(
     return { success: false, error: errorMessage };
   }
 }
-
-// TODO: Tambahkan actions untuk CRUD bill_items dan item_assignments
-// Contoh:
-// export async function saveSplitItemsAction(billId: string, splitItems: SplitItem[]): Promise<{ success: boolean; error?: string }> {
-//   // 1. Hapus item dan assignment lama untuk billId ini (atau strategi update yang lebih canggih)
-//   // 2. Insert item baru ke bill_items, dapatkan ID DB mereka
-//   // 3. Insert assignment baru ke item_assignments menggunakan ID DB item dan ID DB partisipan
-//   return { success: true };
-// }

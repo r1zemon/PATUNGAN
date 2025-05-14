@@ -2,24 +2,75 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
-import { useState } from "react";
+import { useState, FormEvent } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { User, Mail, Lock, Eye, EyeOff, CalendarDays, Phone, ArrowLeft, UserCircle } from "lucide-react";
+import { User, Mail, Lock, Eye, EyeOff, CalendarDays, Phone, ArrowLeft, UserCircle, Loader2 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
 import { id as IndonesianLocale } from "date-fns/locale";
 import { cn } from "@/lib/utils";
+import { useToast } from "@/hooks/use-toast";
+import { signupUserAction } from "@/lib/actions";
 
 
 export default function SignupPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [dateOfBirth, setDateOfBirth] = useState<Date | undefined>();
+  const [isLoading, setIsLoading] = useState(false);
+  const router = useRouter();
+  const { toast } = useToast();
+
+  const handleSignup = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setIsLoading(true);
+
+    const formData = new FormData(event.currentTarget);
+    const password = formData.get('password') as string;
+    const confirmPassword = formData.get('confirmPassword') as string;
+
+    if (password !== confirmPassword) {
+      toast({
+        variant: "destructive",
+        title: "Pendaftaran Gagal",
+        description: "Kata sandi dan konfirmasi kata sandi tidak cocok.",
+      });
+      setIsLoading(false);
+      return;
+    }
+    
+    // Append dateOfBirth to formData if selected
+    if (dateOfBirth) {
+      // Format date to YYYY-MM-DD or a format Supabase DATE type accepts
+      formData.set('dateOfBirth', format(dateOfBirth, "yyyy-MM-dd"));
+    } else {
+      formData.delete('dateOfBirth'); // Ensure it's not sent if undefined
+    }
+
+
+    const result = await signupUserAction(formData);
+
+    if (result.success) {
+      toast({
+        title: "Pendaftaran Berhasil!",
+        description: "Anda akan diarahkan ke halaman utama.",
+      });
+      router.push("/app"); 
+    } else {
+      toast({
+        variant: "destructive",
+        title: "Pendaftaran Gagal",
+        description: result.error || "Terjadi kesalahan saat mendaftar.",
+      });
+    }
+    setIsLoading(false);
+  };
+
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-primary/10 via-background to-accent/10 p-4 selection:bg-primary/40 selection:text-primary-foreground">
@@ -35,114 +86,120 @@ export default function SignupPage() {
           <CardTitle className="text-3xl font-bold">Daftar Akun</CardTitle>
           <CardDescription>Buat akun untuk melanjutkan dan mulai berbagi tagihan dengan mudah.</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-1">
-            <Label htmlFor="fullName">Nama Lengkap</Label>
-            <div className="relative">
-              <User className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-              <Input id="fullName" placeholder="Nama Lengkap Anda" className="pl-10" />
+        <form onSubmit={handleSignup}>
+          <CardContent className="space-y-4">
+            <div className="space-y-1">
+              <Label htmlFor="fullName">Nama Lengkap</Label>
+              <div className="relative">
+                <User className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                <Input id="fullName" name="fullName" placeholder="Nama Lengkap Anda" className="pl-10" required />
+              </div>
             </div>
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor="username">Nama Pengguna</Label>
-            <div className="relative">
-              <User className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-              <Input id="username" placeholder="Username unik Anda" className="pl-10" />
+            <div className="space-y-1">
+              <Label htmlFor="username">Nama Pengguna</Label>
+              <div className="relative">
+                <User className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                <Input id="username" name="username" placeholder="Username unik Anda" className="pl-10" required />
+              </div>
             </div>
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor="email">Email</Label>
-            <div className="relative">
-              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-              <Input id="email" type="email" placeholder="contoh@email.com" className="pl-10" />
+            <div className="space-y-1">
+              <Label htmlFor="email">Email</Label>
+              <div className="relative">
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                <Input id="email" name="email" type="email" placeholder="contoh@email.com" className="pl-10" required />
+              </div>
             </div>
-          </div>
-           <div className="space-y-1">
-            <Label htmlFor="dob">Tanggal Lahir</Label>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  variant={"outline"}
-                  className={cn(
-                    "w-full justify-start text-left font-normal",
-                    !dateOfBirth && "text-muted-foreground"
-                  )}
-                >
-                  <div className="flex items-center">
-                    <CalendarDays className="mr-2 h-5 w-5 text-muted-foreground" />
+            <div className="space-y-1">
+              <Label htmlFor="dob">Tanggal Lahir (Opsional)</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant={"outline"}
+                    className={cn(
+                      "w-full justify-start text-left font-normal pl-10", // Added pl-10 for icon alignment
+                      !dateOfBirth && "text-muted-foreground"
+                    )}
+                  >
+                    <CalendarDays className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                     {dateOfBirth ? format(dateOfBirth, "PPP", { locale: IndonesianLocale }) : <span>Pilih tanggal lahir</span>}
-                  </div>
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0">
-                <Calendar
-                  mode="single"
-                  selected={dateOfBirth}
-                  onSelect={setDateOfBirth}
-                  initialFocus
-                  captionLayout="dropdown-buttons"
-                  fromYear={1950}
-                  toYear={new Date().getFullYear() - 10} // Must be at least 10 years old
-                  locale={IndonesianLocale}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0">
+                  <Calendar
+                    mode="single"
+                    selected={dateOfBirth}
+                    onSelect={setDateOfBirth}
+                    initialFocus
+                    captionLayout="dropdown-buttons"
+                    fromYear={1950}
+                    toYear={new Date().getFullYear() - 10} 
+                    locale={IndonesianLocale}
+                    name="dateOfBirth"
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="phone">Nomor Telepon (Opsional)</Label>
+              <div className="relative">
+                <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                <Input id="phone" name="phone" type="tel" placeholder="08123456789" className="pl-10" />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="password">Kata Sandi</Label>
+              <div className="relative">
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                <Input
+                  id="password"
+                  name="password"
+                  type={showPassword ? "text" : "password"}
+                  placeholder="Buat kata sandi yang kuat"
+                  className="pl-10 pr-10"
+                  required
                 />
-              </PopoverContent>
-            </Popover>
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor="phone">Nomor Telepon</Label>
-            <div className="relative">
-              <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-              <Input id="phone" type="tel" placeholder="08123456789" className="pl-10" />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8"
+                  onClick={() => setShowPassword(!showPassword)}
+                  aria-label={showPassword ? "Sembunyikan kata sandi" : "Tampilkan kata sandi"}
+                >
+                  {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                </Button>
+              </div>
             </div>
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor="password">Kata Sandi</Label>
-            <div className="relative">
-              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-              <Input
-                id="password"
-                type={showPassword ? "text" : "password"}
-                placeholder="Buat kata sandi yang kuat"
-                className="pl-10 pr-10"
-              />
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8"
-                onClick={() => setShowPassword(!showPassword)}
-                aria-label={showPassword ? "Sembunyikan kata sandi" : "Tampilkan kata sandi"}
-              >
-                {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-              </Button>
+            <div className="space-y-1">
+              <Label htmlFor="confirmPassword">Konfirmasi Kata Sandi</Label>
+              <div className="relative">
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                <Input
+                  id="confirmPassword"
+                  name="confirmPassword"
+                  type={showConfirmPassword ? "text" : "password"}
+                  placeholder="Ulangi kata sandi Anda"
+                  className="pl-10 pr-10"
+                  required
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  aria-label={showConfirmPassword ? "Sembunyikan konfirmasi kata sandi" : "Tampilkan konfirmasi kata sandi"}
+                >
+                  {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                </Button>
+              </div>
             </div>
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor="confirmPassword">Konfirmasi Kata Sandi</Label>
-            <div className="relative">
-              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-              <Input
-                id="confirmPassword"
-                type={showConfirmPassword ? "text" : "password"}
-                placeholder="Ulangi kata sandi Anda"
-                className="pl-10 pr-10"
-              />
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8"
-                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                aria-label={showConfirmPassword ? "Sembunyikan konfirmasi kata sandi" : "Tampilkan konfirmasi kata sandi"}
-              >
-                {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-              </Button>
-            </div>
-          </div>
-          <Button type="submit" className="w-full text-lg py-6 mt-2">
-            Daftar Akun
-          </Button>
-        </CardContent>
+            <Button type="submit" className="w-full text-lg py-6 mt-2" disabled={isLoading}>
+              {isLoading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : null}
+              {isLoading ? "Mendaftar..." : "Daftar Akun"}
+            </Button>
+          </CardContent>
+        </form>
         <CardFooter>
           <p className="w-full text-center text-sm text-muted-foreground">
             Sudah punya akun?{" "}
@@ -155,4 +212,3 @@ export default function SignupPage() {
     </div>
   );
 }
-

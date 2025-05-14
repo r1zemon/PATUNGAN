@@ -1,3 +1,4 @@
+
 // src/lib/database.types.ts
 // File ini akan diisi dengan tipe yang di-generate oleh Supabase CLI
 // supabase gen types typescript --linked > src/lib/database.types.ts
@@ -55,6 +56,7 @@ export interface Database {
           id: string
           name: string
           total_share_amount: number | null
+          // user_profile_id: string | null // Kolom opsional jika partisipan adalah user terdaftar
         }
         Insert: {
           bill_id: string
@@ -62,6 +64,7 @@ export interface Database {
           id?: string
           name: string
           total_share_amount?: number | null
+          // user_profile_id?: string | null
         }
         Update: {
           bill_id?: string
@@ -69,6 +72,7 @@ export interface Database {
           id?: string
           name?: string
           total_share_amount?: number | null
+          // user_profile_id?: string | null
         }
         Relationships: [
           {
@@ -77,6 +81,12 @@ export interface Database {
             referencedRelation: "bills"
             referencedColumns: ["id"]
           }
+          // {
+          //   foreignKeyName: "bill_participants_user_profile_id_fkey"
+          //   columns: ["user_profile_id"]
+          //   referencedRelation: "profiles"
+          //   referencedColumns: ["id"]
+          // }
         ]
       }
       bills: {
@@ -87,10 +97,10 @@ export interface Database {
           name: string | null
           payer_participant_id: string | null
           tax_amount: number | null
-          tax_tip_split_strategy: string | null
+          tax_tip_split_strategy: string | null // "PAYER_PAYS_ALL" | "SPLIT_EQUALLY"
           tip_amount: number | null
           updated_at: string | null
-          user_id: string | null
+          user_id: string | null // FK to auth.users
         }
         Insert: {
           created_at?: string | null
@@ -172,9 +182,12 @@ export interface Database {
         Row: {
           avatar_url: string | null
           full_name: string | null
-          id: string
+          id: string // FK to auth.users
           updated_at: string | null
           username: string | null
+          email: string | null // Opsional, bisa juga tidak disimpan di sini
+          date_of_birth: string | null // YYYY-MM-DD format
+          phone_number: string | null
         }
         Insert: {
           avatar_url?: string | null
@@ -182,6 +195,9 @@ export interface Database {
           id: string
           updated_at?: string | null
           username?: string | null
+          email?: string | null
+          date_of_birth?: string | null
+          phone_number?: string | null
         }
         Update: {
           avatar_url?: string | null
@@ -189,12 +205,15 @@ export interface Database {
           id?: string
           updated_at?: string | null
           username?: string | null
+          email?: string | null
+          date_of_birth?: string | null
+          phone_number?: string | null
         }
         Relationships: [
           {
             foreignKeyName: "profiles_id_fkey"
             columns: ["id"]
-            referencedRelation: "users"
+            referencedRelation: "users" // Ini mengacu pada auth.users
             referencedColumns: ["id"]
           }
         ]
@@ -266,5 +285,7 @@ export interface Database {
 // Akhir dari tipe yang di-generate (atau contoh)
 // Anda bisa meng-copy paste output dari `supabase gen types typescript --linked > src/lib/database.types.ts` di sini.
 // Jika CLI belum digunakan, tipe dasar di atas adalah placeholder.
-// Saya akan mengasumsikan Anda telah menjalankan CLI dan mendapatkan tipe yang akurat.
-// Untuk contoh ini, saya telah menyertakan struktur dasar yang mungkin Anda dapatkan.
+// Saya telah memperbarui tipe `profiles` untuk mencakup `date_of_birth` dan `phone_number`.
+// Ingatlah untuk menjalankan `supabase gen types typescript --linked > src/lib/database.types.ts` setelah membuat perubahan skema di Supabase.
+
+```

@@ -1,14 +1,16 @@
-
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, FormEvent } from "react";
 import type { SplitItem, Person, BillDetails, TaxTipSplitStrategy, RawBillSummary, DetailedBillSummaryData } from "@/lib/types";
+import type { User as SupabaseUser } from "@supabase/supabase-js";
 import { 
   handleScanReceiptAction, 
   handleSummarizeBillAction,
   createBillAction,
   addParticipantAction,
-  removeParticipantAction
+  removeParticipantAction,
+  getCurrentUserAction,
+  logoutUserAction
 } from "@/lib/actions";
 import { ReceiptUploader } from "@/components/receipt-uploader";
 import { ItemEditor } from "@/components/item-editor";
@@ -24,6 +26,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Separator } from "@/components/ui/separator";
 import { Home, Coins, LogOut, Settings, UserCircle, Power, Info, Percent, Landmark, UserCheck, Loader2, UserPlus, ArrowRight, Trash2, Users, ScanLine, PlusCircle, Edit2, ListChecks, FilePlus } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -35,16 +38,23 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 
+interface Profile {
+  username?: string;
+  full_name?: string;
+  avatar_url?: string;
+  email?: string; // Tambahkan jika Anda menyimpan email di profil
+}
+
 export default function SplitBillAppPage() {
   const [currentBillId, setCurrentBillId] = useState<string | null>(null);
   const [isBillCreating, setIsBillCreating] = useState(false);
 
-  const [people, setPeople] = useState<Person[]>([]); // Person.id akan menjadi ID dari tabel bill_participants
+  const [people, setPeople] = useState<Person[]>([]);
   const [personNameInput, setPersonNameInput] = useState<string>("");
 
-  const [splitItems, setSplitItems] = useState<SplitItem[]>([]); // SplitItem.id masih client-side
+  const [splitItems, setSplitItems] = useState<SplitItem[]>([]);
   const [billDetails, setBillDetails] = useState<BillDetails>({
-    payerId: null, // Ini akan menjadi ID dari tabel bill_participants
+    payerId: null,
     taxAmount: 0,
     tipAmount: 0,
     taxTipSplitStrategy: "SPLIT_EQUALLY",
@@ -54,19 +64,39 @@ export default function SplitBillAppPage() {
   const [isScanning, setIsScanning] = useState(false);
   const [isCalculating, setIsCalculating] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [currentStep, setCurrentStep] = useState(1); // Step 1: Add People
+  const [currentStep, setCurrentStep] = useState(1);
 
-  const [currentUser, setCurrentUser] = useState({ name: "Guest User", avatarUrl: "" }); 
+  const [authUser, setAuthUser] = useState<SupabaseUser | null>(null);
+  const [userProfile, setUserProfile] = useState<Profile | null>(null);
+  const [isLoadingUser, setIsLoadingUser] = useState(true);
+
 
   const { toast } = useToast();
+  const router = useRouter();
 
   const [taxInputDisplayValue, setTaxInputDisplayValue] = useState<string>(billDetails.taxAmount.toString());
   const [tipInputDisplayValue, setTipInputDisplayValue] = useState<string>(billDetails.tipAmount.toString());
 
+  const fetchUser = useCallback(async () => {
+    setIsLoadingUser(true);
+    const { user, profile, error: userError } = await getCurrentUserAction();
+    if (userError) {
+      // toast({ variant: "destructive", title: "Gagal memuat data pengguna", description: userError });
+      console.error("Error fetching user data:", userError);
+    }
+    setAuthUser(user);
+    setUserProfile(profile);
+    setIsLoadingUser(false);
+  }, [toast]);
+
+  useEffect(() => {
+    fetchUser();
+  }, [fetchUser]);
+
   const initializeNewBill = useCallback(async () => {
     setIsBillCreating(true);
     setError(null);
-    const result = await createBillAction("Tagihan Baru"); // Nama default untuk bill
+    const result = await createBillAction("Tagihan Baru");
     if (result.success && result.billId) {
       setCurrentBillId(result.billId);
       setPeople([]);
@@ -88,21 +118,24 @@ export default function SplitBillAppPage() {
     setIsBillCreating(false);
   }, [toast]);
   
-  // Panggil initializeNewBill saat komponen dimuat pertama kali
   useEffect(() => {
-    initializeNewBill();
-  }, [initializeNewBill]);
+    if (!authUser && !isLoadingUser) { // Jika tidak ada user dan loading selesai, mungkin arahkan ke login
+        // router.push('/login'); // Opsional: Arahkan ke login jika tidak ada sesi
+    } else if (authUser && !currentBillId && !isBillCreating) { // Jika ada user tapi belum ada bill
+        initializeNewBill();
+    }
+  }, [authUser, isLoadingUser, currentBillId, isBillCreating, initializeNewBill, router]);
+
 
   const resetApp = () => {
-    initializeNewBill(); // Memanggil fungsi yang sudah ada untuk membuat bill baru
+    initializeNewBill(); 
   }
 
-  // Update payerId jika people list berubah atau payer adalah removed
   useEffect(() => {
     if (people.length > 0) {
       const payerExists = people.some(p => p.id === billDetails.payerId);
       if (!billDetails.payerId || !payerExists) {
-        setBillDetails(prev => ({ ...prev, payerId: people[0].id })); // Default ke orang pertama
+        setBillDetails(prev => ({ ...prev, payerId: people[0].id }));
       }
     } else {
       setBillDetails(prev => ({ ...prev, payerId: null }));
@@ -138,7 +171,7 @@ export default function SplitBillAppPage() {
     
     const result = await addParticipantAction(currentBillId, personNameInput.trim());
     if (result.success && result.person) {
-      setPeople(prev => [...prev, result.person!]); // person.id sekarang adalah dari DB
+      setPeople(prev => [...prev, result.person!]);
       setPersonNameInput("");
       toast({ title: "Orang Ditambahkan", description: `${result.person.name} telah ditambahkan dan disimpan.`});
     } else {
@@ -180,15 +213,12 @@ export default function SplitBillAppPage() {
     setIsScanning(true);
     setError(null);
     setDetailedBillSummary(null); 
-    setSplitItems([]); // Kosongkan item lokal saat scan baru
-
-    // TODO: Sebelum menyimpan item baru, mungkin perlu menghapus item lama dari DB untuk billId ini
-    // Untuk saat ini, kita hanya mengisi state splitItems
+    setSplitItems([]);
 
     const result = await handleScanReceiptAction(receiptDataUri);
     if (result.success && result.data) {
       const newSplitItems: SplitItem[] = result.data.items.map(item => ({ 
-        id: item.id, // Ini masih ID client-side dari hasil scan
+        id: item.id, 
         name: item.name,
         unitPrice: item.unitPrice,
         quantity: item.quantity,
@@ -213,12 +243,11 @@ export default function SplitBillAppPage() {
       prevItems.map((item) => (item.id === updatedItem.id ? updatedItem : item))
     );
     setDetailedBillSummary(null); 
-    // TODO: Action untuk update item di DB jika item sudah disimpan
   };
 
   const handleAddItem = () => {
     const newItem: SplitItem = {
-      id: `manual_${Date.now()}`, // ID Client-side
+      id: `manual_${Date.now()}`, 
       name: "Item Baru",
       unitPrice: 0,
       quantity: 1,
@@ -229,13 +258,11 @@ export default function SplitBillAppPage() {
     if (currentStep < 3 && people.length > 0) { 
         setCurrentStep(3); 
     }
-    // TODO: Action untuk add item di DB jika user sudah siap menyimpan
   };
 
   const handleDeleteItem = (itemId: string) => {
     setSplitItems(prevItems => prevItems.filter(item => item.id !== itemId));
     setDetailedBillSummary(null);
-     // TODO: Action untuk delete item di DB jika item sudah disimpan
   };
 
   const handleBillDetailsChange = (field: keyof BillDetails, value: string | number | TaxTipSplitStrategy) => {
@@ -265,10 +292,6 @@ export default function SplitBillAppPage() {
         return;
     }
     
-    // TODO: Sebelum memanggil handleSummarizeBillAction, kita perlu menyimpan splitItems ke DB
-    // dan mendapatkan ID DB mereka. Untuk sekarang, kita masih pakai ID client-side untuk itemsForSummary.
-    // Ini perlu disesuaikan jika `handleSummarizeBillAction` memerlukan ID item dari DB.
-
     const unassignedItems = itemsForSummary.filter(item => {
         const totalAssignedCount = item.assignedTo.reduce((sum, assignment) => sum + assignment.count, 0);
         return totalAssignedCount < item.quantity;
@@ -286,9 +309,9 @@ export default function SplitBillAppPage() {
 
     const result = await handleSummarizeBillAction(
       itemsForSummary, 
-      people, // people sudah berisi ID dari bill_participants
+      people, 
       currentBillId,
-      billDetails.payerId, // Ini adalah ID bill_participant
+      billDetails.payerId, 
       billDetails.taxAmount,
       billDetails.tipAmount,
       billDetails.taxTipSplitStrategy
@@ -311,9 +334,8 @@ export default function SplitBillAppPage() {
       Object.values(rawSummary).forEach(share => currentGrandTotal += share);
       detailedSummary.grandTotal = currentGrandTotal;
       
-      // Buat settlement dari rawSummary (yang namanya sudah dimapping dengan ID bill_participants di action)
       for (const person of people) {
-        const personShare = rawSummary[person.name] || 0; // Akses dengan nama, karena itu output AI
+        const personShare = rawSummary[person.name] || 0; 
         if (person.id !== billDetails.payerId && personShare > 0) {
           detailedSummary.settlements.push({
             from: person.name,
@@ -332,15 +354,34 @@ export default function SplitBillAppPage() {
     }
     setIsCalculating(false);
   };
+
+  const handleLogout = async () => {
+    const { success, error } = await logoutUserAction();
+    if (success) {
+      toast({ title: "Logout Berhasil" });
+      setAuthUser(null);
+      setUserProfile(null);
+      setCurrentBillId(null); // Reset bill ID
+      router.push("/"); // Arahkan ke landing page
+      resetApp(); // Reset state aplikasi lainnya
+    } else {
+      toast({ variant: "destructive", title: "Logout Gagal", description: error });
+    }
+  };
   
-  if (isBillCreating && !currentBillId) {
+  if (isLoadingUser || (isBillCreating && !currentBillId)) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-background via-secondary/10 to-background p-4">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
-        <p className="mt-4 text-lg text-foreground">Memulai sesi tagihan baru...</p>
+        <p className="mt-4 text-lg text-foreground">
+          {isLoadingUser ? "Memuat data pengguna..." : "Memulai sesi tagihan baru..."}
+        </p>
       </div>
     );
   }
+
+  const displayName = userProfile?.username || userProfile?.full_name || authUser?.email || "Pengguna";
+  const avatarInitial = displayName.substring(0,1).toUpperCase();
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-secondary/10 to-background">
@@ -361,44 +402,50 @@ export default function SplitBillAppPage() {
                 <Home className="h-5 w-5" />
               </Button>
             </Link>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="relative h-10 w-10 rounded-full">
-                  <Avatar className="h-9 w-9">
-                    <AvatarImage src={currentUser.avatarUrl || `https://placehold.co/40x40.png?text=${currentUser.name.substring(0,1)}`} alt={currentUser.name} data-ai-hint="profile avatar" />
-                    <AvatarFallback>{currentUser.name.substring(0,2).toUpperCase()}</AvatarFallback>
-                  </Avatar>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-56" align="end" forceMount>
-                <DropdownMenuLabel className="font-normal">
-                  <div className="flex flex-col space-y-1">
-                    <p className="text-sm font-medium leading-none">{currentUser.name}</p>
-                    <p className="text-xs leading-none text-muted-foreground">
-                      {currentUser.name === "Guest User" ? "guest@example.com" : currentUser.name.toLowerCase().replace(" ", ".") + "@example.com"}
-                    </p>
-                  </div>
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                 <DropdownMenuItem onClick={resetApp} className="sm:hidden">
-                    <FilePlus className="mr-2 h-4 w-4" />
-                    <span>Tagihan Baru</span>
+            {authUser ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" className="relative h-10 w-10 rounded-full">
+                    <Avatar className="h-9 w-9">
+                      <AvatarImage src={userProfile?.avatar_url || `https://placehold.co/40x40.png?text=${avatarInitial}`} alt={displayName} data-ai-hint="profile avatar"/>
+                      <AvatarFallback>{avatarInitial}</AvatarFallback>
+                    </Avatar>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent className="w-56" align="end" forceMount>
+                  <DropdownMenuLabel className="font-normal">
+                    <div className="flex flex-col space-y-1">
+                      <p className="text-sm font-medium leading-none">{userProfile?.full_name || displayName}</p>
+                      <p className="text-xs leading-none text-muted-foreground">
+                        {authUser.email}
+                      </p>
+                    </div>
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={resetApp} className="sm:hidden">
+                      <FilePlus className="mr-2 h-4 w-4" />
+                      <span>Tagihan Baru</span>
+                    </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => router.push('/app/profile')}> {/* Ganti dengan halaman profil sebenarnya */}
+                    <UserCircle className="mr-2 h-4 w-4" />
+                    <span>Profil</span>
                   </DropdownMenuItem>
-                <DropdownMenuItem>
-                  <UserCircle className="mr-2 h-4 w-4" />
-                  <span>Profil</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem>
-                  <Settings className="mr-2 h-4 w-4" />
-                  <span>Pengaturan</span>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => alert("Fungsi Logout akan diimplementasikan!")}>
-                  <LogOut className="mr-2 h-4 w-4" />
-                  <span>Keluar</span>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+                  <DropdownMenuItem onClick={() => toast({title: "Info", description: "Pengaturan belum diimplementasikan."})}>
+                    <Settings className="mr-2 h-4 w-4" />
+                    <span>Pengaturan</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={handleLogout}>
+                    <LogOut className="mr-2 h-4 w-4" />
+                    <span>Keluar</span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              <Button onClick={() => router.push('/login')} variant="outline" size="sm">
+                Masuk / Daftar
+              </Button>
+            )}
           </div>
         </div>
       </header>
@@ -413,7 +460,6 @@ export default function SplitBillAppPage() {
             </Alert>
           )}
 
-          {/* Step 1: Add People */}
           {currentStep === 1 && (
             <Card className="shadow-xl overflow-hidden bg-card/90 backdrop-blur-sm hover:shadow-2xl transition-shadow duration-300 ease-in-out">
               <CardHeader className="bg-card/60 border-b">
@@ -465,7 +511,6 @@ export default function SplitBillAppPage() {
             </Card>
           )}
           
-          {/* Step 2: Scan Receipt */}
           {currentStep >= 2 && (
             <Card className="shadow-xl overflow-hidden bg-card/90 backdrop-blur-sm hover:shadow-2xl transition-shadow duration-300 ease-in-out">
               <CardHeader className="bg-card/60 border-b">
@@ -478,7 +523,6 @@ export default function SplitBillAppPage() {
                   isScanning={isScanning} 
                   onClearPreview={() => {
                     setSplitItems([]); 
-                    // Tidak mereset seluruh app, hanya item dari scan
                   }}
                 />
               </CardContent>
@@ -492,7 +536,6 @@ export default function SplitBillAppPage() {
             </Card>
           )}
 
-          {/* Step 3: Edit Items, Assign & Payment Details */}
           {currentStep >= 3 && (
             <Card className="shadow-xl overflow-hidden bg-card/90 backdrop-blur-sm hover:shadow-2xl transition-shadow duration-300 ease-in-out">
               <CardHeader className="bg-card/60 border-b">
@@ -506,7 +549,7 @@ export default function SplitBillAppPage() {
                   onUpdateItem={handleUpdateItem}
                   onAddItem={handleAddItem}
                   onDeleteItem={handleDeleteItem}
-                  isCalculating={isCalculating} // isCalculating dan onCalculateSummary tidak lagi dipakai di sini
+                  isCalculating={isCalculating} 
                 />
                 
                 <Separator />
@@ -518,7 +561,7 @@ export default function SplitBillAppPage() {
                       <Label htmlFor="payer">Siapa yang Membayar?</Label>
                       <Select
                         value={billDetails.payerId || ""}
-                        onValueChange={(value) => handleBillDetailsChange("payerId", value)} // value adalah participant.id
+                        onValueChange={(value) => handleBillDetailsChange("payerId", value)} 
                         disabled={people.length === 0}
                       >
                         <SelectTrigger id="payer" className="w-full">
@@ -629,7 +672,6 @@ export default function SplitBillAppPage() {
             </Card>
           )}
           
-          {/* Step 4: Bill Summary */}
           {currentStep >= 4 && detailedBillSummary && (
              <Card className="shadow-xl overflow-hidden bg-card/90 backdrop-blur-sm hover:shadow-2xl transition-shadow duration-300 ease-in-out">
               <CardHeader className="bg-card/60 border-b flex flex-row items-center justify-between">

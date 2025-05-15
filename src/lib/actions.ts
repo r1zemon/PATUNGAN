@@ -13,13 +13,6 @@ import type { Database } from '@/lib/database.types';
 type SettlementInsert = Database['public']['Tables']['settlements']['Insert'];
 
 
-interface AppScannedItem {
-  id: string;
-  name: string;
-  unitPrice: number;
-  quantity: number;
-}
-
 export async function signupUserAction(formData: FormData) {
   const email = formData.get('email') as string;
   const password = formData.get('password') as string;
@@ -99,26 +92,20 @@ export async function getCurrentUserAction(): Promise<{ user: SupabaseUser | nul
   const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
 
   if (sessionError) {
-    console.error("Error getting session in getCurrentUserAction:", sessionError);
-    return { user: null, profile: null, error: `Gagal mendapatkan sesi: ${sessionError.message}` };
+    console.error("Error getting session in getCurrentUserAction:", sessionError.message);
+    // This is a genuine error in fetching the session
+    return { user: null, profile: null, error: `Gagal memuat sesi pengguna: ${sessionError.message}` };
   }
 
-  if (!sessionData) {
-    console.warn("getCurrentUserAction: supabase.auth.getSession() returned null data object.");
-    return { user: null, profile: null, error: "Sesi tidak ditemukan (objek data sesi null)." };
-  }
-
-  if (!sessionData.session) {
-    // No active session, this is a normal case if user is not logged in.
-    return { user: null, profile: null }; 
+  if (!sessionData || !sessionData.session || !sessionData.session.user) {
+    // This means no active, valid user session was found. This is NOT an error, just a state.
+    console.log("getCurrentUserAction: No active user session found.");
+    return { user: null, profile: null }; // NO ERROR STRING if simply no session
   }
   
   const user = sessionData.session.user; 
-  if (!user) { 
-     console.warn("getCurrentUserAction: Session exists, but user object within session is null.");
-     return { user: null, profile: null }; 
-  }
 
+  // If we reach here, user object is valid. Proceed to fetch profile.
   const { data: profileData, error: profileError } = await supabase
     .from('profiles')
     .select('*')
@@ -126,12 +113,13 @@ export async function getCurrentUserAction(): Promise<{ user: SupabaseUser | nul
     .single();
 
   if (profileError && profileError.code !== 'PGRST116') { // PGRST116: Single row not found (profile might not exist yet)
-    console.error("Error fetching profile for user:", user.id, profileError);
+    console.error("Error fetching profile for user:", user.id, profileError.message);
     return { user: user, profile: null, error: `Gagal mengambil profil: ${profileError.message}` };
   }
 
   return { user: user, profile: profileData }; // profileData can be null if not found (PGRST116), which is fine.
 }
+
 
 export async function logoutUserAction() {
   const { error } = await supabase.auth.signOut();
@@ -149,20 +137,21 @@ export async function createBillAction(billName?: string): Promise<{ success: bo
   const { data: userAuthData, error: authError } = await supabase.auth.getUser();
 
   if (authError) {
-    console.error("Error getting user for createBillAction (authError):", authError);
-    return { success: false, error: `Gagal mendapatkan sesi pengguna: ${authError.message}` };
+    console.error("createBillAction - authError:", authError.message);
+    return { success: false, error: `Gagal mendapatkan sesi pengguna (authError): ${authError.message}` };
   }
 
   if (!userAuthData) {
-     console.warn("createBillAction: supabase.auth.getUser() returned null data object.");
+     console.warn("createBillAction: userAuthData object is null.");
      return { success: false, error: "Gagal mendapatkan data autentikasi pengguna. Tidak dapat membuat tagihan." };
   }
   
-  const user = userAuthData.user;
-  if (!user) {
+  if (!userAuthData.user) {
      console.warn("createBillAction: User object within userAuthData is null.");
      return { success: false, error: "Pengguna tidak terautentikasi (data pengguna tidak ditemukan). Tidak dapat membuat tagihan." };
   }
+  
+  const user = userAuthData.user;
   
   const { data: billData, error: billInsertError } = await supabase
     .from('bills')
@@ -274,19 +263,26 @@ export async function handleSummarizeBillAction(
   tipAmount: number,
   taxTipSplitStrategy: TaxTipSplitStrategy
 ): Promise<{ success: boolean; data?: RawBillSummary; error?: string }> {
-  if (splitItems.length === 0 && people.length === 0 && taxAmount === 0 && tipAmount === 0) {
-    if (people.length > 0) {
-        const zeroSummary: RawBillSummary = {};
-        people.forEach(p => zeroSummary[p.name] = 0);
-        return { success: true, data: zeroSummary };
-    }
-    return { success: false, error: "Tidak ada item, orang, pajak, atau tip untuk diringkas." };
-  }
   if (!billId) {
     return { success: false, error: "Bill ID tidak disediakan." };
   }
   if (!payerParticipantId) {
     return { success: false, error: "ID Pembayar tidak disediakan." };
+  }
+  if (splitItems.length === 0 && taxAmount === 0 && tipAmount === 0) {
+    if (people.length > 0) {
+        const zeroSummary: RawBillSummary = {};
+        people.forEach(p => zeroSummary[p.name] = 0);
+        // Update participant shares to 0 in DB
+        for (const person of people) {
+            const { error: updateError } = await supabase.from('bill_participants').update({ total_share_amount: 0 }).eq('id', person.id);
+            if (updateError) console.error(`Error setting share to 0 for ${person.name}: ${updateError.message}`);
+        }
+        // Update bill grand total to 0
+        await supabase.from('bills').update({ grand_total: 0, tax_amount:0, tip_amount:0, payer_participant_id: payerParticipantId, tax_tip_split_strategy: taxTipSplitStrategy }).eq('id', billId);
+        return { success: true, data: zeroSummary };
+    }
+    return { success: false, error: "Tidak ada item, pajak, atau tip untuk diringkas, dan tidak ada orang yang terlibat." };
   }
   
   const payer = people.find(p => p.id === payerParticipantId);
@@ -343,17 +339,17 @@ export async function handleSummarizeBillAction(
       if (typeof share === 'number') {
         calculatedGrandTotal += share;
         const { error: updateError } = await supabase.from('bill_participants').update({ total_share_amount: share }).eq('id', person.id);
-        if (updateError) return { personId: person.id, error: updateError, success: false };
+        if (updateError) return { personId: person.id, error: updateError, success: false as const }; // Explicitly type 'false'
       }
-      return { personId: person.id, error: null, success: true };
+      return { personId: person.id, error: null, success: true as const }; // Explicitly type 'true'
     });
     
     const participantUpdateResults = await Promise.all(participantSharePromises);
     for (const result of participantUpdateResults) {
       if (!result.success && result.error) { 
-        const personName = people.find(p=>p.id === result.personId)?.name || result.personId;
-        console.error(`Error updating participant share for ${personName} in DB:`, result.error);
-        return { success: false, error: `Gagal memperbarui bagian untuk partisipan ${personName} di database: ${result.error.message}` };
+        const personNameFound = people.find(p=>p.id === result.personId)?.name || result.personId;
+        console.error(`Error updating participant share for ${personNameFound} in DB:`, result.error);
+        return { success: false, error: `Gagal memperbarui bagian untuk partisipan ${personNameFound} di database: ${result.error.message}` };
       }
     }
     
@@ -363,23 +359,23 @@ export async function handleSummarizeBillAction(
         return { success: false, error: `Gagal menghapus penyelesaian lama dari database: ${deleteSettlementsError.message}` };
     }
     
-    const settlementPromises: Promise<PostgrestResponse<any>>[] = [];
+    const settlementInsertPromises: Promise<PostgrestResponse<any>>[] = [];
     for (const person of people) {
       const share = rawSummary[person.name];
       if (person.id !== payerParticipantId && typeof share === 'number' && share > 0) {
-        const settlementData: SettlementInsert = { // Explicitly typed
+        const settlementData: SettlementInsert = { 
           bill_id: billId,
           from_participant_id: person.id,
           to_participant_id: payerParticipantId,
           amount: share
         };
-        settlementPromises.push(
+        settlementInsertPromises.push(
           supabase.from('settlements').insert(settlementData)
         );
       }
     }
-    if (settlementPromises.length > 0) {
-        const settlementInsertResponses = await Promise.all(settlementPromises);
+    if (settlementInsertPromises.length > 0) {
+        const settlementInsertResponses = await Promise.all(settlementInsertPromises);
         for (const response of settlementInsertResponses) {
           if (response.error) { 
             console.error("Error inserting settlement to DB:", response.error);
@@ -437,3 +433,6 @@ export async function updateUserProfileAction(userId: string, updates: { full_na
   
   return { success: true, data, error: null };
 }
+
+
+    

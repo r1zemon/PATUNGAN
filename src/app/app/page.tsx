@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useMemo, useCallback, FormEvent } from "react";
@@ -42,7 +43,7 @@ interface Profile {
   username?: string;
   full_name?: string;
   avatar_url?: string;
-  email?: string; // Tambahkan jika Anda menyimpan email di profil
+  email?: string; 
 }
 
 export default function SplitBillAppPage() {
@@ -81,19 +82,24 @@ export default function SplitBillAppPage() {
     setIsLoadingUser(true);
     const { user, profile, error: userError } = await getCurrentUserAction();
     if (userError) {
-      // toast({ variant: "destructive", title: "Gagal memuat data pengguna", description: userError });
       console.error("Error fetching user data:", userError);
+      // No toast here, as it might be normal (e.g. user not logged in)
     }
     setAuthUser(user);
     setUserProfile(profile);
     setIsLoadingUser(false);
-  }, [toast]);
+  }, []);
 
   useEffect(() => {
     fetchUser();
   }, [fetchUser]);
 
   const initializeNewBill = useCallback(async () => {
+    if (!authUser) { // Only initialize if user is authenticated
+      setError("Pengguna tidak terautentikasi. Mohon login untuk membuat tagihan.");
+      console.warn("initializeNewBill called without authenticated user.");
+      return;
+    }
     setIsBillCreating(true);
     setError(null);
     const result = await createBillAction("Tagihan Baru");
@@ -110,25 +116,37 @@ export default function SplitBillAppPage() {
       });
       setDetailedBillSummary(null);
       setCurrentStep(1);
-      toast({ title: "Sesi Tagihan Baru Dimulai", description: `ID Tagihan: ${result.billId}`});
+      toast({ title: "Sesi Tagihan Baru Dimulai", description: `Silakan tambahkan partisipan.`});
     } else {
       setError(result.error || "Gagal memulai sesi tagihan baru.");
       toast({ variant: "destructive", title: "Inisialisasi Gagal", description: result.error || "Tidak dapat membuat tagihan baru di database." });
     }
     setIsBillCreating(false);
-  }, [toast]);
+  }, [toast, authUser]); // Added authUser to dependency array
   
   useEffect(() => {
-    if (!authUser && !isLoadingUser) { // Jika tidak ada user dan loading selesai, mungkin arahkan ke login
-        // router.push('/login'); // Opsional: Arahkan ke login jika tidak ada sesi
-    } else if (authUser && !currentBillId && !isBillCreating) { // Jika ada user tapi belum ada bill
+    // If user is loaded, authenticated, but no bill ID yet, and not in process of creating one.
+    if (!isLoadingUser && authUser && !currentBillId && !isBillCreating) {
         initializeNewBill();
     }
-  }, [authUser, isLoadingUser, currentBillId, isBillCreating, initializeNewBill, router]);
+  }, [authUser, isLoadingUser, currentBillId, isBillCreating, initializeNewBill]);
 
 
   const resetApp = () => {
-    initializeNewBill(); 
+     if (authUser) { // Only initialize if user is authenticated
+        initializeNewBill(); 
+     } else {
+        // If no authUser, reset local state but don't call initializeNewBill which requires auth
+        setCurrentBillId(null);
+        setPeople([]);
+        setPersonNameInput("");
+        setSplitItems([]);
+        setBillDetails({ payerId: null, taxAmount: 0, tipAmount: 0, taxTipSplitStrategy: "SPLIT_EQUALLY" });
+        setDetailedBillSummary(null);
+        setCurrentStep(1);
+        setError("Mohon login untuk memulai tagihan baru.");
+        toast({title: "Pengguna Tidak Login", description: "Silakan login untuk menggunakan aplikasi."})
+     }
   }
 
   useEffect(() => {
@@ -180,14 +198,16 @@ export default function SplitBillAppPage() {
   };
 
   const handleRemovePerson = async (personIdToRemove: string) => {
+    if (!currentBillId) return;
     const result = await removeParticipantAction(personIdToRemove);
     if (result.success) {
+      const personRemoved = people.find(p => p.id === personIdToRemove);
       setPeople(prev => prev.filter(p => p.id !== personIdToRemove));
       setSplitItems(prevItems => prevItems.map(item => ({
         ...item,
         assignedTo: item.assignedTo.filter(a => a.personId !== personIdToRemove)
       })));
-      toast({ title: "Orang Dihapus", description: "Orang tersebut telah dihapus dari daftar dan database."});
+      toast({ title: "Orang Dihapus", description: `${personRemoved?.name || 'Orang tersebut'} telah dihapus.`});
       if (billDetails.payerId === personIdToRemove) {
         setBillDetails(prev => ({ ...prev, payerId: people.length > 1 ? people.find(p => p.id !== personIdToRemove)!.id : null }));
       }
@@ -205,6 +225,7 @@ export default function SplitBillAppPage() {
       toast({ variant: "destructive", title: "Tagihan Belum Siap", description: "Mohon tunggu sesi tagihan terinisialisasi." });
       return;
     }
+    setError(null); // Clear previous errors when proceeding
     setCurrentStep(2);
   };
 
@@ -213,7 +234,8 @@ export default function SplitBillAppPage() {
     setIsScanning(true);
     setError(null);
     setDetailedBillSummary(null); 
-    setSplitItems([]);
+    // Do not clear splitItems here if you want to add to existing items from multiple scans
+    // setSplitItems([]); 
 
     const result = await handleScanReceiptAction(receiptDataUri);
     if (result.success && result.data) {
@@ -224,11 +246,11 @@ export default function SplitBillAppPage() {
         quantity: item.quantity,
         assignedTo: [], 
       }));
-      setSplitItems(newSplitItems);
-      toast({ title: "Struk Dipindai", description: `${newSplitItems.length} baris item ditemukan.` });
-      if (newSplitItems.length > 0) {
+      setSplitItems(prev => [...prev, ...newSplitItems]); // Append new items
+      toast({ title: "Struk Dipindai", description: `${newSplitItems.length} baris item ditambahkan.` });
+      if (newSplitItems.length > 0 && currentStep < 3) {
         setCurrentStep(3); 
-      } else {
+      } else if (newSplitItems.length === 0) {
         toast({ variant: "default", title: "Tidak ada item ditemukan", description: "Pemindaian struk tidak menemukan item apapun. Coba tambahkan manual atau pindai/ambil foto ulang." });
       }
     } else {
@@ -285,10 +307,17 @@ export default function SplitBillAppPage() {
     setIsCalculating(true);
     setError(null);
 
-    if (itemsForSummary.length === 0) {
-        setError("Tidak ada item valid untuk diringkas. Mohon tambahkan item dengan kuantitas dan harga.");
-        toast({ variant: "destructive", title: "Ringkasan Gagal", description: "Tidak ada item valid untuk diringkas." });
+    if (itemsForSummary.length === 0 && billDetails.taxAmount === 0 && billDetails.tipAmount === 0) {
+        setError("Tidak ada item, pajak, atau tip untuk diringkas.");
+        toast({ variant: "destructive", title: "Ringkasan Gagal", description: "Tidak ada yang bisa diringkas." });
         setIsCalculating(false);
+        setDetailedBillSummary({ // Show a zero summary
+            payerName: people.find(p => p.id === billDetails.payerId)?.name || "Pembayar",
+            taxAmount: 0, tipAmount: 0, grandTotal: 0,
+            personalTotalShares: people.reduce((acc, p) => ({...acc, [p.name]: 0}), {}),
+            settlements: []
+        });
+        setCurrentStep(4);
         return;
     }
     
@@ -356,20 +385,20 @@ export default function SplitBillAppPage() {
   };
 
   const handleLogout = async () => {
-    const { success, error } = await logoutUserAction();
+    const { success, error: logoutErr } = await logoutUserAction();
     if (success) {
       toast({ title: "Logout Berhasil" });
       setAuthUser(null);
       setUserProfile(null);
-      setCurrentBillId(null); // Reset bill ID
-      router.push("/"); // Arahkan ke landing page
-      resetApp(); // Reset state aplikasi lainnya
+      setCurrentBillId(null); 
+      router.push("/"); 
+      resetApp(); 
     } else {
-      toast({ variant: "destructive", title: "Logout Gagal", description: error });
+      toast({ variant: "destructive", title: "Logout Gagal", description: logoutErr });
     }
   };
   
-  if (isLoadingUser || (isBillCreating && !currentBillId)) {
+  if (isLoadingUser || (authUser && isBillCreating && !currentBillId)) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-background via-secondary/10 to-background p-4">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -394,7 +423,7 @@ export default function SplitBillAppPage() {
             </h1>
           </Link>
           <div className="flex items-center gap-2 sm:gap-4">
-             <Button variant="outline" onClick={resetApp} size="sm" className="hidden sm:inline-flex">
+             <Button variant="outline" onClick={resetApp} size="sm" className="hidden sm:inline-flex" disabled={!authUser}>
                 <FilePlus className="mr-2 h-4 w-4" /> Tagihan Baru
             </Button>
             <Link href="/" passHref>
@@ -426,7 +455,7 @@ export default function SplitBillAppPage() {
                       <FilePlus className="mr-2 h-4 w-4" />
                       <span>Tagihan Baru</span>
                     </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => router.push('/app/profile')}> {/* Ganti dengan halaman profil sebenarnya */}
+                  <DropdownMenuItem onClick={() => toast({title: "Info", description: "Halaman profil belum diimplementasikan."})}>
                     <UserCircle className="mr-2 h-4 w-4" />
                     <span>Profil</span>
                   </DropdownMenuItem>
@@ -451,6 +480,26 @@ export default function SplitBillAppPage() {
       </header>
 
       <div className="container mx-auto px-4 py-8 md:px-6 md:py-12">
+        {!authUser && !isLoadingUser && (
+             <Card className="shadow-xl overflow-hidden bg-card/90 backdrop-blur-sm hover:shadow-2xl transition-shadow duration-300 ease-in-out">
+                <CardHeader className="bg-card/60 border-b">
+                    <CardTitle className="text-xl sm:text-2xl font-semibold flex items-center">
+                        <Info className="mr-3 h-6 w-6 text-primary"/> Selamat Datang di Patungan!
+                    </CardTitle>
+                    <CardDescription>Untuk memulai membagi tagihan, silakan masuk atau daftar terlebih dahulu.</CardDescription>
+                </CardHeader>
+                <CardContent className="p-4 sm:p-6 flex flex-col sm:flex-row gap-4">
+                     <Button onClick={() => router.push('/login')} className="w-full sm:w-auto" size="lg">
+                        Masuk
+                    </Button>
+                    <Button onClick={() => router.push('/signup')} variant="outline" className="w-full sm:w-auto" size="lg">
+                        Daftar Akun Baru
+                    </Button>
+                </CardContent>
+             </Card>
+        )}
+
+        {authUser && (
         <main className="space-y-8">
           {error && (
             <Alert variant="destructive" className="shadow-md">
@@ -523,6 +572,8 @@ export default function SplitBillAppPage() {
                   isScanning={isScanning} 
                   onClearPreview={() => {
                     setSplitItems([]); 
+                    // Don't reset app to step 1, just clear items for this bill
+                    toast({ title: "Pratinjau Dihapus", description: "Anda dapat memindai atau mengunggah struk baru."});
                   }}
                 />
               </CardContent>
@@ -657,7 +708,7 @@ export default function SplitBillAppPage() {
                 </div>
                  <Button 
                   onClick={handleCalculateSummary} 
-                  disabled={isCalculating || itemsForSummary.length === 0 || !billDetails.payerId || people.length === 0 || !currentBillId} 
+                  disabled={isCalculating || (itemsForSummary.length === 0 && billDetails.taxAmount === 0 && billDetails.tipAmount === 0) || !billDetails.payerId || people.length === 0 || !currentBillId} 
                   size="lg" 
                   className="w-full mt-6"
                 >
@@ -679,7 +730,7 @@ export default function SplitBillAppPage() {
                   <CardTitle className="text-xl sm:text-2xl font-semibold flex items-center"><ListChecks className="mr-3 h-6 w-6"/>4. Ringkasan Tagihan</CardTitle>
                   <CardDescription>Ini dia siapa berutang apa. Gampang kan!</CardDescription>
                 </div>
-                <Button variant="outline" onClick={resetApp} size="sm">
+                <Button variant="outline" onClick={resetApp} size="sm" disabled={!authUser}>
                     <FilePlus className="mr-2 h-4 w-4" /> Buat Tagihan Baru
                 </Button>
               </CardHeader>
@@ -689,6 +740,7 @@ export default function SplitBillAppPage() {
             </Card>
           )}
         </main>
+        )}
         <footer className="mt-12 pt-8 border-t border-border/40 text-center text-sm text-muted-foreground">
           <p>&copy; {new Date().getFullYear()} Patungan. Hak cipta dilindungi.</p>
           <p>Ditenagai oleh Next.js, Shadcn/UI, Genkit, dan Supabase.</p>

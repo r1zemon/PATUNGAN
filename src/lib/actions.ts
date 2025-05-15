@@ -3,7 +3,7 @@
 
 import { scanReceipt, ScanReceiptOutput, ReceiptItem as AiReceiptItem } from "@/ai/flows/scan-receipt";
 import { summarizeBill, SummarizeBillInput } from "@/ai/flows/summarize-bill";
-import type { SplitItem, Person, RawBillSummary, TaxTipSplitStrategy } from "./types";
+import type { SplitItem, Person, RawBillSummary, TaxTipSplitStrategy, ScannedItem } from "./types"; // Added ScannedItem
 import { supabase } from "./supabaseClient";
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
@@ -57,7 +57,9 @@ export async function signupUserAction(formData: FormData) {
 
   if (profileError) {
     console.error("Error creating profile:", profileError);
-    return { success: false, error: `Pengguna berhasil dibuat, tetapi gagal membuat profil: ${profileError.message}` };
+    // Attempt to delete the auth user if profile creation fails to avoid orphaned auth users
+    await supabase.auth.admin.deleteUser(authData.user.id);
+    return { success: false, error: `Pengguna berhasil dibuat di auth, tetapi gagal membuat profil: ${profileError.message}. Pengguna auth telah dihapus.` };
   }
   
   revalidatePath('/', 'layout'); 
@@ -83,7 +85,8 @@ export async function loginUserAction(formData: FormData) {
   }
   
   revalidatePath('/', 'layout');
-  revalidatePath('/app', 'layout');
+  revalidatePath('/app', 'page'); // Changed from layout to page for /app
+  revalidatePath('/app', 'layout'); // Keep this for header updates
   return { success: true, user: data.user };
 }
 
@@ -93,31 +96,36 @@ export async function getCurrentUserAction(): Promise<{ user: SupabaseUser | nul
 
   if (sessionError) {
     console.error("Error getting session in getCurrentUserAction:", sessionError.message);
-    // This is a genuine error in fetching the session
     return { user: null, profile: null, error: `Gagal memuat sesi pengguna: ${sessionError.message}` };
   }
 
-  if (!sessionData || !sessionData.session || !sessionData.session.user) {
-    // This means no active, valid user session was found. This is NOT an error, just a state.
-    console.log("getCurrentUserAction: No active user session found.");
-    return { user: null, profile: null }; // NO ERROR STRING if simply no session
+  if (!sessionData) {
+    console.warn("getCurrentUserAction: sessionData object itself is null.");
+    return { user: null, profile: null }; 
+  }
+  if (!sessionData.session) {
+    console.warn("getCurrentUserAction: sessionData.session is null.");
+    return { user: null, profile: null };
+  }
+  if (!sessionData.session.user) {
+    console.warn("getCurrentUserAction: User object within sessionData.session is null.");
+    return { user: null, profile: null };
   }
   
   const user = sessionData.session.user; 
 
-  // If we reach here, user object is valid. Proceed to fetch profile.
   const { data: profileData, error: profileError } = await supabase
     .from('profiles')
     .select('*')
     .eq('id', user.id)
     .single();
 
-  if (profileError && profileError.code !== 'PGRST116') { // PGRST116: Single row not found (profile might not exist yet)
+  if (profileError && profileError.code !== 'PGRST116') { 
     console.error("Error fetching profile for user:", user.id, profileError.message);
     return { user: user, profile: null, error: `Gagal mengambil profil: ${profileError.message}` };
   }
 
-  return { user: user, profile: profileData }; // profileData can be null if not found (PGRST116), which is fine.
+  return { user: user, profile: profileData };
 }
 
 
@@ -127,7 +135,8 @@ export async function logoutUserAction() {
     return { success: false, error: error.message };
   }
   revalidatePath('/', 'layout');
-  revalidatePath('/app', 'layout'); 
+  revalidatePath('/app', 'page'); // Changed from layout to page for /app
+  revalidatePath('/app', 'layout'); // Keep this
   revalidatePath('/login', 'page');
   return { success: true };
 }
@@ -142,12 +151,12 @@ export async function createBillAction(billName?: string): Promise<{ success: bo
   }
 
   if (!userAuthData) {
-     console.warn("createBillAction: userAuthData object is null.");
-     return { success: false, error: "Gagal mendapatkan data autentikasi pengguna. Tidak dapat membuat tagihan." };
+     console.warn("createBillAction: userAuthData object is null. Cannot create bill.");
+     return { success: false, error: "Gagal mendapatkan data autentikasi pengguna (data null). Tidak dapat membuat tagihan." };
   }
   
   if (!userAuthData.user) {
-     console.warn("createBillAction: User object within userAuthData is null.");
+     console.warn("createBillAction: User object within userAuthData is null. Cannot create bill.");
      return { success: false, error: "Pengguna tidak terautentikasi (data pengguna tidak ditemukan). Tidak dapat membuat tagihan." };
   }
   
@@ -210,7 +219,7 @@ export async function removeParticipantAction(participantId: string): Promise<{ 
 
 export async function handleScanReceiptAction(
   receiptDataUri: string
-): Promise<{ success: boolean; data?: { items: AppScannedItem[] }; error?: string }> {
+): Promise<{ success: boolean; data?: { items: ScannedItem[] }; error?: string }> { // Changed AppScannedItem to ScannedItem
   if (!receiptDataUri) {
     return { success: false, error: "Tidak ada data gambar struk." };
   }
@@ -224,7 +233,7 @@ export async function handleScanReceiptAction(
     const result: ScanReceiptOutput = await scanReceipt({ receiptDataUri });
     
     if (result && result.items !== undefined) {
-      const appItems: AppScannedItem[] = result.items.map((item: AiReceiptItem, index: number) => ({
+      const appItems: ScannedItem[] = result.items.map((item: AiReceiptItem, index: number) => ({ // Changed AppScannedItem to ScannedItem
         id: `scanned_${Date.now()}_${index}`, 
         name: item.name || "Item Tidak Dikenal",
         unitPrice: typeof item.unitPrice === 'number' ? item.unitPrice : 0,
@@ -269,20 +278,19 @@ export async function handleSummarizeBillAction(
   if (!payerParticipantId) {
     return { success: false, error: "ID Pembayar tidak disediakan." };
   }
+   if (people.length === 0) {
+    return { success: false, error: "Tidak ada orang yang terlibat dalam tagihan." };
+  }
   if (splitItems.length === 0 && taxAmount === 0 && tipAmount === 0) {
-    if (people.length > 0) {
-        const zeroSummary: RawBillSummary = {};
-        people.forEach(p => zeroSummary[p.name] = 0);
-        // Update participant shares to 0 in DB
-        for (const person of people) {
-            const { error: updateError } = await supabase.from('bill_participants').update({ total_share_amount: 0 }).eq('id', person.id);
-            if (updateError) console.error(`Error setting share to 0 for ${person.name}: ${updateError.message}`);
-        }
-        // Update bill grand total to 0
-        await supabase.from('bills').update({ grand_total: 0, tax_amount:0, tip_amount:0, payer_participant_id: payerParticipantId, tax_tip_split_strategy: taxTipSplitStrategy }).eq('id', billId);
-        return { success: true, data: zeroSummary };
+    const zeroSummary: RawBillSummary = {};
+    people.forEach(p => zeroSummary[p.name] = 0);
+    
+    for (const person of people) {
+        const { error: updateError } = await supabase.from('bill_participants').update({ total_share_amount: 0 }).eq('id', person.id);
+        if (updateError) console.warn(`Error setting share to 0 for ${person.name}: ${updateError.message}`);
     }
-    return { success: false, error: "Tidak ada item, pajak, atau tip untuk diringkas, dan tidak ada orang yang terlibat." };
+    await supabase.from('bills').update({ grand_total: 0, tax_amount:0, tip_amount:0, payer_participant_id: payerParticipantId, tax_tip_split_strategy: taxTipSplitStrategy }).eq('id', billId);
+    return { success: true, data: zeroSummary };
   }
   
   const payer = people.find(p => p.id === payerParticipantId);
@@ -317,7 +325,7 @@ export async function handleSummarizeBillAction(
         count: assignment.count,
       };
     }).filter(a => a.personName !== "Unknown Person" && a.count > 0),
-  }));
+  })).filter(item => item.quantity > 0 && item.unitPrice >= 0); // Pastikan hanya item valid yang dikirim
 
   const peopleNamesForAI: SummarizeBillInput["people"] = people.map(p => p.name);
 
@@ -339,16 +347,20 @@ export async function handleSummarizeBillAction(
       if (typeof share === 'number') {
         calculatedGrandTotal += share;
         const { error: updateError } = await supabase.from('bill_participants').update({ total_share_amount: share }).eq('id', person.id);
-        if (updateError) return { personId: person.id, error: updateError, success: false as const }; // Explicitly type 'false'
+        if (updateError) return { personId: person.id, error: updateError, success: false as const };
+      } else if (rawSummary[person.name] === undefined) {
+         // Handle if AI did not return a share for a person, default to 0
+        const { error: updateError } = await supabase.from('bill_participants').update({ total_share_amount: 0 }).eq('id', person.id);
+        if (updateError) return { personId: person.id, error: updateError, success: false as const };
       }
-      return { personId: person.id, error: null, success: true as const }; // Explicitly type 'true'
+      return { personId: person.id, error: null, success: true as const };
     });
     
     const participantUpdateResults = await Promise.all(participantSharePromises);
     for (const result of participantUpdateResults) {
       if (!result.success && result.error) { 
         const personNameFound = people.find(p=>p.id === result.personId)?.name || result.personId;
-        console.error(`Error updating participant share for ${personNameFound} in DB:`, result.error);
+        console.error(`Error updating participant share for ${personNameFound} in DB:`, result.error.message);
         return { success: false, error: `Gagal memperbarui bagian untuk partisipan ${personNameFound} di database: ${result.error.message}` };
       }
     }
@@ -359,7 +371,7 @@ export async function handleSummarizeBillAction(
         return { success: false, error: `Gagal menghapus penyelesaian lama dari database: ${deleteSettlementsError.message}` };
     }
     
-    const settlementInsertPromises: Promise<PostgrestResponse<any>>[] = [];
+    const settlementPromises: Promise<PostgrestSingleResponse<any>>[] = [];
     for (const person of people) {
       const share = rawSummary[person.name];
       if (person.id !== payerParticipantId && typeof share === 'number' && share > 0) {
@@ -369,17 +381,17 @@ export async function handleSummarizeBillAction(
           to_participant_id: payerParticipantId,
           amount: share
         };
-        settlementInsertPromises.push(
-          supabase.from('settlements').insert(settlementData)
+        settlementPromises.push(
+          supabase.from('settlements').insert(settlementData).select().single()
         );
       }
     }
-    if (settlementInsertPromises.length > 0) {
-        const settlementInsertResponses = await Promise.all(settlementInsertPromises);
-        for (const response of settlementInsertResponses) {
-          if (response.error) { 
-            console.error("Error inserting settlement to DB:", response.error);
-            return { success: false, error: `Gagal menyimpan penyelesaian ke database: ${response.error.message}` };
+    if (settlementPromises.length > 0) {
+        const settlementInsertResults = await Promise.all(settlementPromises);
+        for (const result of settlementInsertResults) {
+          if (result.error) { 
+            console.error("Error inserting settlement to DB:", result.error);
+            return { success: false, error: `Gagal menyimpan penyelesaian ke database: ${result.error.message}` };
           }
         }
     }
@@ -433,6 +445,3 @@ export async function updateUserProfileAction(userId: string, updates: { full_na
   
   return { success: true, data, error: null };
 }
-
-
-    

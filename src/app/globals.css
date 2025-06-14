@@ -5,7 +5,7 @@
 @layer base {
   :root {
     --background: 0 0% 94%; /* Light Gray - PRD */
-    --foreground: 220 20% 96%; /* Very Light Cool Off-White, for better readability on patterned bg */
+    --foreground: 220 25% 25%; /* Dark text, similar to card-foreground for readability */
 
     --card: 0 0% 100%; /* White for cards */
     --card-foreground: 220 25% 25%; /* Dark text on card */

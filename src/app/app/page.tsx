@@ -84,7 +84,6 @@ export default function SplitBillAppPage() {
     const { user, profile, error: userError } = await getCurrentUserAction();
     if (userError) {
       console.error("Error fetching user data:", userError);
-      // No toast here, as it might be normal (e.g. user not logged in)
     }
     setAuthUser(user);
     setUserProfile(profile);
@@ -410,8 +409,8 @@ export default function SplitBillAppPage() {
   const avatarInitial = displayName.substring(0,1).toUpperCase();
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-secondary/10 to-background bg-money-pattern bg-[length:150px_auto]">
-       <header className="py-4 px-4 sm:px-6 md:px-8 border-b sticky top-0 bg-background/80 backdrop-blur-md z-10">
+    <div className="relative min-h-screen bg-gradient-to-br from-background via-secondary/10 to-background bg-money-pattern bg-[length:150px_auto] before:content-[''] before:absolute before:inset-0 before:bg-white/50 before:dark:bg-black/50 before:z-0">
+       <header className="relative z-[1] py-4 px-4 sm:px-6 md:px-8 border-b sticky top-0 bg-background/80 backdrop-blur-md">
         <div className="container mx-auto flex items-center justify-between">
           <Link href="/app" onClick={(e) => { e.preventDefault(); resetApp(); }} className="flex items-center gap-2 text-primary hover:text-primary/80 transition-colors">
             <Image src="/logo.png" alt="Patungan Logo" width={48} height={48} className="rounded-lg shadow-sm" />
@@ -476,7 +475,7 @@ export default function SplitBillAppPage() {
         </div>
       </header>
 
-      <div className="container mx-auto px-4 py-8 md:px-6 md:py-12">
+      <div className="relative z-[1] container mx-auto px-4 py-8 md:px-6 md:py-12">
         {!authUser && !isLoadingUser && (
              <Card className="shadow-xl overflow-hidden bg-card/90 backdrop-blur-sm hover:shadow-2xl transition-shadow duration-300 ease-in-out">
                 <CardHeader className="bg-card/60 border-b">
@@ -745,5 +744,3 @@ export default function SplitBillAppPage() {
     </div>
   );
 }
-
-    

@@ -67,9 +67,9 @@ export default function LandingPage() {
   ];
 
   return (
-    <div className="flex flex-col min-h-screen bg-background bg-money-pattern bg-[length:150px_auto]">
-      <LandingHeader />
-      <main className="flex-grow">
+    <div className="relative flex flex-col min-h-screen bg-background bg-money-pattern bg-[length:150px_auto] before:content-[''] before:absolute before:inset-0 before:bg-white/50 before:dark:bg-black/50 before:z-0">
+      <LandingHeader /> {/* This component will have its own z-index if sticky, or will be part of the flow below */}
+      <main className="relative z-[1] flex-grow"> {/* Ensure main content is above the overlay */}
         {/* Hero Section */}
         <section className="container mx-auto px-4 sm:px-6 py-16 md:py-24 lg:py-32">
           <div className="grid md:grid-cols-2 gap-12 items-center">
@@ -129,7 +129,6 @@ export default function LandingPage() {
             <div className="max-w-4xl mx-auto space-y-12">
               {appCoreFeatures.map((feature, index) => {
                 const IconComponent = feature.icon;
-                // Alternate image alignment for visual variety
                 const isImageLeft = index % 2 === 0;
                 return (
                   <div key={feature.title} className="grid md:grid-cols-2 gap-8 md:gap-12 items-center bg-card p-6 sm:p-8 rounded-xl shadow-lg hover:shadow-xl transition-shadow duration-300">
@@ -235,7 +234,7 @@ export default function LandingPage() {
         </section>
 
       </main>
-      <Footer />
+      <Footer /> {/* This component will also be part of the flow and thus affected by the main div's z-index */}
     </div>
   );
 }

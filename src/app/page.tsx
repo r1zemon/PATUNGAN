@@ -81,7 +81,7 @@ export default function LandingPage() {
                 <br />
                 bagi tagihan dengan teman.
               </h1>
-              <p className="text-lg text-muted-foreground mb-10 max-w-lg">
+              <p className="text-lg text-foreground mb-10 max-w-lg">
                 Jaga pengeluaran grup tetap adil dan bebas stres! Gunakan Patungan untuk membagi tagihan,
                 mengelola dana bersama, dan melunasi setelah aktivitas apapun.
               </p>
@@ -121,7 +121,7 @@ export default function LandingPage() {
           <div className="container mx-auto px-4 sm:px-6">
             <div className="text-center mb-12 md:mb-16">
               <h2 className="text-3xl md:text-4xl font-bold text-foreground">Semua yang Anda Butuhkan untuk Keuangan Grup</h2>
-              <p className="text-lg text-muted-foreground mt-3 max-w-2xl mx-auto">
+              <p className="text-lg text-foreground mt-3 max-w-2xl mx-auto">
                 Dari pembagian struk sekali jalan hingga pelacakan pengeluaran bersama jangka panjang, Patungan hadir untuk Anda.
               </p>
             </div>

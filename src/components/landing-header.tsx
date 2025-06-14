@@ -1,9 +1,11 @@
+
 "use client";
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
-import { Menu, LogOut, UserCircle, LayoutDashboard, Coins } from 'lucide-react'; 
+import { Menu, LogOut, UserCircle, LayoutDashboard } from 'lucide-react'; 
 import { useEffect, useState, useCallback } from 'react';
 import { getCurrentUserAction, logoutUserAction } from '@/lib/actions';
 import type { User as SupabaseUser } from "@supabase/supabase-js";
@@ -13,7 +15,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 const navLinks = [
   { href: '/', label: 'Beranda' },
-  { href: '#features', label: 'Fitur' }, // Contoh link ke section
+  { href: '#features', label: 'Fitur' }, 
   { href: '#contact', label: 'Kontak' },
 ];
 
@@ -50,8 +52,8 @@ export function LandingHeader() {
       toast({ title: "Logout Berhasil" });
       setAuthUser(null);
       setUserProfile(null);
-      setIsMobileMenuOpen(false); // Close mobile menu on logout
-      router.push("/"); // Tetap di landing page atau arahkan ke login
+      setIsMobileMenuOpen(false); 
+      router.push("/"); 
     } else {
       toast({ variant: "destructive", title: "Logout Gagal", description: error });
     }
@@ -64,10 +66,8 @@ export function LandingHeader() {
     <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background shadow-sm">
       <div className="container mx-auto flex h-16 items-center justify-between px-4 sm:px-6">
         <Link href="/" className="flex items-center gap-2 group">
-           <div className="h-9 w-9 bg-primary rounded-lg flex items-center justify-center text-primary-foreground font-bold text-xl group-hover:bg-primary/90 transition-colors shadow-md">
-            P
-          </div>
-          <span className="text-2xl font-bold text-foreground group-hover:text-foreground/80 transition-colors">Patungan</span>
+           <Image src="/logo.png" alt="Patungan Logo" width={36} height={36} className="rounded-lg group-hover:opacity-90 transition-opacity" />
+           <span className="text-2xl font-bold text-foreground group-hover:text-foreground/80 transition-colors">Patungan</span>
         </Link>
 
         <nav className="hidden md:flex items-center space-x-6">
@@ -95,7 +95,7 @@ export function LandingHeader() {
               <Button variant="ghost" onClick={handleLogout} size="sm">
                  <LogOut className="mr-2 h-4 w-4" /> Keluar
               </Button>
-               <Avatar className="h-9 w-9 cursor-pointer" onClick={() => router.push('/app')}> {/* /app/profile nanti */}
+               <Avatar className="h-9 w-9 cursor-pointer" onClick={() => router.push('/app')}> 
                 <AvatarImage src={userProfile?.avatar_url || `https://placehold.co/40x40.png?text=${avatarInitial}`} alt={displayName} data-ai-hint="profile avatar" />
                 <AvatarFallback>{avatarInitial}</AvatarFallback>
               </Avatar>
@@ -123,7 +123,7 @@ export function LandingHeader() {
             <SheetContent side="right" className="w-[300px] sm:w-[400px] bg-background">
               <nav className="flex flex-col space-y-6 p-6 pt-12">
                 <Link href="/" className="flex items-center gap-2 mb-6" onClick={() => setIsMobileMenuOpen(false)}>
-                   <div className="h-9 w-9 bg-primary rounded-lg flex items-center justify-center text-primary-foreground font-bold text-xl">P</div>
+                   <Image src="/logo.png" alt="Patungan Logo" width={32} height={32} className="rounded-lg"/>
                    <span className="text-xl font-bold text-foreground">Patungan</span>
                 </Link>
                 {navLinks.map((link) => (
@@ -177,3 +177,5 @@ export function LandingHeader() {
     </header>
   );
 }
+
+    

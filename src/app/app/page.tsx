@@ -25,8 +25,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useToast } from "@/hooks/use-toast";
 import { Separator } from "@/components/ui/separator";
-import { Home, Coins, LogOut, Settings, UserCircle, Power, Info, Percent, Landmark, UserCheck, Loader2, UserPlus, ArrowRight, Trash2, Users, ScanLine, PlusCircle, Edit2, ListChecks, FilePlus } from "lucide-react";
+import { Home, LogOut, Settings, UserCircle, Power, Info, Percent, Landmark, UserCheck, Loader2, UserPlus, ArrowRight, Trash2, Users, ScanLine, PlusCircle, Edit2, ListChecks, FilePlus } from "lucide-react";
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import {
   DropdownMenu,
@@ -95,7 +96,7 @@ export default function SplitBillAppPage() {
   }, [fetchUser]);
 
   const initializeNewBill = useCallback(async () => {
-    if (!authUser) { // Only initialize if user is authenticated
+    if (!authUser) { 
       setError("Pengguna tidak terautentikasi. Mohon login untuk membuat tagihan.");
       console.warn("initializeNewBill called without authenticated user.");
       return;
@@ -122,10 +123,9 @@ export default function SplitBillAppPage() {
       toast({ variant: "destructive", title: "Inisialisasi Gagal", description: result.error || "Tidak dapat membuat tagihan baru di database." });
     }
     setIsBillCreating(false);
-  }, [toast, authUser]); // Added authUser to dependency array
+  }, [toast, authUser]); 
   
   useEffect(() => {
-    // If user is loaded, authenticated, but no bill ID yet, and not in process of creating one.
     if (!isLoadingUser && authUser && !currentBillId && !isBillCreating) {
         initializeNewBill();
     }
@@ -133,10 +133,9 @@ export default function SplitBillAppPage() {
 
 
   const resetApp = () => {
-     if (authUser) { // Only initialize if user is authenticated
+     if (authUser) { 
         initializeNewBill(); 
      } else {
-        // If no authUser, reset local state but don't call initializeNewBill which requires auth
         setCurrentBillId(null);
         setPeople([]);
         setPersonNameInput("");
@@ -225,7 +224,7 @@ export default function SplitBillAppPage() {
       toast({ variant: "destructive", title: "Tagihan Belum Siap", description: "Mohon tunggu sesi tagihan terinisialisasi." });
       return;
     }
-    setError(null); // Clear previous errors when proceeding
+    setError(null); 
     setCurrentStep(2);
   };
 
@@ -234,9 +233,7 @@ export default function SplitBillAppPage() {
     setIsScanning(true);
     setError(null);
     setDetailedBillSummary(null); 
-    // Do not clear splitItems here if you want to add to existing items from multiple scans
-    // setSplitItems([]); 
-
+    
     const result = await handleScanReceiptAction(receiptDataUri);
     if (result.success && result.data) {
       const newSplitItems: SplitItem[] = result.data.items.map(item => ({ 
@@ -246,7 +243,7 @@ export default function SplitBillAppPage() {
         quantity: item.quantity,
         assignedTo: [], 
       }));
-      setSplitItems(prev => [...prev, ...newSplitItems]); // Append new items
+      setSplitItems(prev => [...prev, ...newSplitItems]); 
       toast({ title: "Struk Dipindai", description: `${newSplitItems.length} baris item ditambahkan.` });
       if (newSplitItems.length > 0 && currentStep < 3) {
         setCurrentStep(3); 
@@ -311,7 +308,7 @@ export default function SplitBillAppPage() {
         setError("Tidak ada item, pajak, atau tip untuk diringkas.");
         toast({ variant: "destructive", title: "Ringkasan Gagal", description: "Tidak ada yang bisa diringkas." });
         setIsCalculating(false);
-        setDetailedBillSummary({ // Show a zero summary
+        setDetailedBillSummary({ 
             payerName: people.find(p => p.id === billDetails.payerId)?.name || "Pembayar",
             taxAmount: 0, tipAmount: 0, grandTotal: 0,
             personalTotalShares: people.reduce((acc, p) => ({...acc, [p.name]: 0}), {}),
@@ -417,7 +414,7 @@ export default function SplitBillAppPage() {
        <header className="py-4 px-4 sm:px-6 md:px-8 border-b sticky top-0 bg-background/80 backdrop-blur-md z-10">
         <div className="container mx-auto flex items-center justify-between">
           <Link href="/app" onClick={(e) => { e.preventDefault(); resetApp(); }} className="flex items-center gap-2 text-primary hover:text-primary/80 transition-colors">
-            <Coins className="h-8 w-8 text-primary-foreground bg-primary p-1.5 rounded-lg shadow-sm" />
+            <Image src="/logo.png" alt="Patungan Logo" width={36} height={36} className="rounded-lg shadow-sm" />
             <h1 className="text-2xl font-bold tracking-tight text-foreground">
               Patungan
             </h1>
@@ -572,7 +569,6 @@ export default function SplitBillAppPage() {
                   isScanning={isScanning} 
                   onClearPreview={() => {
                     setSplitItems([]); 
-                    // Don't reset app to step 1, just clear items for this bill
                     toast({ title: "Pratinjau Dihapus", description: "Anda dapat memindai atau mengunggah struk baru."});
                   }}
                 />
@@ -749,3 +745,5 @@ export default function SplitBillAppPage() {
     </div>
   );
 }
+
+    

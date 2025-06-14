@@ -46,28 +46,28 @@ export default function LandingPage() {
     {
       icon: Wallet,
       title: "Kelola Biaya Bersama",
-      description: "Catat semua pengeluaran grup Anda, dari makan malam hingga biaya liburan, semuanya di satu tempat.",
-      imageSrc: "https://placehold.co/280x600.png",
+      description: "Unggah struk atau masukkan pengeluaran secara manual, lalu Patungan akan membantu Anda mencatat dan membaginya dengan adil di antara teman-teman Anda.",
+      imageSrc: "https://placehold.co/280x600.png?bg=ccffee",
       aiHint: "expense management mobile",
     },
     {
       icon: BarChart3,
       title: "Pantau Saldo & Utang",
-      description: "Lihat dengan jelas siapa berutang kepada siapa dan lacak saldo Anda dengan teman-teman secara real-time.",
-      imageSrc: "https://placehold.co/280x600.png",
+      description: "Lihat dengan jelas siapa berutang kepada siapa setelah setiap pembagian. Tidak ada lagi perhitungan rumit atau lupa siapa yang belum bayar.",
+      imageSrc: "https://placehold.co/280x600.png?bg=e6f7ff",
       aiHint: "balance tracking app",
     },
     {
       icon: CreditCard,
       title: "Selesaikan Pembayaran Mudah",
-      description: "Dapatkan rekomendasi cara termudah untuk melunasi utang piutang dalam grup Anda, minimalkan transaksi.",
-      imageSrc: "https://placehold.co/280x600.png",
+      description: "Dapatkan ringkasan yang jelas mengenai total yang harus dibayar setiap orang kepada pembayar awal, memudahkan proses pelunasan.",
+      imageSrc: "https://placehold.co/280x600.png?bg=fff0e6",
       aiHint: "payment settlement mobile",
     },
   ];
 
   return (
-    <div className="flex flex-col min-h-screen bg-background bg-geometric-pattern dark:bg-geometric-pattern-dark">
+    <div className="flex flex-col min-h-screen bg-background bg-money-pattern">
       <LandingHeader />
       <main className="flex-grow">
         {/* Hero Section */}

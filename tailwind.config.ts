@@ -10,8 +10,7 @@ export default {
   theme: {
   	extend: {
       backgroundImage: {
-        'geometric-pattern': "url(\"data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%23000000' fill-opacity='0.03' fill-rule='evenodd'%3E%3Cpath d='M20 0L0 20L20 40L40 20z'/%3E%3C/g%3E%3C/svg%3E\")",
-        'geometric-pattern-dark': "url(\"data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%23FFFFFF' fill-opacity='0.03' fill-rule='evenodd'%3E%3Cpath d='M20 0L0 20L20 40L40 20z'/%3E%3C/g%3E%3C/svg%3E\")",
+        'money-pattern': "url('/money_pattern.png')",
       },
   		colors: {
   			background: 'hsl(var(--background))',

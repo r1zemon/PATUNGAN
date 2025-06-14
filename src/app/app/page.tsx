@@ -397,7 +397,7 @@ export default function SplitBillAppPage() {
   
   if (isLoadingUser || (authUser && isBillCreating && !currentBillId)) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-background via-secondary/10 to-background p-4 bg-geometric-pattern dark:bg-geometric-pattern-dark">
+      <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-background via-secondary/10 to-background p-4 bg-money-pattern">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
         <p className="mt-4 text-lg text-foreground">
           {isLoadingUser ? "Memuat data pengguna..." : "Memulai sesi tagihan baru..."}
@@ -410,7 +410,7 @@ export default function SplitBillAppPage() {
   const avatarInitial = displayName.substring(0,1).toUpperCase();
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-secondary/10 to-background bg-geometric-pattern dark:bg-geometric-pattern-dark">
+    <div className="min-h-screen bg-gradient-to-br from-background via-secondary/10 to-background bg-money-pattern">
        <header className="py-4 px-4 sm:px-6 md:px-8 border-b sticky top-0 bg-background/80 backdrop-blur-md z-10">
         <div className="container mx-auto flex items-center justify-between">
           <Link href="/app" onClick={(e) => { e.preventDefault(); resetApp(); }} className="flex items-center gap-2 text-primary hover:text-primary/80 transition-colors">

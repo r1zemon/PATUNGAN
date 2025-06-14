@@ -414,7 +414,7 @@ export default function SplitBillAppPage() {
        <header className="py-4 px-4 sm:px-6 md:px-8 border-b sticky top-0 bg-background/80 backdrop-blur-md z-10">
         <div className="container mx-auto flex items-center justify-between">
           <Link href="/app" onClick={(e) => { e.preventDefault(); resetApp(); }} className="flex items-center gap-2 text-primary hover:text-primary/80 transition-colors">
-            <Image src="/logo.png" alt="Patungan Logo" width={36} height={36} className="rounded-lg shadow-sm" />
+            <Image src="/logo.png" alt="Patungan Logo" width={48} height={48} className="rounded-lg shadow-sm" />
             <h1 className="text-2xl font-bold tracking-tight text-foreground">
               Patungan
             </h1>

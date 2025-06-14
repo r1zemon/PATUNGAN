@@ -66,7 +66,7 @@ export function LandingHeader() {
     <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background shadow-sm">
       <div className="container mx-auto flex h-16 items-center justify-between px-4 sm:px-6">
         <Link href="/" className="flex items-center gap-2 group">
-           <Image src="/logo.png" alt="Patungan Logo" width={36} height={36} className="rounded-lg group-hover:opacity-90 transition-opacity" />
+           <Image src="/logo.png" alt="Patungan Logo" width={48} height={48} className="rounded-lg group-hover:opacity-90 transition-opacity" />
            <span className="text-2xl font-bold text-foreground group-hover:text-foreground/80 transition-colors">Patungan</span>
         </Link>
 

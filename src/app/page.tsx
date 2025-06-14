@@ -67,7 +67,7 @@ export default function LandingPage() {
   ];
 
   return (
-    <div className="relative flex flex-col min-h-screen bg-background bg-money-pattern bg-[length:150px_auto] before:content-[''] before:absolute before:inset-0 before:bg-white/70 before:dark:bg-black/70 before:z-0">
+    <div className="relative flex flex-col min-h-screen bg-background bg-money-pattern bg-[length:150px_auto] before:content-[''] before:absolute before:inset-0 before:bg-white/[.85] before:dark:bg-black/[.85] before:z-0">
       <LandingHeader /> {/* This component will have its own z-index if sticky, or will be part of the flow below */}
       <main className="relative z-[1] flex-grow"> {/* Ensure main content is above the overlay */}
         {/* Hero Section */}
@@ -238,5 +238,7 @@ export default function LandingPage() {
     </div>
   );
 }
+
+    
 
     

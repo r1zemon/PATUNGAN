@@ -409,7 +409,7 @@ export default function SplitBillAppPage() {
   const avatarInitial = displayName.substring(0,1).toUpperCase();
 
   return (
-    <div className="relative min-h-screen bg-gradient-to-br from-background via-secondary/10 to-background bg-money-pattern bg-[length:150px_auto] before:content-[''] before:absolute before:inset-0 before:bg-white/70 before:dark:bg-black/70 before:z-0">
+    <div className="relative min-h-screen bg-gradient-to-br from-background via-secondary/10 to-background bg-money-pattern bg-[length:150px_auto] before:content-[''] before:absolute before:inset-0 before:bg-white/[.85] before:dark:bg-black/[.85] before:z-0">
        <header className="relative z-[1] py-4 px-4 sm:px-6 md:px-8 border-b sticky top-0 bg-background/80 backdrop-blur-md">
         <div className="container mx-auto flex items-center justify-between">
           <Link href="/app" onClick={(e) => { e.preventDefault(); resetApp(); }} className="flex items-center gap-2 text-primary hover:text-primary/80 transition-colors">
@@ -744,5 +744,7 @@ export default function SplitBillAppPage() {
     </div>
   );
 }
+
+    
 
     

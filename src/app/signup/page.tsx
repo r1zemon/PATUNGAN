@@ -59,7 +59,7 @@ export default function SignupPage() {
 
 
   return (
-    <div className="relative min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-primary/10 via-background to-accent/10 p-4 selection:bg-primary/40 selection:text-primary-foreground bg-money-pattern bg-[length:150px_auto] before:content-[''] before:absolute before:inset-0 before:bg-white/70 before:dark:bg-black/70 before:z-0">
+    <div className="relative min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-primary/10 via-background to-accent/10 p-4 selection:bg-primary/40 selection:text-primary-foreground bg-money-pattern bg-[length:150px_auto] before:content-[''] before:absolute before:inset-0 before:bg-white/[.85] before:dark:bg-black/[.85] before:z-0">
       <Link href="/" className="relative z-[1] absolute top-4 left-4 flex items-center text-sm text-primary hover:underline">
         <ArrowLeft className="mr-2 h-4 w-4" />
         Kembali ke Beranda
@@ -168,5 +168,7 @@ export default function SignupPage() {
     </div>
   );
 }
+
+    
 
     

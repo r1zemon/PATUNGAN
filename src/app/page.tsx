@@ -6,7 +6,7 @@ import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { LandingHeader } from '@/components/landing-header';
 import { Footer } from '@/components/footer';
-import { ArrowRight, MoveRight, ScanLine, Users, ListChecks } from 'lucide-react';
+import { ArrowRight, MoveRight, ScanLine, Users, ListChecks, Wallet, BarChart3, CreditCard } from 'lucide-react';
 
 export default function LandingPage() {
   const features = [
@@ -42,8 +42,32 @@ export default function LandingPage() {
     },
   ];
 
+  const appCoreFeatures = [
+    {
+      icon: Wallet,
+      title: "Kelola Biaya Bersama",
+      description: "Catat semua pengeluaran grup Anda, dari makan malam hingga biaya liburan, semuanya di satu tempat.",
+      imageSrc: "https://placehold.co/280x600.png",
+      aiHint: "expense management mobile",
+    },
+    {
+      icon: BarChart3,
+      title: "Pantau Saldo & Utang",
+      description: "Lihat dengan jelas siapa berutang kepada siapa dan lacak saldo Anda dengan teman-teman secara real-time.",
+      imageSrc: "https://placehold.co/280x600.png",
+      aiHint: "balance tracking app",
+    },
+    {
+      icon: CreditCard,
+      title: "Selesaikan Pembayaran Mudah",
+      description: "Dapatkan rekomendasi cara termudah untuk melunasi utang piutang dalam grup Anda, minimalkan transaksi.",
+      imageSrc: "https://placehold.co/280x600.png",
+      aiHint: "payment settlement mobile",
+    },
+  ];
+
   return (
-    <div className="flex flex-col min-h-screen bg-background">
+    <div className="flex flex-col min-h-screen bg-background bg-geometric-pattern dark:bg-geometric-pattern-dark">
       <LandingHeader />
       <main className="flex-grow">
         {/* Hero Section */}
@@ -92,8 +116,56 @@ export default function LandingPage() {
           </div>
         </section>
         
-        {/* Key Features Section (Original) */}
+        {/* New Core Features Section (Vertical Layout) */}
         <section className="py-16 md:py-24 bg-secondary/30">
+          <div className="container mx-auto px-4 sm:px-6">
+            <div className="text-center mb-12 md:mb-16">
+              <h2 className="text-3xl md:text-4xl font-bold text-foreground">Semua yang Anda Butuhkan untuk Keuangan Grup</h2>
+              <p className="text-lg text-muted-foreground mt-3 max-w-2xl mx-auto">
+                Dari pembagian struk sekali jalan hingga pelacakan pengeluaran bersama jangka panjang, Patungan hadir untuk Anda.
+              </p>
+            </div>
+
+            <div className="max-w-4xl mx-auto space-y-12">
+              {appCoreFeatures.map((feature, index) => {
+                const IconComponent = feature.icon;
+                // Alternate image alignment for visual variety
+                const isImageLeft = index % 2 === 0;
+                return (
+                  <div key={feature.title} className="grid md:grid-cols-2 gap-8 md:gap-12 items-center bg-card p-6 sm:p-8 rounded-xl shadow-lg hover:shadow-xl transition-shadow duration-300">
+                    <div className={`flex justify-center ${isImageLeft ? 'md:order-1' : 'md:order-2'}`}>
+                       <div className="bg-neutral-800 p-2 sm:p-3 rounded-[2.5rem] shadow-xl w-full max-w-[240px] sm:max-w-[260px] transform transition-transform duration-500 hover:scale-105">
+                        <div className="bg-background rounded-[2rem] overflow-hidden aspect-[9/19]">
+                          <Image
+                            src={feature.imageSrc}
+                            alt={`${feature.title} mock-up`}
+                            width={280}
+                            height={600}
+                            className="object-cover w-full h-full"
+                            data-ai-hint={feature.aiHint}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                    <div className={`text-center md:text-left ${isImageLeft ? 'md:order-2' : 'md:order-1'}`}>
+                      <div className="inline-flex items-center justify-center p-3 bg-primary/20 rounded-lg mb-4 text-primary">
+                        <IconComponent className="h-8 w-8" />
+                      </div>
+                      <h3 className="text-2xl lg:text-3xl font-semibold mb-3 text-card-foreground">{feature.title}</h3>
+                      <p className="text-base lg:text-lg text-muted-foreground leading-relaxed">
+                        {feature.description}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+
+
+        {/* Key Features Section (Original - maybe rename or merge) */}
+        <section className="py-16 md:py-24 bg-background">
           <div className="container mx-auto px-4 sm:px-6">
             <h2 className="text-3xl font-bold text-center mb-12 text-foreground">Kenapa Pilih Patungan?</h2>
             <div className="grid md:grid-cols-3 gap-8 text-center">
@@ -116,7 +188,7 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* New Detailed Features Section */}
+        {/* Detailed Features Section (Original from previous request, maybe rename or merge) */}
         <section className="py-16 md:py-24 bg-background">
           <div className="container mx-auto px-4 sm:px-6">
             <div className="text-center mb-12 md:mb-16">

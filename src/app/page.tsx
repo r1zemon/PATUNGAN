@@ -45,29 +45,29 @@ export default function LandingPage() {
   const appCoreFeatures = [
     {
       icon: Wallet,
-      title: "Kelola Biaya Bersama",
-      description: "Unggah struk atau masukkan pengeluaran secara manual, lalu Patungan akan membantu Anda mencatat dan membaginya dengan adil di antara teman-teman Anda.",
+      title: "Kelola Biaya Bersama Jadi Mudah",
+      description: "Unggah struk belanja atau masukkan pengeluaran secara manual. Patungan membantu mencatat dan membagi semua biaya dengan adil dan transparan di antara teman-teman Anda, menghilangkan kerumitan perhitungan manual.",
       imageSrc: "https://placehold.co/280x600.png?bg=ccffee",
       aiHint: "expense management mobile",
     },
     {
       icon: BarChart3,
-      title: "Pantau Saldo & Utang",
-      description: "Lihat dengan jelas siapa berutang kepada siapa setelah setiap pembagian. Tidak ada lagi perhitungan rumit atau lupa siapa yang belum bayar.",
+      title: "Pantau Saldo & Utang Secara Real-time",
+      description: "Dengan ringkasan yang jelas, Anda selalu tahu siapa berutang kepada siapa setelah setiap pembagian. Tidak ada lagi kebingungan atau lupa siapa yang belum melunasi bagiannya.",
       imageSrc: "https://placehold.co/280x600.png?bg=e6f7ff",
       aiHint: "balance tracking app",
     },
     {
       icon: CreditCard,
-      title: "Selesaikan Pembayaran Mudah",
-      description: "Dapatkan ringkasan yang jelas mengenai total yang harus dibayar setiap orang kepada pembayar awal, memudahkan proses pelunasan.",
+      title: "Selesaikan Pembayaran dengan Cepat",
+      description: "Dapatkan rincian yang jelas mengenai total yang harus dibayar setiap orang kepada pembayar awal. Proses pelunasan menjadi lebih sederhana dan terorganisir, menghindari kesalahpahaman.",
       imageSrc: "https://placehold.co/280x600.png?bg=fff0e6",
       aiHint: "payment settlement mobile",
     },
   ];
 
   return (
-    <div className="flex flex-col min-h-screen bg-background bg-money-pattern">
+    <div className="flex flex-col min-h-screen bg-background bg-money-pattern bg-[length:150px_auto]">
       <LandingHeader />
       <main className="flex-grow">
         {/* Hero Section */}

@@ -59,7 +59,7 @@ export default function SignupPage() {
 
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-primary/10 via-background to-accent/10 p-4 selection:bg-primary/40 selection:text-primary-foreground bg-money-pattern">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-primary/10 via-background to-accent/10 p-4 selection:bg-primary/40 selection:text-primary-foreground bg-money-pattern bg-[length:150px_auto]">
       <Link href="/" className="absolute top-4 left-4 flex items-center text-sm text-primary hover:underline">
         <ArrowLeft className="mr-2 h-4 w-4" />
         Kembali ke Beranda

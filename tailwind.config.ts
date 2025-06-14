@@ -10,7 +10,7 @@ export default {
   theme: {
   	extend: {
       backgroundImage: {
-        'money-pattern': "url('/background.png')", // Updated image path
+        'money-pattern': "url('/background.jpg')", // Updated image path
       },
   		colors: {
   			background: 'hsl(var(--background))',

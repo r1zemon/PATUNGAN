@@ -5,7 +5,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
-import { Menu, LogOut, UserCircle, LayoutDashboard } from 'lucide-react'; 
+import { Menu, LogOut, UserCircle, LayoutDashboard, History } from 'lucide-react'; // Added History icon
 import { useEffect, useState, useCallback } from 'react';
 import { getCurrentUserAction, logoutUserAction } from '@/lib/actions';
 import type { User as SupabaseUser } from "@supabase/supabase-js";
@@ -15,7 +15,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 const navLinks = [
   { href: '/', label: 'Beranda' },
-  { href: '#features', label: 'Fitur' }, 
+  { href: '/app/history', label: 'Riwayat' }, // Changed from Fitur to Riwayat and href to /app/history
   { href: '#contact', label: 'Kontak' },
 ];
 
@@ -131,8 +131,17 @@ export function LandingHeader() {
                     key={link.label}
                     href={link.href}
                     className="text-lg font-medium text-foreground hover:text-primary transition-colors"
-                     onClick={() => setIsMobileMenuOpen(false)}
+                     onClick={() => {
+                        setIsMobileMenuOpen(false);
+                        // If it's a history link, navigate differently or show toast if not logged in
+                        if (link.href === '/app/history' && !authUser) {
+                           toast({title: "Info", description: "Masuk untuk melihat riwayat.", duration: 3000});
+                           router.push('/login'); // Redirect to login if trying to access history and not logged in
+                           return; // Prevent default link behavior if not logged in
+                        }
+                     }}
                   >
+                    {link.label === "Riwayat" && <History className="inline-block mr-2 h-5 w-5" />}
                     {link.label}
                   </Link>
                 ))}
@@ -179,3 +188,4 @@ export function LandingHeader() {
 }
 
     
+

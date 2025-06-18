@@ -1,4 +1,5 @@
 
+
 export interface Person {
   id: string;
   name: string;
@@ -40,4 +41,13 @@ export interface DetailedBillSummaryData {
   personalTotalShares: RawBillSummary; // Each person's calculated total share
   settlements: Settlement[];
   grandTotal: number;
+}
+
+export interface BillHistoryEntry {
+  id: string;
+  name: string | null;
+  createdAt: string; // ISO string date
+  grandTotal: number | null;
+  payerName: string | null;
+  participantCount: number;
 }

@@ -424,7 +424,7 @@ export default function SplitBillAppPage() {
              <Button variant="outline" onClick={resetApp} size="sm" className="hidden sm:inline-flex" disabled={!authUser}>
                 <FilePlus className="mr-2 h-4 w-4" /> Tagihan Baru
             </Button>
-            <Button variant="ghost" size="icon" aria-label="Ke Aplikasi Utama" onClick={() => router.push('/app')}>
+            <Button variant="ghost" size="icon" aria-label="Mulai Tagihan Baru" onClick={resetApp} disabled={!authUser}>
               <Home className="h-5 w-5" />
             </Button>
             {authUser ? (
@@ -745,5 +745,4 @@ export default function SplitBillAppPage() {
     </div>
   );
 }
-
     

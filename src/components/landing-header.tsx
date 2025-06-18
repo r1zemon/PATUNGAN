@@ -9,7 +9,7 @@ import { Menu, LogOut, UserCircle, LayoutDashboard, History as HistoryIconLucide
 import { useEffect, useState, useCallback } from 'react';
 import { getCurrentUserAction, logoutUserAction } from '@/lib/actions';
 import type { User as SupabaseUser } from "@supabase/supabase-js";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation"; // Added usePathname
 import { useToast } from "@/hooks/use-toast";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -41,6 +41,7 @@ export function LandingHeader() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const router = useRouter();
+  const pathname = usePathname(); // Get current pathname
   const { toast } = useToast();
 
   const fetchUser = useCallback(async () => {
@@ -82,10 +83,29 @@ export function LandingHeader() {
     }
   };
 
+  const handleNavLinkClick = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
+    if (href === '/') {
+      if (pathname === '/') {
+        e.preventDefault();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        setIsMobileMenuOpen(false); // Close mobile menu if open
+      } else {
+        setIsMobileMenuOpen(false); // Close mobile menu if open and navigating
+        // Default navigation to '/' will occur
+      }
+    } else if (href === '/app/history') {
+      e.preventDefault(); 
+      handleHistoryClick();
+    } else {
+      setIsMobileMenuOpen(false); // Close mobile menu for other links
+    }
+  };
+
+
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background shadow-sm">
       <div className="container mx-auto flex h-16 items-center justify-between px-4 sm:px-6">
-        <Link href="/" className="flex items-center gap-2 group">
+        <Link href="/" className="flex items-center gap-2 group" onClick={(e) => handleNavLinkClick(e, '/')}>
            <Image src="/logo.png" alt="Patungan Logo" width={48} height={48} className="rounded-lg group-hover:opacity-90 transition-opacity" data-ai-hint="logo company"/>
            <span className="text-2xl font-bold text-foreground group-hover:text-foreground/80 transition-colors">Patungan</span>
         </Link>
@@ -96,12 +116,7 @@ export function LandingHeader() {
               key={link.label}
               href={link.href}
               className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors"
-              onClick={(e) => {
-                if (link.href === '/app/history') {
-                  e.preventDefault(); 
-                  handleHistoryClick();
-                }
-              }}
+              onClick={(e) => handleNavLinkClick(e, link.href)}
             >
               {link.label}
             </Link>
@@ -179,7 +194,7 @@ export function LandingHeader() {
             </SheetTrigger>
             <SheetContent side="right" className="w-[300px] sm:w-[400px] bg-background">
               <nav className="flex flex-col space-y-6 p-6 pt-12">
-                <Link href="/" className="flex items-center gap-2 mb-6" onClick={() => setIsMobileMenuOpen(false)}>
+                <Link href="/" className="flex items-center gap-2 mb-6" onClick={(e) => handleNavLinkClick(e, '/')}>
                    <Image src="/logo.png" alt="Patungan Logo" width={32} height={32} className="rounded-lg" data-ai-hint="logo company"/>
                    <span className="text-xl font-bold text-foreground">Patungan</span>
                 </Link>
@@ -188,14 +203,7 @@ export function LandingHeader() {
                     key={link.label}
                     href={link.href}
                     className="text-lg font-medium text-foreground hover:text-primary transition-colors flex items-center"
-                     onClick={(e) => {
-                        if (link.href === '/app/history') {
-                           e.preventDefault(); 
-                           handleHistoryClick();
-                        } else {
-                           setIsMobileMenuOpen(false);
-                        }
-                     }}
+                     onClick={(e) => handleNavLinkClick(e, link.href)}
                   >
                     {link.label === "Riwayat" && <HistoryIconLucide className="inline-block mr-2 h-5 w-5" />}
                     {link.label}

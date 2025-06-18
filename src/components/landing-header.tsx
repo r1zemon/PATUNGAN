@@ -82,6 +82,16 @@ export function LandingHeader() {
       router.push('/login');
     }
   };
+  
+  const handleProfileClick = () => {
+    setIsMobileMenuOpen(false);
+    if (authUser) {
+      router.push('/app/profile');
+    } else {
+      toast({title: "Akses Ditolak", description: "Anda harus login untuk melihat profil.", duration: 3000});
+      router.push('/login');
+    }
+  };
 
   const handleNavLinkClick = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
     if (href === '/') {
@@ -96,7 +106,11 @@ export function LandingHeader() {
     } else if (href === '/app/history') {
       e.preventDefault(); 
       handleHistoryClick();
-    } else {
+    } else if (href === '/app/profile') {
+      e.preventDefault();
+      handleProfileClick();
+    }
+    else {
       setIsMobileMenuOpen(false); 
       // For other links like '#contact', allow default behavior or push to a page if it's a full path
       if (href.startsWith('#')) {
@@ -161,7 +175,7 @@ export function LandingHeader() {
                     <HistoryIconLucide className="mr-2 h-4 w-4" />
                     <span>Riwayat Tagihan</span>
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => toast({title: "Info", description: "Halaman profil belum diimplementasikan."})}>
+                  <DropdownMenuItem onClick={handleProfileClick}>
                     <UserCircle className="mr-2 h-4 w-4" />
                     <span>Profil</span>
                   </DropdownMenuItem>
@@ -232,6 +246,9 @@ export function LandingHeader() {
                       <Button variant="default" className="w-full" asChild onClick={() => {router.push('/app'); setIsMobileMenuOpen(false);}}>
                          <Link href="/app"><FilePlus className="mr-2 h-4 w-4"/> Tagihan Baru</Link>
                       </Button>
+                      <Button variant="outline" className="w-full" onClick={handleProfileClick}>
+                        <UserCircle className="mr-2 h-4 w-4" /> Profil
+                      </Button>
                        <Button variant="outline" className="w-full" onClick={handleLogout}>
                          <LogOut className="mr-2 h-4 w-4" /> Keluar
                       </Button>
@@ -255,4 +272,6 @@ export function LandingHeader() {
     </header>
   );
 }
+    
+
     

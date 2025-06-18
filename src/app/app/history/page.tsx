@@ -162,7 +162,7 @@ export default function HistoryPage() {
                     <HistoryIconLucide className="mr-2 h-4 w-4" />
                     <span>Riwayat Tagihan</span>
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => toast({title: "Info", description: "Halaman profil belum diimplementasikan."})}>
+                  <DropdownMenuItem onClick={() => router.push('/app/profile')}>
                     <UserCircle className="mr-2 h-4 w-4" />
                     <span>Profil</span>
                   </DropdownMenuItem>
@@ -262,3 +262,5 @@ export default function HistoryPage() {
   );
 }
 
+
+    

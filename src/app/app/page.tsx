@@ -433,7 +433,7 @@ export default function SplitBillAppPage() {
   
   if (isLoadingUser) {
     return (
-      <div className="relative min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-background via-secondary/10 to-background p-4 bg-money-pattern bg-[length:200px_auto] before:content-[''] before:absolute before:inset-0 before:bg-white/[.90] before:dark:bg-black/[.90] before:z-0">
+      <div className="relative min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-background via-secondary/10 to-background p-4 bg-money-pattern bg-[length:150px_auto] before:content-[''] before:absolute before:inset-0 before:bg-white/[.90] before:dark:bg-black/[.90] before:z-0">
         <div className="relative z-[1] flex flex-col items-center justify-center text-center">
             <Loader2 className="h-12 w-12 animate-spin text-primary" />
             <p className="mt-4 text-lg text-foreground">Memuat data pengguna...</p>
@@ -484,7 +484,7 @@ export default function SplitBillAppPage() {
                     <HistoryIconLucide className="mr-2 h-4 w-4" />
                     <span>Riwayat Tagihan</span>
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => toast({title: "Info", description: "Halaman profil belum diimplementasikan."})}>
+                  <DropdownMenuItem onClick={() => router.push('/app/profile')}>
                     <UserCircle className="mr-2 h-4 w-4" />
                     <span>Profil</span>
                   </DropdownMenuItem>
@@ -851,4 +851,6 @@ export default function SplitBillAppPage() {
     </div>
   );
 }
+    
+
     

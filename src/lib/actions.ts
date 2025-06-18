@@ -430,27 +430,51 @@ export async function handleSummarizeBillAction(
   }
 }
 
-export async function updateUserProfileAction(userId: string, updates: { full_name?: string; username?: string; avatar_url?: string; phone_number?: string }) {
+export async function updateUserProfileAction(
+  userId: string, 
+  updates: { 
+    full_name?: string | null; 
+    username?: string | null; 
+    avatar_url?: string | null; 
+    phone_number?: string | null;
+  }
+): Promise<{ success: boolean; data?: any; error?: string }> {
   const supabase = createSupabaseServerClient();
   if (!userId) return { success: false, error: "User ID is required." };
 
+  // Filter out any undefined values to prevent errors during update
+  const validUpdates: Record<string, any> = {};
+  for (const key in updates) {
+    if (updates[key as keyof typeof updates] !== undefined) {
+      validUpdates[key] = updates[key as keyof typeof updates];
+    }
+  }
+
+  if (Object.keys(validUpdates).length === 0) {
+    return { success: true, data: null, error: "No changes to save." }; // Or handle as no-op
+  }
+  
   const { data, error } = await supabase
     .from('profiles')
-    .update(updates)
+    .update(validUpdates)
     .eq('id', userId)
     .select()
     .single();
 
   if (error) {
     console.error("Error updating profile:", error);
-    return { success: false, error: error.message, data: null };
+    return { success: false, error: `Gagal memperbarui profil: ${error.message}`, data: null };
   }
 
+  // Revalidate paths that might display user profile information
   revalidatePath('/app', 'layout'); 
-  revalidatePath('/', 'layout'); 
+  revalidatePath('/app/profile', 'page');
+  revalidatePath('/app/history', 'page');
+  revalidatePath('/', 'layout'); // For landing page header
   
   return { success: true, data, error: null };
 }
+
 
 export async function getBillsHistoryAction(): Promise<{ success: boolean; data?: BillHistoryEntry[]; error?: string }> {
   const supabase = createSupabaseServerClient();
@@ -518,3 +542,5 @@ export async function getBillsHistoryAction(): Promise<{ success: boolean; data?
   return { success: true, data: historyEntries };
 }
 
+
+    

@@ -97,9 +97,9 @@ export default function HistoryPage() {
     return (
       <div className="min-h-screen flex flex-col bg-gradient-to-br from-background via-secondary/10 to-background p-4 bg-money-pattern bg-[length:150px_auto] before:content-[''] before:absolute before:inset-0 before:bg-white/[.90] before:dark:bg-black/[.90] before:z-0">
         <header className="relative z-[1] py-4 px-4 sm:px-6 md:px-8 border-b sticky top-0 bg-background/80 backdrop-blur-md">
-          <div className="container mx-auto flex items-center justify-between">
+          <div className="container mx-auto flex items-center justify-between h-12"> {/* Adjusted height */}
             <Link href="/" className="flex items-center gap-2 text-primary hover:text-primary/80 transition-colors">
-              <Image src="/logo.png" alt="Patungan Logo" width={48} height={48} className="rounded-lg shadow-sm" data-ai-hint="logo company"/>
+              <Image src="/logo.png" alt="Patungan Logo" width={56} height={56} className="rounded-lg shadow-sm" data-ai-hint="logo company"/>
               <h1 className="text-2xl font-bold tracking-tight text-foreground">Patungan</h1>
             </Link>
             <div className="flex items-center gap-2 sm:gap-4">
@@ -125,17 +125,14 @@ export default function HistoryPage() {
   return (
     <div className="relative min-h-screen flex flex-col bg-gradient-to-br from-background via-secondary/10 to-background bg-money-pattern bg-[length:150px_auto] before:content-[''] before:absolute before:inset-0 before:bg-white/[.90] before:dark:bg-black/[.90] before:z-0">
       <header className="relative z-[1] py-4 px-4 sm:px-6 md:px-8 border-b sticky top-0 bg-background/80 backdrop-blur-md">
-        <div className="container mx-auto flex items-center justify-between">
+        <div className="container mx-auto flex items-center justify-between h-12"> {/* Adjusted height */}
           <Link href="/" className="flex items-center gap-2 text-primary hover:text-primary/80 transition-colors">
-            <Image src="/logo.png" alt="Patungan Logo" width={48} height={48} className="rounded-lg shadow-sm" data-ai-hint="logo company"/>
+            <Image src="/logo.png" alt="Patungan Logo" width={56} height={56} className="rounded-lg shadow-sm" data-ai-hint="logo company"/>
             <h1 className="text-2xl font-bold tracking-tight text-foreground">
               Patungan
             </h1>
           </Link>
           <div className="flex items-center gap-2 sm:gap-4">
-             <Button variant="outline" onClick={() => router.push('/app')} size="sm" className="hidden sm:inline-flex">
-                <FilePlus className="mr-2 h-4 w-4" /> Tagihan Baru
-            </Button>
             <Link href="/" passHref>
               <Button variant="ghost" size="icon" aria-label="Kembali ke Beranda">
                 <Home className="h-5 w-5" />
@@ -264,4 +261,3 @@ export default function HistoryPage() {
     </div>
   );
 }
-

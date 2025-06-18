@@ -5,7 +5,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
-import { Menu, LogOut, UserCircle, LayoutDashboard, History as HistoryIconLucide, Settings } from 'lucide-react'; 
+import { Menu, LogOut, UserCircle, LayoutDashboard, History as HistoryIconLucide, Settings, FilePlus } from 'lucide-react'; 
 import { useEffect, useState, useCallback } from 'react';
 import { getCurrentUserAction, logoutUserAction } from '@/lib/actions';
 import type { User as SupabaseUser } from "@supabase/supabase-js";
@@ -98,7 +98,7 @@ export function LandingHeader() {
               className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors"
               onClick={(e) => {
                 if (link.href === '/app/history') {
-                  e.preventDefault(); // Prevent default link behavior
+                  e.preventDefault(); 
                   handleHistoryClick();
                 }
               }}
@@ -113,9 +113,9 @@ export function LandingHeader() {
              <Button variant="ghost" disabled size="sm">Memuat...</Button>
           ) : authUser ? (
             <>
-              <Button variant="outline" asChild size="sm">
+              <Button variant="default" asChild size="sm">
                 <Link href="/app">
-                  <LayoutDashboard className="mr-2 h-4 w-4" /> Ke Aplikasi
+                  <FilePlus className="mr-2 h-4 w-4" /> Tagihan Baru
                 </Link>
               </Button>
               <DropdownMenu>
@@ -217,9 +217,9 @@ export function LandingHeader() {
                         </div>
                       </div>
                       <Button variant="default" className="w-full" asChild onClick={() => setIsMobileMenuOpen(false)}>
-                         <Link href="/app"><LayoutDashboard className="mr-2 h-4 w-4"/> Ke Aplikasi</Link>
+                         <Link href="/app"><FilePlus className="mr-2 h-4 w-4"/> Tagihan Baru</Link>
                       </Button>
-                       <Button variant="outline" className="w-full" onClick={handleLogout}> {/* Logout doesn't need to close menu first, it does it itself */}
+                       <Button variant="outline" className="w-full" onClick={handleLogout}>
                          <LogOut className="mr-2 h-4 w-4" /> Keluar
                       </Button>
                     </>

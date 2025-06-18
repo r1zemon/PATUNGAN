@@ -122,7 +122,7 @@ export default function LandingPage() {
               </div>
             </div>
             <div className="flex justify-center md:justify-end animate-fade-in-up">
-              <div className="bg-neutral-800 p-2 sm:p-3 rounded-[2.5rem] shadow-2xl w-full max-w-[280px] sm:max-w-xs transform transition-transform duration-500 hover:scale-105">
+              <div className="bg-neutral-800 p-2 sm:p-3 rounded-[2.5rem] shadow-2xl w-full max-w-[280px] sm:max-w-xs transform transition-transform duration-500">
                 <div className="bg-background rounded-[2rem] overflow-hidden">
                   <Image 
                       src="https://placehold.co/320x640.png" 
@@ -156,7 +156,7 @@ export default function LandingPage() {
                 return (
                   <div key={feature.title} className="grid md:grid-cols-2 gap-8 md:gap-12 items-center bg-card p-6 sm:p-8 rounded-xl shadow-lg hover:shadow-xl transition-shadow duration-300">
                     <div className={`flex justify-center ${isImageLeft ? 'md:order-1' : 'md:order-2'}`}>
-                       <div className="bg-neutral-800 p-2 sm:p-3 rounded-[2.5rem] shadow-xl w-full max-w-[240px] sm:max-w-[260px] transform transition-transform duration-500 hover:scale-105">
+                       <div className="bg-neutral-800 p-2 sm:p-3 rounded-[2.5rem] shadow-xl w-full max-w-[240px] sm:max-w-[260px] transform transition-transform duration-500">
                         <div className="bg-background rounded-[2rem] overflow-hidden aspect-[9/19]">
                           <Image
                             src={feature.imageSrc}
@@ -236,7 +236,7 @@ export default function LandingPage() {
                       </p>
                     </div>
                     <div className={`md:col-span-2 flex justify-center ${isEven ? 'md:order-1' : 'md:order-2'}`}>
-                      <div className="bg-neutral-800 p-2 sm:p-3 rounded-[2.5rem] shadow-2xl w-full max-w-[260px] transform transition-transform duration-500 hover:scale-105">
+                      <div className="bg-neutral-800 p-2 sm:p-3 rounded-[2.5rem] shadow-2xl w-full max-w-[260px] transform transition-transform duration-500">
                         <div className="bg-background rounded-[2rem] overflow-hidden aspect-[9/19]">
                           <Image
                             src={feature.imageSrc}

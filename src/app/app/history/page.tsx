@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
-import { Home, LogOut, Settings, UserCircle, Power, Info, FilePlus, Loader2, History as HistoryIconLucide, ArrowLeft, Users, Coins, CalendarDays } from "lucide-react"; // Renamed History to HistoryIconLucide
+import { Home, LogOut, Settings, UserCircle, Power, Info, FilePlus, Loader2, History as HistoryIconLucide, ArrowLeft, Users, Coins, CalendarDays } from "lucide-react"; 
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -161,11 +161,11 @@ export default function HistoryPage() {
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => router.push('/app')} className="sm:hidden">
-                      <FilePlus className="mr-2 h-4 w-4" />
-                      <span>Tagihan Baru</span>
+                  <DropdownMenuItem onClick={() => router.push('/app/history')}>
+                    <HistoryIconLucide className="mr-2 h-4 w-4" />
+                    <span>Riwayat Tagihan</span>
                   </DropdownMenuItem>
-                   <DropdownMenuItem onClick={() => toast({title: "Info", description: "Halaman profil belum diimplementasikan."})}>
+                  <DropdownMenuItem onClick={() => toast({title: "Info", description: "Halaman profil belum diimplementasikan."})}>
                     <UserCircle className="mr-2 h-4 w-4" />
                     <span>Profil</span>
                   </DropdownMenuItem>

@@ -424,7 +424,7 @@ export default function SplitBillAppPage() {
              <Button variant="outline" onClick={resetApp} size="sm" className="hidden sm:inline-flex" disabled={!authUser}>
                 <FilePlus className="mr-2 h-4 w-4" /> Tagihan Baru
             </Button>
-            <Button variant="ghost" size="icon" aria-label="Mulai Tagihan Baru atau Ke Aplikasi Utama" onClick={(e) => { e.preventDefault(); router.push('/app'); resetApp(); }}>
+            <Button variant="ghost" size="icon" aria-label="Ke Aplikasi Utama" onClick={() => router.push('/app')}>
               <Home className="h-5 w-5" />
             </Button>
             {authUser ? (
@@ -447,15 +447,11 @@ export default function SplitBillAppPage() {
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={resetApp} className="sm:hidden">
-                      <FilePlus className="mr-2 h-4 w-4" />
-                      <span>Tagihan Baru</span>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => router.push('/app/history')}>
-                      <HistoryIconLucide className="mr-2 h-4 w-4" />
-                      <span>Riwayat Tagihan</span>
-                    </DropdownMenuItem>
-                   <DropdownMenuItem onClick={() => toast({title: "Info", description: "Halaman profil belum diimplementasikan."})}>
+                  <DropdownMenuItem onClick={() => router.push('/app/history')}>
+                    <HistoryIconLucide className="mr-2 h-4 w-4" />
+                    <span>Riwayat Tagihan</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => toast({title: "Info", description: "Halaman profil belum diimplementasikan."})}>
                     <UserCircle className="mr-2 h-4 w-4" />
                     <span>Profil</span>
                   </DropdownMenuItem>
@@ -599,6 +595,7 @@ export default function SplitBillAppPage() {
                   onUpdateItem={handleUpdateItem}
                   onAddItem={handleAddItem}
                   onDeleteItem={handleDeleteItem}
+                  onCalculateSummary={handleCalculateSummary} 
                   isCalculating={isCalculating} 
                 />
                 

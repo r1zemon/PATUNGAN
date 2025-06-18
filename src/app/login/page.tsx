@@ -36,6 +36,7 @@ export default function LoginPage() {
           title: "Login Berhasil!",
           description: "Anda akan diarahkan ke halaman utama.",
         });
+        router.refresh(); // Add this to ensure session is picked up by middleware
         router.push("/app");
       } else {
         toast({
@@ -150,7 +151,3 @@ export default function LoginPage() {
     </div>
   );
 }
-
-    
-
-    

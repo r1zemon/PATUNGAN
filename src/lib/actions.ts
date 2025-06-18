@@ -4,11 +4,10 @@
 
 import { scanReceipt, ScanReceiptOutput, ReceiptItem as AiReceiptItem } from "@/ai/flows/scan-receipt";
 import { summarizeBill, SummarizeBillInput } from "@/ai/flows/summarize-bill";
-import type { SplitItem, Person, RawBillSummary, TaxTipSplitStrategy, ScannedItem, BillHistoryEntry } from "./types"; // Added ScannedItem & BillHistoryEntry
-import { createSupabaseServerClient } from '@/lib/supabase/server'; // Updated Supabase client import using alias
-import { redirect } from 'next/navigation';
+import type { SplitItem, Person, RawBillSummary, TaxTipSplitStrategy, ScannedItem, BillHistoryEntry } from "./types";
+import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
-import type { PostgrestSingleResponse, PostgrestResponse, User as SupabaseUser } from "@supabase/supabase-js";
+import type { PostgrestSingleResponse, User as SupabaseUser } from "@supabase/supabase-js";
 import type { Database } from '@/lib/database.types';
 
 type SettlementInsert = Database['public']['Tables']['settlements']['Insert'];
@@ -59,7 +58,6 @@ export async function signupUserAction(formData: FormData) {
 
   if (profileError) {
     console.error("Error creating profile:", profileError);
-    // Attempt to delete the auth user if profile creation fails to avoid orphaned auth users
     const { error: deleteUserError } = await supabase.auth.admin.deleteUser(authData.user.id);
     if (deleteUserError) {
         console.error("Error deleting auth user after profile creation failure:", deleteUserError);
@@ -94,7 +92,7 @@ export async function loginUserAction(formData: FormData) {
   revalidatePath('/', 'layout');
   revalidatePath('/app', 'page'); 
   revalidatePath('/app', 'layout'); 
-  revalidatePath('/login', 'page'); // Revalidate the login page
+  revalidatePath('/login', 'page');
   return { success: true, user: data.user };
 }
 
@@ -140,7 +138,7 @@ export async function logoutUserAction() {
 }
 
 
-export async function createBillAction(billName?: string): Promise<{ success: boolean; billId?: string; error?: string }> {
+export async function createBillAction(billName: string): Promise<{ success: boolean; billId?: string; error?: string }> {
   const supabase = createSupabaseServerClient();
   const { data: { user } , error: authError } = await supabase.auth.getUser();
 
@@ -150,13 +148,17 @@ export async function createBillAction(billName?: string): Promise<{ success: bo
   }
   
   if (!user) {
-     console.warn("createBillAction: User object within userAuthData is null. Cannot create bill.");
-     return { success: false, error: "Pengguna tidak terautentikasi (data pengguna tidak ditemukan). Tidak dapat membuat tagihan." };
+     console.warn("createBillAction: User object is null. Cannot create bill.");
+     return { success: false, error: "Pengguna tidak terautentikasi. Tidak dapat membuat tagihan." };
   }
   
   const { data: billData, error: billInsertError } = await supabase
     .from('bills')
-    .insert([{ name: billName || "Tagihan Baru", user_id: user.id }])
+    .insert([{ 
+        name: billName || "Tagihan Baru", 
+        user_id: user.id,
+        // grand_total, payer_participant_id, etc. will be NULL initially
+     }])
     .select('id')
     .single();
 
@@ -273,8 +275,8 @@ export async function handleSummarizeBillAction(
   if (!payerParticipantId) {
     return { success: false, error: "ID Pembayar tidak disediakan." };
   }
-   if (people.length === 0) {
-    return { success: false, error: "Tidak ada orang yang terlibat dalam tagihan." };
+   if (people.length < 2) { // Changed from people.length === 0
+    return { success: false, error: "Minimal dua orang diperlukan untuk membagi tagihan." };
   }
   if (splitItems.length === 0 && taxAmount === 0 && tipAmount === 0) {
     const zeroSummary: RawBillSummary = {};
@@ -284,7 +286,14 @@ export async function handleSummarizeBillAction(
         const { error: updateError } = await supabase.from('bill_participants').update({ total_share_amount: 0 }).eq('id', person.id);
         if (updateError) console.warn(`Error setting share to 0 for ${person.name}: ${updateError.message}`);
     }
-    await supabase.from('bills').update({ grand_total: 0, tax_amount:0, tip_amount:0, payer_participant_id: payerParticipantId, tax_tip_split_strategy: taxTipSplitStrategy }).eq('id', billId);
+    // Update the bill to mark it as "completed" even if total is 0
+    await supabase.from('bills').update({ 
+        grand_total: 0, 
+        tax_amount:0, 
+        tip_amount:0, 
+        payer_participant_id: payerParticipantId, 
+        tax_tip_split_strategy: taxTipSplitStrategy 
+    }).eq('id', billId);
     return { success: true, data: zeroSummary };
   }
   
@@ -293,21 +302,6 @@ export async function handleSummarizeBillAction(
     return { success: false, error: "Data pembayar tidak valid atau tidak ditemukan dalam daftar partisipan." };
   }
   const payerName = payer.name;
-
-  const { error: billUpdateError } = await supabase
-    .from('bills')
-    .update({
-      payer_participant_id: payerParticipantId,
-      tax_amount: taxAmount,
-      tip_amount: tipAmount,
-      tax_tip_split_strategy: taxTipSplitStrategy,
-    })
-    .eq('id', billId);
-
-  if (billUpdateError) {
-    console.error("Error updating bill details in DB:", billUpdateError);
-    return { success: false, error: `Gagal memperbarui detail tagihan di database: ${billUpdateError.message}` };
-  }
 
   const itemsForAI: SummarizeBillInput["items"] = splitItems.map(item => ({
     name: item.name,
@@ -343,7 +337,7 @@ export async function handleSummarizeBillAction(
         calculatedGrandTotal += share;
         const { error: updateError } = await supabase.from('bill_participants').update({ total_share_amount: share }).eq('id', person.id);
         if (updateError) return { personId: person.id, error: updateError, success: false as const };
-      } else if (rawSummary[person.name] === undefined) {
+      } else if (rawSummary[person.name] === undefined) { // If AI didn't return a share, assume 0
         const { error: updateError } = await supabase.from('bill_participants').update({ total_share_amount: 0 }).eq('id', person.id);
         if (updateError) return { personId: person.id, error: updateError, success: false as const };
       }
@@ -357,6 +351,23 @@ export async function handleSummarizeBillAction(
         console.error(`Error updating participant share for ${personNameFound} in DB:`, result.error.message);
         return { success: false, error: `Gagal memperbarui bagian untuk partisipan ${personNameFound} di database: ${result.error.message}` };
       }
+    }
+    
+    // Update the main bill entry to mark it as "completed"
+    const { error: billUpdateError } = await supabase
+        .from('bills')
+        .update({
+        payer_participant_id: payerParticipantId,
+        tax_amount: taxAmount,
+        tip_amount: tipAmount,
+        tax_tip_split_strategy: taxTipSplitStrategy,
+        grand_total: calculatedGrandTotal // This is key for history
+        })
+        .eq('id', billId);
+
+    if (billUpdateError) {
+        console.error("Error updating bill details in DB:", billUpdateError);
+        return { success: false, error: `Gagal memperbarui detail tagihan (grand_total, etc.) di database: ${billUpdateError.message}` };
     }
     
     const { error: deleteSettlementsError } = await supabase.from('settlements').delete().eq('bill_id', billId);
@@ -390,12 +401,7 @@ export async function handleSummarizeBillAction(
         }
     }
     
-    const { error: grandTotalUpdateError } = await supabase.from('bills').update({ grand_total: calculatedGrandTotal }).eq('id', billId);
-    if (grandTotalUpdateError) {
-        console.error("Error updating grand total in DB:", grandTotalUpdateError);
-        return { success: false, error: `Gagal memperbarui total keseluruhan di database: ${grandTotalUpdateError.message}` };
-    }
-
+    revalidatePath('/app/history', 'page'); // Revalidate history page after a bill is completed
     return { success: true, data: rawSummary };
   } catch (error) {
     console.error("Error summarizing bill with AI or saving summary:", error);
@@ -418,7 +424,6 @@ export async function handleSummarizeBillAction(
   }
 }
 
-// Action to update profile
 export async function updateUserProfileAction(userId: string, updates: { full_name?: string; username?: string; avatar_url?: string; phone_number?: string }) {
   const supabase = createSupabaseServerClient();
   if (!userId) return { success: false, error: "User ID is required." };
@@ -449,10 +454,13 @@ export async function getBillsHistoryAction(): Promise<{ success: boolean; data?
     return { success: false, error: "Pengguna tidak terautentikasi atau sesi tidak valid." };
   }
 
+  // Only fetch bills that have been "completed" (i.e., grand_total is not NULL and payer_participant_id is not NULL)
   const { data: bills, error: billsError } = await supabase
     .from('bills')
     .select('id, name, created_at, grand_total, payer_participant_id')
     .eq('user_id', user.id)
+    .not('grand_total', 'is', null) // Key filter: only bills with a calculated grand total
+    .not('payer_participant_id', 'is', null) // Key filter: only bills with a payer assigned
     .order('created_at', { ascending: false });
 
   if (billsError) {
@@ -461,7 +469,7 @@ export async function getBillsHistoryAction(): Promise<{ success: boolean; data?
   }
 
   if (!bills) {
-    return { success: true, data: [] }; // No bills found, but not an error
+    return { success: true, data: [] }; 
   }
 
   const historyEntries: BillHistoryEntry[] = [];
@@ -493,16 +501,12 @@ export async function getBillsHistoryAction(): Promise<{ success: boolean; data?
     historyEntries.push({
       id: bill.id,
       name: bill.name,
-      createdAt: bill.created_at || new Date().toISOString(), // Fallback for created_at
-      grandTotal: bill.grand_total,
+      createdAt: bill.created_at || new Date().toISOString(),
+      grandTotal: bill.grand_total, // grand_total should exist due to filter
       payerName: payerName,
       participantCount: participantCount || 0,
     });
   }
   
-  revalidatePath('/app/history', 'page');
   return { success: true, data: historyEntries };
 }
-
-
-    

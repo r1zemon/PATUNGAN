@@ -1,8 +1,8 @@
 
 "use client";
 
-import { useState, useEffect, useMemo, useCallback, FormEvent } from "react";
-import type { SplitItem, Person, BillDetails, TaxTipSplitStrategy, RawBillSummary, DetailedBillSummaryData } from "@/lib/types";
+import { useState, useEffect, useMemo, useCallback } from "react";
+import type { SplitItem, Person, BillDetails, TaxTipSplitStrategy, DetailedBillSummaryData } from "@/lib/types";
 import type { User as SupabaseUser } from "@supabase/supabase-js";
 import { 
   handleScanReceiptAction, 
@@ -25,7 +25,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useToast } from "@/hooks/use-toast";
 import { Separator } from "@/components/ui/separator";
-import { Home, LogOut, Settings, UserCircle, Power, Info, Percent, Landmark, UserCheck, Loader2, UserPlus, ArrowRight, Trash2, Users, ScanLine, PlusCircle, Edit2, ListChecks, FilePlus, History as HistoryIconLucide } from "lucide-react";
+import { Home, LogOut, Settings, UserCircle, Power, Info, Percent, Landmark, UserCheck, Loader2, UserPlus, ArrowRight, Trash2, Users, ScanLine, PlusCircle, Edit2, ListChecks, FilePlus, History as HistoryIconLucide, FileText } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -49,7 +49,9 @@ interface Profile {
 
 export default function SplitBillAppPage() {
   const [currentBillId, setCurrentBillId] = useState<string | null>(null);
-  const [isBillCreating, setIsBillCreating] = useState(false);
+  const [billNameInput, setBillNameInput] = useState<string>("");
+  const [currentBillName, setCurrentBillName] = useState<string>("");
+
 
   const [people, setPeople] = useState<Person[]>([]);
   const [personNameInput, setPersonNameInput] = useState<string>("");
@@ -66,11 +68,12 @@ export default function SplitBillAppPage() {
   const [isScanning, setIsScanning] = useState(false);
   const [isCalculating, setIsCalculating] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [currentStep, setCurrentStep] = useState(1);
+  const [currentStep, setCurrentStep] = useState(0); // 0: Initial, 1: Bill Active, 2: Summary Shown
 
   const [authUser, setAuthUser] = useState<SupabaseUser | null>(null);
   const [userProfile, setUserProfile] = useState<Profile | null>(null);
   const [isLoadingUser, setIsLoadingUser] = useState(true);
+  const [isInitializingBill, setIsInitializingBill] = useState(false);
 
 
   const { toast } = useToast();
@@ -94,17 +97,21 @@ export default function SplitBillAppPage() {
     fetchUser();
   }, [fetchUser]);
 
-  const initializeNewBill = useCallback(async () => {
+  const startNewBillSession = useCallback(async () => {
     if (!authUser) { 
       setError("Pengguna tidak terautentikasi. Mohon login untuk membuat tagihan.");
-      console.warn("initializeNewBill called without authenticated user.");
       return;
     }
-    setIsBillCreating(true);
+    if (!billNameInput.trim()) {
+      toast({ variant: "destructive", title: "Nama Tagihan Kosong", description: "Mohon masukkan nama untuk tagihan Anda."});
+      return;
+    }
+    setIsInitializingBill(true);
     setError(null);
-    const result = await createBillAction("Tagihan Baru");
+    const result = await createBillAction(billNameInput.trim());
     if (result.success && result.billId) {
       setCurrentBillId(result.billId);
+      setCurrentBillName(billNameInput.trim());
       setPeople([]);
       setPersonNameInput("");
       setSplitItems([]);
@@ -115,33 +122,27 @@ export default function SplitBillAppPage() {
         taxTipSplitStrategy: "SPLIT_EQUALLY",
       });
       setDetailedBillSummary(null);
-      setCurrentStep(1);
-      toast({ title: "Sesi Tagihan Baru Dimulai", description: `Silakan tambahkan partisipan.`});
+      setCurrentStep(1); // Move to active bill step
+      toast({ title: "Sesi Tagihan Dimulai", description: `Tagihan "${billNameInput.trim()}" siap untuk diisi.`});
     } else {
       setError(result.error || "Gagal memulai sesi tagihan baru.");
       toast({ variant: "destructive", title: "Inisialisasi Gagal", description: result.error || "Tidak dapat membuat tagihan baru di database." });
     }
-    setIsBillCreating(false);
-  }, [toast, authUser]); 
+    setIsInitializingBill(false);
+  }, [toast, authUser, billNameInput]); 
   
-  useEffect(() => {
-    if (!isLoadingUser && authUser && !currentBillId && !isBillCreating) {
-        initializeNewBill();
-    }
-  }, [authUser, isLoadingUser, currentBillId, isBillCreating, initializeNewBill]);
-
-
-  const resetApp = () => {
-     if (authUser) { 
-        initializeNewBill(); 
-     } else {
-        setCurrentBillId(null);
-        setPeople([]);
-        setPersonNameInput("");
-        setSplitItems([]);
-        setBillDetails({ payerId: null, taxAmount: 0, tipAmount: 0, taxTipSplitStrategy: "SPLIT_EQUALLY" });
-        setDetailedBillSummary(null);
-        setCurrentStep(1);
+  const resetAppToStart = () => {
+     setCurrentBillId(null);
+     setCurrentBillName("");
+     setBillNameInput("");
+     setPeople([]);
+     setPersonNameInput("");
+     setSplitItems([]);
+     setBillDetails({ payerId: null, taxAmount: 0, tipAmount: 0, taxTipSplitStrategy: "SPLIT_EQUALLY" });
+     setDetailedBillSummary(null);
+     setCurrentStep(0); // Back to initial step for new bill name
+     setError(null);
+     if (!authUser) {
         setError("Mohon login untuk memulai tagihan baru.");
         toast({title: "Pengguna Tidak Login", description: "Silakan login untuk menggunakan aplikasi."})
      }
@@ -189,7 +190,7 @@ export default function SplitBillAppPage() {
     if (result.success && result.person) {
       setPeople(prev => [...prev, result.person!]);
       setPersonNameInput("");
-      toast({ title: "Orang Ditambahkan", description: `${result.person.name} telah ditambahkan dan disimpan.`});
+      toast({ title: "Orang Ditambahkan", description: `${result.person.name} telah ditambahkan.`});
     } else {
       toast({ variant: "destructive", title: "Gagal Menambah Orang", description: result.error || "Tidak dapat menyimpan orang ke database." });
     }
@@ -214,20 +215,6 @@ export default function SplitBillAppPage() {
     }
   };
   
-  const proceedToScanStep = () => {
-    if (people.length === 0) {
-      toast({ variant: "destructive", title: "Belum Ada Orang", description: "Mohon tambahkan minimal satu orang untuk melanjutkan." });
-      return;
-    }
-     if (!currentBillId) {
-      toast({ variant: "destructive", title: "Tagihan Belum Siap", description: "Mohon tunggu sesi tagihan terinisialisasi." });
-      return;
-    }
-    setError(null); 
-    setCurrentStep(2);
-  };
-
-
   const handleScanReceipt = async (receiptDataUri: string) => {
     setIsScanning(true);
     setError(null);
@@ -244,9 +231,7 @@ export default function SplitBillAppPage() {
       }));
       setSplitItems(prev => [...prev, ...newSplitItems]); 
       toast({ title: "Struk Dipindai", description: `${newSplitItems.length} baris item ditambahkan.` });
-      if (newSplitItems.length > 0 && currentStep < 3) {
-        setCurrentStep(3); 
-      } else if (newSplitItems.length === 0) {
+       if (newSplitItems.length === 0) {
         toast({ variant: "default", title: "Tidak ada item ditemukan", description: "Pemindaian struk tidak menemukan item apapun. Coba tambahkan manual atau pindai/ambil foto ulang." });
       }
     } else {
@@ -273,9 +258,6 @@ export default function SplitBillAppPage() {
     };
     setSplitItems(prevItems => [...prevItems, newItem]);
     setDetailedBillSummary(null);
-    if (currentStep < 3 && people.length > 0) { 
-        setCurrentStep(3); 
-    }
   };
 
   const handleDeleteItem = (itemId: string) => {
@@ -290,13 +272,17 @@ export default function SplitBillAppPage() {
 
   const handleCalculateSummary = async () => {
     if (!currentBillId) {
-      setError("Sesi tagihan tidak ditemukan. Mohon coba reset.");
+      setError("Sesi tagihan tidak ditemukan. Mohon coba mulai tagihan baru.");
       toast({ variant: "destructive", title: "Gagal Menghitung", description: "Sesi tagihan tidak valid." });
       return;
     }
     if (!billDetails.payerId) {
       setError("Mohon pilih siapa yang membayar tagihan.");
       toast({ variant: "destructive", title: "Gagal Menghitung", description: "Pembayar belum dipilih." });
+      return;
+    }
+    if (people.length < 2) {
+      toast({ variant: "destructive", title: "Partisipan Kurang", description: "Perlu minimal dua orang untuk membagi tagihan." });
       return;
     }
     
@@ -313,7 +299,7 @@ export default function SplitBillAppPage() {
             personalTotalShares: people.reduce((acc, p) => ({...acc, [p.name]: 0}), {}),
             settlements: []
         });
-        setCurrentStep(4);
+        setCurrentStep(2); // Move to summary shown step
         return;
     }
     
@@ -371,8 +357,8 @@ export default function SplitBillAppPage() {
       }
       
       setDetailedBillSummary(detailedSummary);
-      toast({ title: "Tagihan Diringkas", description: "Ringkasan berhasil dihitung dan disimpan." });
-      setCurrentStep(4); 
+      toast({ title: "Tagihan Diringkas & Disimpan", description: "Ringkasan berhasil dihitung dan tagihan ini akan muncul di riwayat." });
+      setCurrentStep(2); // Move to summary shown step
     } else {
       setError(result.error || "Gagal meringkas tagihan.");
       toast({ variant: "destructive", title: "Ringkasan Gagal", description: result.error || "Tidak dapat menghitung ringkasan." });
@@ -386,22 +372,19 @@ export default function SplitBillAppPage() {
       toast({ title: "Logout Berhasil" });
       setAuthUser(null);
       setUserProfile(null);
-      setCurrentBillId(null); 
+      resetAppToStart();
       router.push("/"); 
-      resetApp(); 
     } else {
       toast({ variant: "destructive", title: "Logout Gagal", description: logoutErr });
     }
   };
   
-  if (isLoadingUser || (authUser && isBillCreating && !currentBillId)) {
+  if (isLoadingUser) {
     return (
       <div className="relative min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-background via-secondary/10 to-background p-4 bg-money-pattern bg-[length:150px_auto] before:content-[''] before:absolute before:inset-0 before:bg-white/[.90] before:dark:bg-black/[.90] before:z-0">
         <div className="relative z-[1] flex flex-col items-center justify-center text-center">
             <Loader2 className="h-12 w-12 animate-spin text-primary" />
-            <p className="mt-4 text-lg text-foreground">
-            {isLoadingUser ? "Memuat data pengguna..." : "Memulai sesi tagihan baru..."}
-            </p>
+            <p className="mt-4 text-lg text-foreground">Memuat data pengguna...</p>
         </div>
       </div>
     );
@@ -503,104 +486,121 @@ export default function SplitBillAppPage() {
             </Alert>
           )}
 
-          {currentStep === 1 && (
+          {currentStep === 0 && ( // Initial step: Enter Bill Name
             <Card className="shadow-xl overflow-hidden bg-card/90 backdrop-blur-sm hover:shadow-2xl transition-shadow duration-300 ease-in-out">
               <CardHeader className="bg-card/60 border-b">
-                <CardTitle className="text-xl sm:text-2xl font-semibold flex items-center"><Users className="mr-3 h-6 w-6"/>1. Tambah Orang</CardTitle>
-                <CardDescription>Masukkan nama orang-orang yang akan ikut patungan. Data disimpan ke database.</CardDescription>
+                <CardTitle className="text-xl sm:text-2xl font-semibold flex items-center"><FileText className="mr-3 h-6 w-6"/>Mulai Tagihan Baru</CardTitle>
+                <CardDescription>Beri nama tagihan Anda untuk memulai.</CardDescription>
               </CardHeader>
               <CardContent className="p-4 sm:p-6 space-y-4">
-                <div className="flex space-x-2">
+                <div className="space-y-2">
+                  <Label htmlFor="billName">Nama Tagihan</Label>
                   <Input
+                    id="billName"
                     type="text"
-                    placeholder="Nama Orang"
-                    value={personNameInput}
-                    onChange={(e) => setPersonNameInput(e.target.value)}
-                    onKeyPress={(e) => { if (e.key === 'Enter') handleAddPerson(); }}
+                    placeholder="Contoh: Makan Malam Tim, Trip ke Bali"
+                    value={billNameInput}
+                    onChange={(e) => setBillNameInput(e.target.value)}
+                    onKeyPress={(e) => { if (e.key === 'Enter' && billNameInput.trim()) startNewBillSession(); }}
                     className="flex-grow"
-                    disabled={!currentBillId}
                   />
-                  <Button onClick={handleAddPerson} variant="outline" disabled={!currentBillId || !personNameInput.trim()}>
-                    <UserPlus className="mr-2 h-4 w-4" /> Tambah
-                  </Button>
                 </div>
-                {people.length > 0 && (
-                  <div className="space-y-2">
-                    <h4 className="text-sm font-medium text-muted-foreground">Daftar Orang:</h4>
-                    <div className="flex flex-wrap gap-2">
-                      {people.map(person => (
-                        <Badge key={person.id} variant="secondary" className="py-1 px-3 text-sm flex items-center gap-2 shadow-sm">
-                          {person.name}
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-5 w-5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-full"
-                            onClick={() => handleRemovePerson(person.id)}
-                            aria-label={`Hapus ${person.name}`}
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </Button>
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-                )}
               </CardContent>
               <CardFooter>
-                <Button onClick={proceedToScanStep} disabled={people.length === 0 || !currentBillId} className="w-full" size="lg">
-                  Lanjut ke Scan Struk <ArrowRight className="ml-2" />
+                <Button onClick={startNewBillSession} disabled={!billNameInput.trim() || isInitializingBill} className="w-full" size="lg">
+                  {isInitializingBill ? <Loader2 className="animate-spin mr-2"/> : <ArrowRight className="ml-2" />}
+                  {isInitializingBill ? "Memulai..." : "Lanjut & Isi Detail Tagihan"} 
                 </Button>
               </CardFooter>
             </Card>
           )}
           
-          {currentStep >= 2 && (
+          {currentStep === 1 && currentBillId && ( // Active Bill Step: All inputs shown
+            <>
             <Card className="shadow-xl overflow-hidden bg-card/90 backdrop-blur-sm hover:shadow-2xl transition-shadow duration-300 ease-in-out">
               <CardHeader className="bg-card/60 border-b">
-                <CardTitle className="text-xl sm:text-2xl font-semibold flex items-center"><ScanLine className="mr-3 h-6 w-6"/>2. Pindai Struk Anda</CardTitle>
-                <CardDescription>Gunakan kamera untuk memindai struk atau unggah file gambar. Anda juga bisa menambahkan item manual di langkah berikutnya.</CardDescription>
+                <CardTitle className="text-xl sm:text-2xl font-semibold flex items-center">
+                    Tagihan: <span className="text-primary ml-2">{currentBillName}</span>
+                </CardTitle>
+                <CardDescription>Masukkan semua detail untuk tagihan ini.</CardDescription>
               </CardHeader>
-              <CardContent className="p-4 sm:p-6">
-                <ReceiptUploader 
-                  onScan={handleScanReceipt} 
-                  isScanning={isScanning} 
-                  onClearPreview={() => {
-                    setSplitItems([]); 
-                    toast({ title: "Pratinjau Dihapus", description: "Anda dapat memindai atau mengunggah struk baru."});
-                  }}
-                />
-              </CardContent>
-               {currentStep === 2 && splitItems.length === 0 && (
-                <CardFooter className="border-t pt-4">
-                    <Button onClick={handleAddItem} variant="outline" className="w-full">
-                        <PlusCircle className="mr-2 h-4 w-4" /> Lewati Pindai & Tambah Item Manual
+              <CardContent className="p-4 sm:p-6 space-y-8">
+                {/* Section 1: Add People */}
+                <section>
+                    <h3 className="text-lg font-semibold mb-3 flex items-center"><Users className="mr-2 h-5 w-5"/>Partisipan</h3>
+                    <div className="flex space-x-2">
+                    <Input
+                        type="text"
+                        placeholder="Nama Orang"
+                        value={personNameInput}
+                        onChange={(e) => setPersonNameInput(e.target.value)}
+                        onKeyPress={(e) => { if (e.key === 'Enter') handleAddPerson(); }}
+                        className="flex-grow"
+                    />
+                    <Button onClick={handleAddPerson} variant="outline" disabled={!personNameInput.trim()}>
+                        <UserPlus className="mr-2 h-4 w-4" /> Tambah
                     </Button>
-                </CardFooter>
-            )}
-            </Card>
-          )}
+                    </div>
+                    {people.length > 0 && (
+                    <div className="mt-4 space-y-2">
+                        <h4 className="text-sm font-medium text-muted-foreground">Daftar Orang ({people.length}):</h4>
+                        <div className="flex flex-wrap gap-2">
+                        {people.map(person => (
+                            <Badge key={person.id} variant="secondary" className="py-1 px-3 text-sm flex items-center gap-2 shadow-sm">
+                            {person.name}
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-5 w-5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-full"
+                                onClick={() => handleRemovePerson(person.id)}
+                                aria-label={`Hapus ${person.name}`}
+                            >
+                                <Trash2 className="h-3 w-3" />
+                            </Button>
+                            </Badge>
+                        ))}
+                        </div>
+                    </div>
+                    )}
+                </section>
 
-          {currentStep >= 3 && (
-            <Card className="shadow-xl overflow-hidden bg-card/90 backdrop-blur-sm hover:shadow-2xl transition-shadow duration-300 ease-in-out">
-              <CardHeader className="bg-card/60 border-b">
-                <CardTitle className="text-xl sm:text-2xl font-semibold flex items-center"><Edit2 className="mr-3 h-6 w-6"/>3. Edit Item, Alokasi & Detail Pembayaran</CardTitle>
-                <CardDescription>Tinjau item, koreksi, tambahkan baru, alokasikan ke orang, tentukan pembayar, pajak, dan tip.</CardDescription>
-              </CardHeader>
-              <CardContent className="p-4 sm:p-6 space-y-6">
-                <ItemEditor
-                  items={splitItems}
-                  people={people}
-                  onUpdateItem={handleUpdateItem}
-                  onAddItem={handleAddItem}
-                  onDeleteItem={handleDeleteItem}
-                  onCalculateSummary={handleCalculateSummary} 
-                  isCalculating={isCalculating} 
-                />
+                <Separator/>
+
+                {/* Section 2: Scan Receipt */}
+                <section>
+                    <h3 className="text-lg font-semibold mb-3 flex items-center"><ScanLine className="mr-2 h-5 w-5"/>Pindai Struk (Opsional)</h3>
+                    <ReceiptUploader 
+                        onScan={handleScanReceipt} 
+                        isScanning={isScanning} 
+                        onClearPreview={() => {
+                            // Split items are part of the main state, no direct clear needed here
+                            // unless you want to specifically clear scanned items vs manual
+                            toast({ title: "Pratinjau Dihapus", description: "Anda dapat memindai atau mengunggah struk baru."});
+                        }}
+                    />
+                </section>
                 
-                <Separator />
-                
-                <div>
-                  <h3 className="text-lg font-medium mb-3">Detail Pembayaran Tambahan</h3>
+                <Separator/>
+
+                {/* Section 3: Item Editor */}
+                <section>
+                    <h3 className="text-lg font-semibold mb-3 flex items-center"><Edit2 className="mr-2 h-5 w-5"/>Item Tagihan & Alokasi</h3>
+                     <ItemEditor
+                        items={splitItems}
+                        people={people}
+                        onUpdateItem={handleUpdateItem}
+                        onAddItem={handleAddItem}
+                        onDeleteItem={handleDeleteItem}
+                        onCalculateSummary={() => {}} // Dummy, button moved
+                        isCalculating={false} // Dummy, button moved
+                    />
+                </section>
+
+                <Separator/>
+
+                {/* Section 4: Payment Details */}
+                <section>
+                  <h3 className="text-lg font-semibold mb-3">Detail Pembayaran Tambahan</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                     <div className="space-y-2">
                       <Label htmlFor="payer">Siapa yang Membayar?</Label>
@@ -699,32 +699,35 @@ export default function SplitBillAppPage() {
                       </div>
                     </RadioGroup>
                   </div>
-                </div>
-                 <Button 
-                  onClick={handleCalculateSummary} 
-                  disabled={isCalculating || (itemsForSummary.length === 0 && billDetails.taxAmount === 0 && billDetails.tipAmount === 0) || !billDetails.payerId || people.length === 0 || !currentBillId} 
-                  size="lg" 
-                  className="w-full mt-6"
-                >
-                  {isCalculating ? (
-                    <Loader2 className="animate-spin mr-2" />
-                  ) : (
-                    <UserCheck className="mr-2" />
-                  )}
-                  {isCalculating ? "Menghitung..." : "Hitung & Lihat Ringkasan Tagihan"}
-                </Button>
-              </CardContent>
+                </section>
+                </CardContent>
+                <CardFooter className="border-t pt-6">
+                    <Button 
+                    onClick={handleCalculateSummary} 
+                    disabled={isCalculating || (itemsForSummary.length === 0 && billDetails.taxAmount === 0 && billDetails.tipAmount === 0) || !billDetails.payerId || people.length < 2 || !currentBillId} 
+                    size="lg" 
+                    className="w-full"
+                    >
+                    {isCalculating ? (
+                        <Loader2 className="animate-spin mr-2" />
+                    ) : (
+                        <UserCheck className="mr-2" />
+                    )}
+                    {isCalculating ? "Menghitung..." : "Hitung & Lihat Ringkasan Tagihan"}
+                    </Button>
+                </CardFooter>
             </Card>
+            </>
           )}
           
-          {currentStep >= 4 && detailedBillSummary && (
+          {currentStep === 2 && detailedBillSummary && ( // Summary Shown Step
              <Card className="shadow-xl overflow-hidden bg-card/90 backdrop-blur-sm hover:shadow-2xl transition-shadow duration-300 ease-in-out">
               <CardHeader className="bg-card/60 border-b flex flex-row items-center justify-between">
                 <div>
-                  <CardTitle className="text-xl sm:text-2xl font-semibold flex items-center"><ListChecks className="mr-3 h-6 w-6"/>4. Ringkasan Tagihan</CardTitle>
+                  <CardTitle className="text-xl sm:text-2xl font-semibold flex items-center"><ListChecks className="mr-3 h-6 w-6"/>Ringkasan Tagihan: {currentBillName}</CardTitle>
                   <CardDescription>Ini dia siapa berutang apa. Gampang kan!</CardDescription>
                 </div>
-                <Button variant="outline" onClick={resetApp} size="sm" disabled={!authUser}>
+                <Button variant="outline" onClick={resetAppToStart} size="sm" disabled={!authUser}>
                     <FilePlus className="mr-2 h-4 w-4" /> Buat Tagihan Baru
                 </Button>
               </CardHeader>

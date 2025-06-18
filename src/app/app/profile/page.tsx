@@ -24,7 +24,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Skeleton } from "@/components/ui/skeleton"; // Added missing import
+import { Skeleton } from "@/components/ui/skeleton";
 
 interface Profile {
   id: string;
@@ -120,10 +120,18 @@ export default function ProfilePage() {
     if (!authUser || !userProfile) return;
     setIsSaving(true);
 
+    const trimmedFullName = formData.fullName.trim();
+    const trimmedUsername = formData.username.trim();
+    
+    let trimmedPhoneNumber: string | null = null;
+    if (typeof formData.phoneNumber === 'string' && formData.phoneNumber.trim() !== '') {
+      trimmedPhoneNumber = formData.phoneNumber.trim();
+    }
+
     const updates: Partial<Profile> = {
-      full_name: formData.fullName.trim() || null,
-      username: formData.username.trim() || null,
-      phone_number: formData.phoneNumber.trim() || null,
+      full_name: trimmedFullName || null,
+      username: trimmedUsername || null,
+      phone_number: trimmedPhoneNumber,
     };
 
     // Basic validation

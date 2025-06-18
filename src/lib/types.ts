@@ -50,5 +50,6 @@ export interface BillHistoryEntry {
   grandTotal: number | null;
   payerName: string | null;
   participantCount: number;
+  scheduled_at?: string | null; // New optional field
 }
 

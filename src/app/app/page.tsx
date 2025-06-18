@@ -25,10 +25,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useToast } from "@/hooks/use-toast";
 import { Separator } from "@/components/ui/separator";
-import { Home, LogOut, Settings, UserCircle, Power, Info, Percent, Landmark, UserCheck, Loader2, UserPlus, ArrowRight, Trash2, Users, ScanLine, PlusCircle, Edit2, ListChecks, FilePlus, History as HistoryIconLucide, FileText } from "lucide-react";
+import { Home, LogOut, Settings, UserCircle, Power, Info, Percent, Landmark, UserCheck, Loader2, UserPlus, ArrowRight, Trash2, Users, ScanLine, PlusCircle, Edit2, ListChecks, FilePlus, History as HistoryIconLucide, FileText, CalendarClock } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
+import { format } from 'date-fns';
+import { id as IndonesianLocale } from 'date-fns/locale';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -52,6 +54,8 @@ export default function SplitBillAppPage() {
   const [billNameInput, setBillNameInput] = useState<string>("");
   const [currentBillName, setCurrentBillName] = useState<string>("");
 
+  const [billTimingOption, setBillTimingOption] = useState<'now' | 'schedule'>('now');
+  const [scheduledAt, setScheduledAt] = useState<string>(""); // Store as ISO string from datetime-local
 
   const [people, setPeople] = useState<Person[]>([]);
   const [personNameInput, setPersonNameInput] = useState<string>("");
@@ -112,35 +116,73 @@ export default function SplitBillAppPage() {
       toast({ variant: "destructive", title: "Nama Tagihan Kosong", description: "Mohon masukkan nama untuk tagihan Anda."});
       return;
     }
+
     setIsInitializingBill(true);
     setError(null);
-    const result = await createBillAction(billNameInput.trim());
-    if (result.success && result.billId) {
-      setCurrentBillId(result.billId);
-      setCurrentBillName(billNameInput.trim());
-      setPeople([]);
-      setPersonNameInput("");
-      setSplitItems([]);
-      setBillDetails({
-        payerId: null,
-        taxAmount: 0,
-        tipAmount: 0,
-        taxTipSplitStrategy: "SPLIT_EQUALLY",
-      });
-      setDetailedBillSummary(null);
-      setCurrentStep(1); 
-      toast({ title: "Sesi Tagihan Dimulai", description: `Tagihan "${billNameInput.trim()}" siap untuk diisi.`});
-    } else {
-      setError(result.error || "Gagal memulai sesi tagihan baru.");
-      toast({ variant: "destructive", title: "Inisialisasi Gagal", description: result.error || "Tidak dapat membuat tagihan baru di database." });
+
+    if (billTimingOption === 'schedule') {
+      if (!scheduledAt) {
+        toast({ variant: "destructive", title: "Jadwal Kosong", description: "Mohon pilih tanggal dan waktu untuk penjadwalan."});
+        setIsInitializingBill(false);
+        return;
+      }
+      try {
+        const scheduledDate = new Date(scheduledAt);
+        if (isNaN(scheduledDate.getTime())) {
+          throw new Error("Format tanggal jadwal tidak valid.");
+        }
+        if (scheduledDate <= new Date()) {
+          toast({ variant: "destructive", title: "Jadwal Tidak Valid", description: "Waktu yang dijadwalkan harus di masa mendatang."});
+          setIsInitializingBill(false);
+          return;
+        }
+
+        const result = await createBillAction(billNameInput.trim(), scheduledDate.toISOString());
+        if (result.success && result.billId) {
+          toast({ 
+            title: "Tagihan Dijadwalkan", 
+            description: `Tagihan "${billNameInput.trim()}" berhasil dijadwalkan untuk ${format(scheduledDate, "dd MMMM yyyy 'pukul' HH:mm", { locale: IndonesianLocale })}.`
+          });
+          resetAppToStart(); // Reset to step 0
+        } else {
+          setError(result.error || "Gagal menjadwalkan tagihan.");
+          toast({ variant: "destructive", title: "Penjadwalan Gagal", description: result.error || "Tidak dapat membuat tagihan terjadwal di database." });
+        }
+      } catch (e: any) {
+         setError(e.message || "Kesalahan saat memproses jadwal.");
+         toast({ variant: "destructive", title: "Kesalahan Jadwal", description: e.message || "Tidak dapat memproses waktu yang dijadwalkan." });
+      }
+    } else { // billTimingOption === 'now'
+      const result = await createBillAction(billNameInput.trim(), null); // Pass null for scheduledAt
+      if (result.success && result.billId) {
+        setCurrentBillId(result.billId);
+        setCurrentBillName(billNameInput.trim());
+        setPeople([]);
+        setPersonNameInput("");
+        setSplitItems([]);
+        setBillDetails({
+          payerId: null,
+          taxAmount: 0,
+          tipAmount: 0,
+          taxTipSplitStrategy: "SPLIT_EQUALLY",
+        });
+        setDetailedBillSummary(null);
+        setCurrentStep(1); 
+        toast({ title: "Sesi Tagihan Dimulai", description: `Tagihan "${billNameInput.trim()}" siap untuk diisi.`});
+      } else {
+        setError(result.error || "Gagal memulai sesi tagihan baru.");
+        toast({ variant: "destructive", title: "Inisialisasi Gagal", description: result.error || "Tidak dapat membuat tagihan baru di database." });
+      }
     }
     setIsInitializingBill(false);
-  }, [toast, authUser, billNameInput, router]); 
+  }, [authUser, billNameInput, billTimingOption, scheduledAt, router, toast]); 
   
   const resetAppToStart = () => {
      setCurrentBillId(null);
      setCurrentBillName("");
      setBillNameInput("");
+     setBillTimingOption("now");
+     setScheduledAt("");
      setPeople([]);
      setPersonNameInput("");
      setSplitItems([]);
@@ -391,7 +433,7 @@ export default function SplitBillAppPage() {
   
   if (isLoadingUser) {
     return (
-      <div className="relative min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-background via-secondary/10 to-background p-4 bg-money-pattern bg-[length:150px_auto] before:content-[''] before:absolute before:inset-0 before:bg-white/[.90] before:dark:bg-black/[.90] before:z-0">
+      <div className="relative min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-background via-secondary/10 to-background p-4 bg-money-pattern bg-[length:200px_auto] before:content-[''] before:absolute before:inset-0 before:bg-white/[.90] before:dark:bg-black/[.90] before:z-0">
         <div className="relative z-[1] flex flex-col items-center justify-center text-center">
             <Loader2 className="h-12 w-12 animate-spin text-primary" />
             <p className="mt-4 text-lg text-foreground">Memuat data pengguna...</p>
@@ -500,9 +542,9 @@ export default function SplitBillAppPage() {
             <Card className="shadow-xl overflow-hidden bg-card/90 backdrop-blur-sm hover:shadow-2xl transition-shadow duration-300 ease-in-out">
               <CardHeader className="bg-card/60 border-b p-6">
                 <CardTitle className="text-xl sm:text-2xl font-semibold flex items-center"><FileText className="mr-3 h-6 w-6"/>Mulai Tagihan Baru</CardTitle>
-                <CardDescription>Beri nama tagihan Anda untuk memulai.</CardDescription>
+                <CardDescription>Beri nama tagihan Anda dan pilih waktu pembuatan.</CardDescription>
               </CardHeader>
-              <CardContent className="p-6 space-y-4">
+              <CardContent className="p-6 space-y-6">
                 <div className="space-y-2">
                   <Label htmlFor="billName">Nama Tagihan</Label>
                   <Input
@@ -511,15 +553,64 @@ export default function SplitBillAppPage() {
                     placeholder="Contoh: Makan Malam Tim, Trip ke Bali"
                     value={billNameInput}
                     onChange={(e) => setBillNameInput(e.target.value)}
-                    onKeyPress={(e) => { if (e.key === 'Enter' && billNameInput.trim()) startNewBillSession(); }}
                     className="flex-grow"
                   />
                 </div>
+                <div className="space-y-3">
+                    <Label>Kapan tagihan ini akan dibuat?</Label>
+                    <RadioGroup value={billTimingOption} onValueChange={(value) => setBillTimingOption(value as 'now' | 'schedule')} className="flex flex-col sm:flex-row gap-4">
+                        <div className="flex items-center space-x-2 p-3 border rounded-md hover:bg-muted/50 transition-colors flex-1 cursor-pointer has-[:checked]:bg-primary/10 has-[:checked]:border-primary">
+                            <RadioGroupItem value="now" id="timing-now" />
+                            <Label htmlFor="timing-now" className="font-normal leading-tight cursor-pointer flex-1">
+                                Buat Sekarang
+                                <p className="text-xs text-muted-foreground">Langsung isi detail dan hitung tagihan.</p>
+                            </Label>
+                        </div>
+                        <div className="flex items-center space-x-2 p-3 border rounded-md hover:bg-muted/50 transition-colors flex-1 cursor-pointer has-[:checked]:bg-primary/10 has-[:checked]:border-primary">
+                            <RadioGroupItem value="schedule" id="timing-schedule" />
+                            <Label htmlFor="timing-schedule" className="font-normal leading-tight cursor-pointer flex-1">
+                                Jadwalkan
+                                 <p className="text-xs text-muted-foreground">Simpan tagihan untuk diisi detailnya nanti.</p>
+                            </Label>
+                        </div>
+                    </RadioGroup>
+                </div>
+
+                {billTimingOption === 'schedule' && (
+                    <div className="space-y-2">
+                        <Label htmlFor="scheduledAt">Tanggal & Waktu Penjadwalan</Label>
+                        <div className="relative">
+                           <CalendarClock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                            <Input
+                                id="scheduledAt"
+                                type="datetime-local"
+                                value={scheduledAt}
+                                onChange={(e) => setScheduledAt(e.target.value)}
+                                className="pl-10"
+                                min={new Date().toISOString().slice(0, 16)} // Prevent past dates
+                            />
+                        </div>
+                        <p className="text-xs text-muted-foreground">Pilih tanggal dan waktu di masa mendatang untuk tagihan ini.</p>
+                    </div>
+                )}
               </CardContent>
               <CardFooter className="p-6">
-                <Button onClick={startNewBillSession} disabled={!billNameInput.trim() || isInitializingBill} className="w-full" size="lg">
-                  {isInitializingBill ? <Loader2 className="animate-spin mr-2"/> : <ArrowRight className="mr-2 h-4 w-4" />}
-                  {isInitializingBill ? "Memulai..." : "Lanjut & Isi Detail Tagihan"} 
+                <Button 
+                    onClick={startNewBillSession} 
+                    disabled={
+                        !billNameInput.trim() || 
+                        isInitializingBill || 
+                        (billTimingOption === 'schedule' && !scheduledAt)
+                    } 
+                    className="w-full" 
+                    size="lg"
+                >
+                  {isInitializingBill ? <Loader2 className="animate-spin mr-2"/> : 
+                    billTimingOption === 'now' ? <ArrowRight className="mr-2 h-4 w-4" /> : <CalendarClock className="mr-2 h-4 w-4" />
+                  }
+                  {isInitializingBill ? "Memproses..." : 
+                    billTimingOption === 'now' ? "Lanjut & Isi Detail Tagihan" : "Jadwalkan Tagihan"
+                  } 
                 </Button>
               </CardFooter>
             </Card>

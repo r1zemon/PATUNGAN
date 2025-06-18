@@ -138,7 +138,10 @@ export async function logoutUserAction() {
 }
 
 
-export async function createBillAction(billName: string): Promise<{ success: boolean; billId?: string; error?: string }> {
+export async function createBillAction(
+  billName: string, 
+  scheduledAt?: string | null
+): Promise<{ success: boolean; billId?: string; error?: string }> {
   const supabase = createSupabaseServerClient();
   const { data: { user } , error: authError } = await supabase.auth.getUser();
 
@@ -152,13 +155,16 @@ export async function createBillAction(billName: string): Promise<{ success: boo
      return { success: false, error: "Pengguna tidak terautentikasi. Tidak dapat membuat tagihan." };
   }
   
+  const billInsertData: Database['public']['Tables']['bills']['Insert'] = {
+    name: billName || "Tagihan Baru",
+    user_id: user.id,
+    scheduled_at: scheduledAt || null,
+    // grand_total, payer_participant_id, etc. will be NULL initially
+  };
+
   const { data: billData, error: billInsertError } = await supabase
     .from('bills')
-    .insert([{ 
-        name: billName || "Tagihan Baru", 
-        user_id: user.id,
-        // grand_total, payer_participant_id, etc. will be NULL initially
-     }])
+    .insert([billInsertData])
     .select('id')
     .single();
 
@@ -455,12 +461,12 @@ export async function getBillsHistoryAction(): Promise<{ success: boolean; data?
   }
 
   // Only fetch bills that have been "completed" (i.e., grand_total is not NULL and payer_participant_id is not NULL)
+  // OR bills that are scheduled (scheduled_at is not NULL)
   const { data: bills, error: billsError } = await supabase
     .from('bills')
-    .select('id, name, created_at, grand_total, payer_participant_id')
+    .select('id, name, created_at, grand_total, payer_participant_id, scheduled_at') // Added scheduled_at
     .eq('user_id', user.id)
-    .not('grand_total', 'is', null) // Key filter: only bills with a calculated grand total
-    .not('payer_participant_id', 'is', null) // Key filter: only bills with a payer assigned
+    .or('grand_total.not.is.null,scheduled_at.not.is.null') // Fetch completed OR scheduled bills
     .order('created_at', { ascending: false });
 
   if (billsError) {
@@ -502,11 +508,13 @@ export async function getBillsHistoryAction(): Promise<{ success: boolean; data?
       id: bill.id,
       name: bill.name,
       createdAt: bill.created_at || new Date().toISOString(),
-      grandTotal: bill.grand_total, // grand_total should exist due to filter
+      grandTotal: bill.grand_total, 
       payerName: payerName,
       participantCount: participantCount || 0,
+      scheduled_at: bill.scheduled_at, // Add scheduled_at to history entry
     });
   }
   
   return { success: true, data: historyEntries };
 }
+

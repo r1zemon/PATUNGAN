@@ -96,6 +96,7 @@ export interface Database {
           id: string
           name: string | null
           payer_participant_id: string | null
+          scheduled_at: string | null // New column
           tax_amount: number | null
           tax_tip_split_strategy: string | null 
           tip_amount: number | null
@@ -108,6 +109,7 @@ export interface Database {
           id?: string
           name?: string | null
           payer_participant_id?: string | null
+          scheduled_at?: string | null // New column
           tax_amount?: number | null
           tax_tip_split_strategy?: string | null
           tip_amount?: number | null
@@ -120,6 +122,7 @@ export interface Database {
           id?: string
           name?: string | null
           payer_participant_id?: string | null
+          scheduled_at?: string | null // New column
           tax_amount?: number | null
           tax_tip_split_strategy?: string | null
           tip_amount?: number | null

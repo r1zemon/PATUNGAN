@@ -94,6 +94,7 @@ export async function loginUserAction(formData: FormData) {
   revalidatePath('/', 'layout');
   revalidatePath('/app', 'page'); 
   revalidatePath('/app', 'layout'); 
+  revalidatePath('/login', 'page'); // Revalidate the login page
   return { success: true, user: data.user };
 }
 
@@ -502,3 +503,5 @@ export async function getBillsHistoryAction(): Promise<{ success: boolean; data?
   return { success: true, data: historyEntries };
 }
 
+
+    

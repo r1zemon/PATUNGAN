@@ -36,7 +36,7 @@ export default function LoginPage() {
           title: "Login Berhasil!",
           description: "Anda akan diarahkan ke halaman utama.",
         });
-        router.refresh(); // Add this to ensure session is picked up by middleware
+        router.refresh(); // Crucial: Refresh to ensure middleware picks up the new session
         router.push("/app");
       } else {
         toast({
@@ -151,3 +151,5 @@ export default function LoginPage() {
     </div>
   );
 }
+
+    

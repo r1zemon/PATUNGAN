@@ -6,9 +6,26 @@ import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { LandingHeader } from '@/components/landing-header';
 import { Footer } from '@/components/footer';
-import { ArrowRight, MoveRight, ScanLine, Users, ListChecks, Wallet, BarChart3, CreditCard } from 'lucide-react';
+import { ArrowRight, MoveRight, ScanLine, Users, ListChecks, Wallet, BarChart3, CreditCard, Loader2 } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import type { User as SupabaseUser } from "@supabase/supabase-js";
+import { getCurrentUserAction } from '@/lib/actions';
 
 export default function LandingPage() {
+  const [authUser, setAuthUser] = useState<SupabaseUser | null>(null);
+  const [isLoadingUser, setIsLoadingUser] = useState(true);
+
+  const fetchUser = useCallback(async () => {
+    setIsLoadingUser(true);
+    const { user } = await getCurrentUserAction();
+    setAuthUser(user);
+    setIsLoadingUser(false);
+  }, []);
+
+  useEffect(() => {
+    fetchUser();
+  }, [fetchUser]);
+
   const features = [
     {
       title: "Scan Struk Cepat & Akurat",
@@ -91,11 +108,17 @@ export default function LandingPage() {
                     Mulai Patungan <MoveRight className="ml-2 h-5 w-5" />
                   </Link>
                 </Button>
-                <Button size="lg" variant="outline" asChild className="border-primary text-primary hover:bg-primary/10 shadow-lg hover:shadow-xl transition-shadow duration-300 hover:scale-[1.03] transform">
-                  <Link href="/signup"> 
-                    Daftar Sekarang <ArrowRight className="ml-2 h-5 w-5" />
-                  </Link>
-                </Button>
+                {isLoadingUser ? (
+                  <Button size="lg" variant="outline" disabled className="border-primary text-primary hover:bg-primary/10 shadow-lg hover:shadow-xl transition-shadow duration-300">
+                     <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Memuat...
+                  </Button>
+                ) : !authUser && (
+                  <Button size="lg" variant="outline" asChild className="border-primary text-primary hover:bg-primary/10 shadow-lg hover:shadow-xl transition-shadow duration-300 hover:scale-[1.03] transform">
+                    <Link href="/signup"> 
+                      Daftar Sekarang <ArrowRight className="ml-2 h-5 w-5" />
+                    </Link>
+                  </Button>
+                )}
               </div>
             </div>
             <div className="flex justify-center md:justify-end animate-fade-in-up">
@@ -238,7 +261,6 @@ export default function LandingPage() {
     </div>
   );
 }
-
     
 
     

@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
-import { Home, LogOut, Settings, UserCircle, Power, Info, FilePlus, Loader2, HistoryIcon, ArrowLeft, Users, Coins, CalendarDays } from "lucide-react";
+import { Home, LogOut, Settings, UserCircle, Power, Info, FilePlus, Loader2, History as HistoryIconLucide, ArrowLeft, Users, Coins, CalendarDays } from "lucide-react"; // Renamed History to HistoryIconLucide
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -99,22 +99,21 @@ export default function HistoryPage() {
         <header className="relative z-[1] py-4 px-4 sm:px-6 md:px-8 border-b sticky top-0 bg-background/80 backdrop-blur-md">
           <div className="container mx-auto flex items-center justify-between">
             <Link href="/app" className="flex items-center gap-2 text-primary hover:text-primary/80 transition-colors">
-              <Image src="/logo.png" alt="Patungan Logo" width={48} height={48} className="rounded-lg shadow-sm" />
+              <Image src="/logo.png" alt="Patungan Logo" width={48} height={48} className="rounded-lg shadow-sm" data-ai-hint="logo company"/>
               <h1 className="text-2xl font-bold tracking-tight text-foreground">Patungan</h1>
             </Link>
             <div className="flex items-center gap-2 sm:gap-4">
               <Skeleton className="h-9 w-28 hidden sm:block" />
               <Skeleton className="h-10 w-10 rounded-full" />
-              <Skeleton className="h-10 w-10 rounded-full" />
             </div>
           </div>
         </header>
-        <div className="relative z-[1] container mx-auto px-4 py-8 md:px-6 md:py-12 flex-grow">
+        <main className="relative z-[1] container mx-auto px-4 py-8 md:px-6 md:py-12 flex-grow">
           <div className="flex items-center justify-center h-full">
             <Loader2 className="h-12 w-12 animate-spin text-primary" />
             <p className="ml-4 text-lg text-foreground">Memuat riwayat tagihan...</p>
           </div>
-        </div>
+        </main>
          <footer className="relative z-[1] mt-auto pt-8 border-t border-border/40 text-center text-sm text-muted-foreground">
             <p>&copy; {new Date().getFullYear()} Patungan. Hak cipta dilindungi.</p>
             <p>Ditenagai oleh Next.js, Shadcn/UI, Genkit, dan Supabase.</p>
@@ -128,7 +127,7 @@ export default function HistoryPage() {
       <header className="relative z-[1] py-4 px-4 sm:px-6 md:px-8 border-b sticky top-0 bg-background/80 backdrop-blur-md">
         <div className="container mx-auto flex items-center justify-between">
           <Link href="/app" className="flex items-center gap-2 text-primary hover:text-primary/80 transition-colors">
-            <Image src="/logo.png" alt="Patungan Logo" width={48} height={48} className="rounded-lg shadow-sm" />
+            <Image src="/logo.png" alt="Patungan Logo" width={48} height={48} className="rounded-lg shadow-sm" data-ai-hint="logo company"/>
             <h1 className="text-2xl font-bold tracking-tight text-foreground">
               Patungan
             </h1>
@@ -165,7 +164,7 @@ export default function HistoryPage() {
                   <DropdownMenuItem onClick={() => router.push('/app')} className="sm:hidden">
                       <FilePlus className="mr-2 h-4 w-4" />
                       <span>Tagihan Baru</span>
-                    </DropdownMenuItem>
+                  </DropdownMenuItem>
                    <DropdownMenuItem onClick={() => toast({title: "Info", description: "Halaman profil belum diimplementasikan."})}>
                     <UserCircle className="mr-2 h-4 w-4" />
                     <span>Profil</span>
@@ -193,7 +192,7 @@ export default function HistoryPage() {
       <main className="relative z-[1] container mx-auto px-4 py-8 md:px-6 md:py-12 flex-grow">
         <div className="flex flex-col sm:flex-row justify-between items-center mb-8 gap-4">
             <h2 className="text-3xl font-semibold tracking-tight text-foreground flex items-center">
-                <HistoryIcon className="mr-3 h-8 w-8 text-primary" />
+                <HistoryIconLucide className="mr-3 h-8 w-8 text-primary" />
                 Riwayat Tagihan Anda
             </h2>
              <Button onClick={() => router.push('/app')} variant="default">
@@ -212,7 +211,7 @@ export default function HistoryPage() {
         {billsHistory.length === 0 && !isLoadingHistory && !error && (
           <Card className="shadow-lg border-dashed">
             <CardContent className="p-10 text-center">
-              <HistoryIcon className="mx-auto h-16 w-16 text-muted-foreground mb-4" />
+              <HistoryIconLucide className="mx-auto h-16 w-16 text-muted-foreground mb-4" />
               <h3 className="text-xl font-semibold text-foreground mb-2">Belum Ada Riwayat</h3>
               <p className="text-muted-foreground mb-6">Anda belum memiliki riwayat tagihan yang tersimpan. Mulai buat tagihan baru!</p>
               <Button onClick={() => router.push('/app')}>

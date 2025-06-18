@@ -5,7 +5,8 @@ export const metadata: Metadata = {
   description: 'Pindai struk dan bagi tagihan dengan mudah bersama teman-teman Anda.',
 };
 
-// Separate metadata for history page
+// Separate metadata for history page, Next.js will pick this up if a page.tsx in the history segment exports it.
+// Or, it can be dynamically generated within the history page itself.
 export const historyPageMetadata: Metadata = {
   title: 'Riwayat Tagihan - Patungan',
   description: 'Lihat riwayat tagihan yang telah Anda buat sebelumnya.',
@@ -17,8 +18,6 @@ export default function AppLayout({
 }: {
   children: React.ReactNode;
 }) {
-  // Note: To apply historyPageMetadata, you'd typically do it
-  // on the history page itself if using generateMetadata.
-  // Here, it's just exported for potential use elsewhere or if structure changes.
   return <>{children}</>;
 }
+

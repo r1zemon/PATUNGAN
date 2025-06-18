@@ -25,7 +25,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useToast } from "@/hooks/use-toast";
 import { Separator } from "@/components/ui/separator";
-import { Home, LogOut, Settings, UserCircle, Power, Info, Percent, Landmark, UserCheck, Loader2, UserPlus, ArrowRight, Trash2, Users, ScanLine, PlusCircle, Edit2, ListChecks, FilePlus } from "lucide-react";
+import { Home, LogOut, Settings, UserCircle, Power, Info, Percent, Landmark, UserCheck, Loader2, UserPlus, ArrowRight, Trash2, Users, ScanLine, PlusCircle, Edit2, ListChecks, FilePlus, History as HistoryIconLucide } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -413,7 +413,7 @@ export default function SplitBillAppPage() {
        <header className="relative z-[1] py-4 px-4 sm:px-6 md:px-8 border-b sticky top-0 bg-background/80 backdrop-blur-md">
         <div className="container mx-auto flex items-center justify-between">
           <Link href="/app" onClick={(e) => { e.preventDefault(); resetApp(); }} className="flex items-center gap-2 text-primary hover:text-primary/80 transition-colors">
-            <Image src="/logo.png" alt="Patungan Logo" width={48} height={48} className="rounded-lg shadow-sm" />
+            <Image src="/logo.png" alt="Patungan Logo" width={48} height={48} className="rounded-lg shadow-sm" data-ai-hint="logo company"/>
             <h1 className="text-2xl font-bold tracking-tight text-foreground">
               Patungan
             </h1>
@@ -422,11 +422,9 @@ export default function SplitBillAppPage() {
              <Button variant="outline" onClick={resetApp} size="sm" className="hidden sm:inline-flex" disabled={!authUser}>
                 <FilePlus className="mr-2 h-4 w-4" /> Tagihan Baru
             </Button>
-            <Link href="/" passHref>
-              <Button variant="ghost" size="icon" aria-label="Kembali ke Beranda">
-                <Home className="h-5 w-5" />
-              </Button>
-            </Link>
+            <Button variant="ghost" size="icon" aria-label="Mulai Tagihan Baru atau Ke Aplikasi Utama" onClick={(e) => { e.preventDefault(); router.push('/app'); resetApp(); }}>
+              <Home className="h-5 w-5" />
+            </Button>
             {authUser ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -451,7 +449,11 @@ export default function SplitBillAppPage() {
                       <FilePlus className="mr-2 h-4 w-4" />
                       <span>Tagihan Baru</span>
                     </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => toast({title: "Info", description: "Halaman profil belum diimplementasikan."})}>
+                    <DropdownMenuItem onClick={() => router.push('/app/history')}>
+                      <HistoryIconLucide className="mr-2 h-4 w-4" />
+                      <span>Riwayat Tagihan</span>
+                    </DropdownMenuItem>
+                   <DropdownMenuItem onClick={() => toast({title: "Info", description: "Halaman profil belum diimplementasikan."})}>
                     <UserCircle className="mr-2 h-4 w-4" />
                     <span>Profil</span>
                   </DropdownMenuItem>
@@ -748,3 +750,4 @@ export default function SplitBillAppPage() {
     
 
     
+

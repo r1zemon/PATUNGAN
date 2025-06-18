@@ -500,6 +500,7 @@ export async function getBillsHistoryAction(): Promise<{ success: boolean; data?
     });
   }
   
+  revalidatePath('/app/history', 'page');
   return { success: true, data: historyEntries };
 }
 

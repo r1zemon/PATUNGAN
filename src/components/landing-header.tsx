@@ -5,7 +5,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
-import { Menu, LogOut, UserCircle, LayoutDashboard, History } from 'lucide-react'; // Added History icon
+import { Menu, LogOut, UserCircle, LayoutDashboard, History as HistoryIconLucide } from 'lucide-react'; // Changed History to HistoryIconLucide
 import { useEffect, useState, useCallback } from 'react';
 import { getCurrentUserAction, logoutUserAction } from '@/lib/actions';
 import type { User as SupabaseUser } from "@supabase/supabase-js";
@@ -15,7 +15,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 const navLinks = [
   { href: '/', label: 'Beranda' },
-  { href: '/app/history', label: 'Riwayat' }, // Changed from Fitur to Riwayat and href to /app/history
+  { href: '/app/history', label: 'Riwayat' }, 
   { href: '#contact', label: 'Kontak' },
 ];
 
@@ -66,7 +66,7 @@ export function LandingHeader() {
     <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background shadow-sm">
       <div className="container mx-auto flex h-16 items-center justify-between px-4 sm:px-6">
         <Link href="/" className="flex items-center gap-2 group">
-           <Image src="/logo.png" alt="Patungan Logo" width={48} height={48} className="rounded-lg group-hover:opacity-90 transition-opacity" />
+           <Image src="/logo.png" alt="Patungan Logo" width={48} height={48} className="rounded-lg group-hover:opacity-90 transition-opacity" data-ai-hint="logo company"/>
            <span className="text-2xl font-bold text-foreground group-hover:text-foreground/80 transition-colors">Patungan</span>
         </Link>
 
@@ -76,6 +76,13 @@ export function LandingHeader() {
               key={link.label}
               href={link.href}
               className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors"
+              onClick={(e) => {
+                if (link.href === '/app/history' && !authUser && !isLoadingUser) {
+                  e.preventDefault();
+                  toast({title: "Akses Ditolak", description: "Anda harus login untuk melihat riwayat.", duration: 3000});
+                  router.push('/login');
+                }
+              }}
             >
               {link.label}
             </Link>
@@ -123,25 +130,24 @@ export function LandingHeader() {
             <SheetContent side="right" className="w-[300px] sm:w-[400px] bg-background">
               <nav className="flex flex-col space-y-6 p-6 pt-12">
                 <Link href="/" className="flex items-center gap-2 mb-6" onClick={() => setIsMobileMenuOpen(false)}>
-                   <Image src="/logo.png" alt="Patungan Logo" width={32} height={32} className="rounded-lg"/>
+                   <Image src="/logo.png" alt="Patungan Logo" width={32} height={32} className="rounded-lg" data-ai-hint="logo company"/>
                    <span className="text-xl font-bold text-foreground">Patungan</span>
                 </Link>
                 {navLinks.map((link) => (
                   <Link
                     key={link.label}
                     href={link.href}
-                    className="text-lg font-medium text-foreground hover:text-primary transition-colors"
-                     onClick={() => {
+                    className="text-lg font-medium text-foreground hover:text-primary transition-colors flex items-center"
+                     onClick={(e) => {
                         setIsMobileMenuOpen(false);
-                        // If it's a history link, navigate differently or show toast if not logged in
-                        if (link.href === '/app/history' && !authUser) {
-                           toast({title: "Info", description: "Masuk untuk melihat riwayat.", duration: 3000});
-                           router.push('/login'); // Redirect to login if trying to access history and not logged in
-                           return; // Prevent default link behavior if not logged in
+                        if (link.href === '/app/history' && !authUser && !isLoadingUser) {
+                           e.preventDefault();
+                           toast({title: "Akses Ditolak", description: "Masuk untuk melihat riwayat.", duration: 3000});
+                           router.push('/login'); 
                         }
                      }}
                   >
-                    {link.label === "Riwayat" && <History className="inline-block mr-2 h-5 w-5" />}
+                    {link.label === "Riwayat" && <HistoryIconLucide className="inline-block mr-2 h-5 w-5" />}
                     {link.label}
                   </Link>
                 ))}
@@ -188,4 +194,5 @@ export function LandingHeader() {
 }
 
     
+
 

@@ -34,10 +34,10 @@ export default function LoginPage() {
       if (result.success) {
         toast({
           title: "Login Berhasil!",
-          description: "Anda akan diarahkan ke halaman utama.",
+          description: "Anda akan diarahkan ke beranda.",
         });
         router.refresh(); // Crucial: Refresh to ensure middleware picks up the new session
-        router.push("/app");
+        router.push("/"); // Redirect to landing page
       } else {
         toast({
           variant: "destructive",

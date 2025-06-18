@@ -408,7 +408,8 @@ export default function SplitBillAppPage() {
   }
 
   const displayName = userProfile?.username || userProfile?.full_name || authUser?.email || "Pengguna";
-  const avatarInitial = displayName.substring(0,1).toUpperCase();
+  const avatarInitial = displayName ? displayName.substring(0,1).toUpperCase() : "P";
+
 
   return (
     <div className="relative min-h-screen bg-gradient-to-br from-background via-secondary/10 to-background bg-money-pattern bg-[length:150px_auto] before:content-[''] before:absolute before:inset-0 before:bg-white/[.90] before:dark:bg-black/[.90] before:z-0">

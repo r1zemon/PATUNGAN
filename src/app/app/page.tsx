@@ -396,11 +396,13 @@ export default function SplitBillAppPage() {
   
   if (isLoadingUser || (authUser && isBillCreating && !currentBillId)) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-background via-secondary/10 to-background p-4 bg-money-pattern bg-[length:150px_auto]">
-        <Loader2 className="h-12 w-12 animate-spin text-primary" />
-        <p className="mt-4 text-lg text-foreground">
-          {isLoadingUser ? "Memuat data pengguna..." : "Memulai sesi tagihan baru..."}
-        </p>
+      <div className="relative min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-background via-secondary/10 to-background p-4 bg-money-pattern bg-[length:150px_auto] before:content-[''] before:absolute before:inset-0 before:bg-white/[.90] before:dark:bg-black/[.90] before:z-0">
+        <div className="relative z-[1] flex flex-col items-center justify-center text-center">
+            <Loader2 className="h-12 w-12 animate-spin text-primary" />
+            <p className="mt-4 text-lg text-foreground">
+            {isLoadingUser ? "Memuat data pengguna..." : "Memulai sesi tagihan baru..."}
+            </p>
+        </div>
       </div>
     );
   }
@@ -750,4 +752,5 @@ export default function SplitBillAppPage() {
     
 
     
+
 

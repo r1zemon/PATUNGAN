@@ -407,7 +407,7 @@ export default function SplitBillAppPage() {
   return (
     <div className="relative min-h-screen bg-gradient-to-br from-background via-secondary/10 to-background bg-money-pattern bg-[length:150px_auto] before:content-[''] before:absolute before:inset-0 before:bg-white/[.90] before:dark:bg-black/[.90] before:z-0">
        <header className="relative z-[1] py-4 px-4 sm:px-6 md:px-8 border-b sticky top-0 bg-background/80 backdrop-blur-md">
-        <div className="container mx-auto flex items-center justify-between h-12"> {/* Adjusted height to better fit larger logo */}
+        <div className="container mx-auto flex items-center justify-between h-20"> 
           <Link href="/" className="flex items-center gap-2 text-primary hover:text-primary/80 transition-colors">
             <Image src="/logo.png" alt="Patungan Logo" width={56} height={56} className="rounded-lg shadow-sm" data-ai-hint="logo company"/>
             <h1 className="text-2xl font-bold tracking-tight text-foreground">
@@ -415,7 +415,7 @@ export default function SplitBillAppPage() {
             </h1>
           </Link>
           <div className="flex items-center gap-2 sm:gap-4">
-             <Button variant="ghost" size="icon" aria-label="Kembali ke Halaman Utama" onClick={() => router.push('/')} disabled={!authUser}>
+             <Button variant="ghost" size="icon" aria-label="Kembali ke Beranda" onClick={() => router.push('/')} disabled={!authUser}>
                 <Home className="h-5 w-5" />
             </Button>
             {authUser ? (
@@ -731,17 +731,17 @@ export default function SplitBillAppPage() {
           {currentStep === 2 && detailedBillSummary && ( 
              <Card className="shadow-xl overflow-hidden bg-card/90 backdrop-blur-sm hover:shadow-2xl transition-shadow duration-300 ease-in-out">
                <CardHeader className="bg-card/60 border-b flex flex-row items-start justify-between p-6 gap-4">
-                <div className="min-w-0"> {/* Wrapper for text content */}
+                <div className="min-w-0"> 
                   <CardTitle className="text-xl sm:text-2xl font-semibold flex items-center">
                     <ListChecks className="mr-3 h-6 w-6 flex-shrink-0"/>
                     <span>Ringkasan Tagihan:&nbsp;</span>
-                    <span className="truncate text-primary">{currentBillName}</span> {/* Added truncate here */}
+                    <span className="truncate text-primary">{currentBillName}</span>
                   </CardTitle>
                   <CardDescription className="mt-1">
                     Ini dia siapa berutang apa. Gampang kan!
                   </CardDescription>
                 </div>
-                <Button variant="outline" onClick={resetAppToStart} size="sm" disabled={!authUser} className="flex-shrink-0"> {/* Button won't shrink */}
+                <Button variant="outline" onClick={resetAppToStart} size="sm" disabled={!authUser} className="flex-shrink-0"> 
                     <FilePlus className="mr-2 h-4 w-4" /> Buat Tagihan Baru
                 </Button>
               </CardHeader>

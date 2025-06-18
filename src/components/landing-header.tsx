@@ -109,7 +109,7 @@ export function LandingHeader() {
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background shadow-sm">
-      <div className="container mx-auto flex h-20 items-center justify-between px-4 sm:px-6"> {/* Increased header height for larger logo */}
+      <div className="container mx-auto flex h-20 items-center justify-between px-4 sm:px-6">
         <Link href="/" className="flex items-center gap-2 group" onClick={(e) => handleNavLinkClick(e, '/')}>
            <Image src="/logo.png" alt="Patungan Logo" width={56} height={56} className="rounded-lg group-hover:opacity-90 transition-opacity" data-ai-hint="logo company"/>
            <span className="text-2xl font-bold text-foreground group-hover:text-foreground/80 transition-colors">Patungan</span>
@@ -200,7 +200,7 @@ export function LandingHeader() {
             <SheetContent side="right" className="w-[300px] sm:w-[400px] bg-background">
               <nav className="flex flex-col space-y-6 p-6 pt-12">
                 <Link href="/" className="flex items-center gap-2 mb-6" onClick={(e) => handleNavLinkClick(e, '/')}>
-                   <Image src="/logo.png" alt="Patungan Logo" width={40} height={40} className="rounded-lg" data-ai-hint="logo company"/> {/* Adjusted mobile logo slightly smaller than desktop but larger than original */}
+                   <Image src="/logo.png" alt="Patungan Logo" width={40} height={40} className="rounded-lg" data-ai-hint="logo company"/>
                    <span className="text-xl font-bold text-foreground">Patungan</span>
                 </Link>
                 {navLinks.map((link) => (

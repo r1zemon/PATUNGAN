@@ -5,7 +5,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
-import { Menu, LogOut, UserCircle, Settings, FilePlus, History as HistoryIconLucide, Home } from 'lucide-react';
+import { Menu, LogOut, UserCircle, Settings, FilePlus, Home } from 'lucide-react';
 import { useEffect, useState, useCallback } from 'react';
 import { getCurrentUserAction, logoutUserAction } from '@/lib/actions';
 import type { User as SupabaseUser } from "@supabase/supabase-js";
@@ -122,7 +122,7 @@ export function LandingHeader() {
   };
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background shadow-sm">
+    <header className="sticky top-0 z-50 w-full bg-background shadow-sm">
       <div className="container mx-auto flex h-20 items-center justify-between px-4 sm:px-6">
         <Link href="/" className="flex items-center gap-2 group" onClick={(e) => handleNavLinkClick(e, '/')}>
            <Image src="/logo.png" alt="Patungan Logo" width={56} height={56} className="rounded-lg group-hover:opacity-90 transition-opacity" data-ai-hint="logo company"/>
@@ -225,7 +225,7 @@ export function LandingHeader() {
                     className="text-base font-medium text-foreground hover:text-primary transition-colors flex items-center py-3 px-2 rounded-md hover:bg-muted"
                      onClick={(e) => handleNavLinkClick(e, link.href)}
                   >
-                    {link.label === "Riwayat" && <HistoryIconLucide className="inline-block mr-3 h-5 w-5 opacity-80" />}
+                    {link.href === '/app/history' && <Menu className="inline-block mr-3 h-5 w-5 opacity-80" />}
                     {link.label === "Beranda" && <Home className="inline-block mr-3 h-5 w-5 opacity-80" />}
                     {link.label}
                   </Link>

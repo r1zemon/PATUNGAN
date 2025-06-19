@@ -182,7 +182,7 @@ export default function ProfilePage() {
       reader.readAsDataURL(file);
       setAvatarFile(null); 
       setCroppedAvatarPreview(null); 
-      setFormData(prev => ({ ...prev, avatarUrlInput: userProfile?.avatar_url || "" })); // Reset URL input if file is chosen
+      setFormData(prev => ({ ...prev, avatarUrlInput: userProfile?.avatar_url || "" })); 
     }
   };
 
@@ -251,7 +251,7 @@ export default function ProfilePage() {
     const croppedFile = dataURLtoFile(base64Image, 'avatar.png');
     if (croppedFile) {
       setAvatarFile(croppedFile); 
-      setFormData(prev => ({ ...prev, avatarUrlInput: "" })); // Clear manual URL if file is cropped
+      setFormData(prev => ({ ...prev, avatarUrlInput: "" })); 
     } else {
       toast({ variant: "destructive", title: "Gagal Membuat File", description: "Tidak dapat mengonversi gambar yang dipotong."});
     }
@@ -315,9 +315,6 @@ export default function ProfilePage() {
       hasChanges = true;
     }
 
-    // Avatar change logic:
-    // 1. If avatarFile exists (from cropper), it's a change.
-    // 2. If no avatarFile, but formData.avatarUrlInput is different from userProfile.avatar_url, it's a change.
     if (avatarFile) {
         hasChanges = true; 
     } else if (formData.avatarUrlInput.trim() !== (userProfile.avatar_url || "")) {
@@ -335,7 +332,7 @@ export default function ProfilePage() {
     const { success, data: updatedProfileData, error: updateError } = await updateUserProfileAction(
         authUser.id, 
         profileUpdates,
-        avatarFile // Pass the cropped file if it exists
+        avatarFile 
     );
 
     if (success && updatedProfileData) {
@@ -354,7 +351,6 @@ export default function ProfilePage() {
       setAvatarFile(null); 
       if (avatarFileInputRef.current) avatarFileInputRef.current.value = "";
       
-      // Update header avatar only after successful save
       setHeaderAvatarUrl(typedUpdatedProfile.avatar_url || null);
       const newHeaderDisplayName = typedUpdatedProfile.full_name || typedUpdatedProfile.username || authUser.email || "Pengguna";
       setHeaderDisplayName(newHeaderDisplayName);
@@ -384,7 +380,6 @@ export default function ProfilePage() {
         setAvatarFile(null);
         if (avatarFileInputRef.current) avatarFileInputRef.current.value = "";
 
-        // Update header avatar after successful removal
         setHeaderAvatarUrl(null);
         const newHeaderDisplayName = formData.fullName || formData.username || authUser.email || "Pengguna";
         setHeaderDisplayName(newHeaderDisplayName);
@@ -451,11 +446,9 @@ export default function ProfilePage() {
             </h1>
           </Link>
           <div className="flex items-center gap-2 sm:gap-4">
-            <Link href="/" passHref>
-              <Button variant="ghost" size="icon" aria-label="Kembali ke Beranda">
+            <Button variant="ghost" size="icon" aria-label="Kembali ke Beranda" onClick={() => router.push('/')}>
                 <Home className="h-5 w-5" />
-              </Button>
-            </Link>
+            </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="relative h-10 w-10 rounded-full">
@@ -639,7 +632,7 @@ export default function ProfilePage() {
                   Pilih area foto yang ingin Anda jadikan foto profil. Hasilnya akan berbentuk lingkaran.
                 </DialogDescription>
               </DialogHeader>
-              <div className="py-4 max-h-[60vh] overflow-y-auto flex justify-center items-center">
+              <div className="py-4 max-h-[60vh] overflow-hidden flex justify-center items-center">
                 {imgSrcForCropper && (
                   <ReactCrop
                     crop={crop}
@@ -664,7 +657,6 @@ export default function ProfilePage() {
                   setShowCropperDialog(false);
                   setImgSrcForCropper('');
                   if (avatarFileInputRef.current) avatarFileInputRef.current.value = "";
-                  // Do not reset croppedAvatarPreview or avatarFile here, let cancel button on main page do it
                 }}>
                   <X className="mr-2 h-4 w-4"/> Batal
                 </Button>

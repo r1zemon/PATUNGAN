@@ -95,7 +95,7 @@ export default function HistoryPage() {
 
   if (isLoadingUser || isLoadingHistory) {
     return (
-      <div className="min-h-screen flex flex-col bg-gradient-to-br from-background via-secondary/10 to-background p-4 bg-money-pattern bg-[length:150px_auto] before:content-[''] before:absolute before:inset-0 before:bg-white/[.90] before:dark:bg-black/[.90] before:z-0">
+      <div className="relative flex flex-col min-h-screen bg-background bg-money-pattern bg-[length:120px_auto] before:content-[''] before:absolute before:inset-0 before:bg-white/[.90] before:dark:bg-black/[.90] before:z-0">
         <header className="relative z-[1] py-4 px-4 sm:px-6 md:px-8 border-b sticky top-0 bg-background/80 backdrop-blur-md">
           <div className="container mx-auto flex items-center justify-between h-20"> 
             <Link href="/" className="flex items-center gap-2 text-primary hover:text-primary/80 transition-colors">
@@ -123,7 +123,7 @@ export default function HistoryPage() {
   }
 
   return (
-    <div className="relative min-h-screen flex flex-col bg-gradient-to-br from-background via-secondary/10 to-background bg-money-pattern bg-[length:150px_auto] before:content-[''] before:absolute before:inset-0 before:bg-white/[.90] before:dark:bg-black/[.90] before:z-0">
+    <div className="relative flex flex-col min-h-screen bg-background bg-money-pattern bg-[length:120px_auto] before:content-[''] before:absolute before:inset-0 before:bg-white/[.90] before:dark:bg-black/[.90] before:z-0">
       <header className="relative z-[1] py-4 px-4 sm:px-6 md:px-8 border-b sticky top-0 bg-background/80 backdrop-blur-md">
         <div className="container mx-auto flex items-center justify-between h-20"> 
           <Link href="/" className="flex items-center gap-2 text-primary hover:text-primary/80 transition-colors">

@@ -59,112 +59,114 @@ export default function SignupPage() {
 
 
   return (
-    <div className="relative min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-primary/10 via-background to-accent/10 p-4 selection:bg-primary/40 selection:text-primary-foreground bg-money-pattern bg-[length:150px_auto] before:content-[''] before:absolute before:inset-0 before:bg-white/[.90] before:dark:bg-black/[.90] before:z-0">
-      <Link href="/" className="z-[1] absolute top-6 left-6 flex items-center text-sm text-foreground hover:underline">
-        <ArrowLeft className="mr-2 h-4 w-4" />
-        Kembali ke Beranda
-      </Link>
-      <Card className="relative z-[1] w-full max-w-md shadow-2xl bg-card/90 backdrop-blur-sm">
-        <CardHeader className="text-center">
-          <div className="mx-auto bg-muted-foreground/20 rounded-full p-3 w-fit mb-4">
-            <UserCircle className="h-12 w-12 text-primary" />
-          </div>
-          <CardTitle className="text-3xl font-bold">Daftar Akun</CardTitle>
-          <CardDescription>Buat akun untuk melanjutkan dan mulai berbagi tagihan dengan mudah.</CardDescription>
-        </CardHeader>
-        <form onSubmit={handleSignup}>
-          <CardContent className="space-y-4">
-            <div className="space-y-1">
-              <Label htmlFor="fullName">Nama Lengkap</Label>
-              <div className="relative">
-                <User className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                <Input id="fullName" name="fullName" placeholder="Nama Lengkap Anda" className="pl-10" required />
-              </div>
+    <div className="relative flex flex-col min-h-screen bg-background bg-money-pattern bg-[length:120px_auto] before:content-[''] before:absolute before:inset-0 before:bg-white/[.90] before:dark:bg-black/[.90] before:z-0">
+      <div className="relative z-[1] flex flex-col items-center justify-center flex-grow p-4">
+        <Link href="/" className="absolute top-6 left-6 flex items-center text-sm text-foreground hover:underline">
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          Kembali ke Beranda
+        </Link>
+        <Card className="w-full max-w-md shadow-2xl bg-card/90 backdrop-blur-sm">
+          <CardHeader className="text-center">
+            <div className="mx-auto bg-muted-foreground/20 rounded-full p-3 w-fit mb-4">
+              <UserCircle className="h-12 w-12 text-primary" />
             </div>
-            <div className="space-y-1">
-              <Label htmlFor="username">Nama Pengguna</Label>
-              <div className="relative">
-                <User className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                <Input id="username" name="username" placeholder="Username unik Anda" className="pl-10" required />
+            <CardTitle className="text-3xl font-bold">Daftar Akun</CardTitle>
+            <CardDescription>Buat akun untuk melanjutkan dan mulai berbagi tagihan dengan mudah.</CardDescription>
+          </CardHeader>
+          <form onSubmit={handleSignup}>
+            <CardContent className="space-y-4">
+              <div className="space-y-1">
+                <Label htmlFor="fullName">Nama Lengkap</Label>
+                <div className="relative">
+                  <User className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                  <Input id="fullName" name="fullName" placeholder="Nama Lengkap Anda" className="pl-10" required />
+                </div>
               </div>
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="email">Email</Label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                <Input id="email" name="email" type="email" placeholder="contoh@email.com" className="pl-10" required />
+              <div className="space-y-1">
+                <Label htmlFor="username">Nama Pengguna</Label>
+                <div className="relative">
+                  <User className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                  <Input id="username" name="username" placeholder="Username unik Anda" className="pl-10" required />
+                </div>
               </div>
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="phone">Nomor Telepon (Opsional)</Label>
-              <div className="relative">
-                <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                <Input id="phone" name="phone" type="tel" placeholder="08123456789" className="pl-10" />
+              <div className="space-y-1">
+                <Label htmlFor="email">Email</Label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                  <Input id="email" name="email" type="email" placeholder="contoh@email.com" className="pl-10" required />
+                </div>
               </div>
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="password">Kata Sandi</Label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                <Input
-                  id="password"
-                  name="password"
-                  type={showPassword ? "text" : "password"}
-                  placeholder="Buat kata sandi yang kuat"
-                  className="pl-10 pr-10"
-                  required
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8"
-                  onClick={() => setShowPassword(!showPassword)}
-                  aria-label={showPassword ? "Sembunyikan kata sandi" : "Tampilkan kata sandi"}
-                >
-                  {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                </Button>
+              <div className="space-y-1">
+                <Label htmlFor="phone">Nomor Telepon (Opsional)</Label>
+                <div className="relative">
+                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                  <Input id="phone" name="phone" type="tel" placeholder="08123456789" className="pl-10" />
+                </div>
               </div>
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="confirmPassword">Konfirmasi Kata Sandi</Label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                <Input
-                  id="confirmPassword"
-                  name="confirmPassword"
-                  type={showConfirmPassword ? "text" : "password"}
-                  placeholder="Ulangi kata sandi Anda"
-                  className="pl-10 pr-10"
-                  required
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8"
-                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                  aria-label={showConfirmPassword ? "Sembunyikan konfirmasi kata sandi" : "Tampilkan konfirmasi kata sandi"}
-                >
-                  {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                </Button>
+              <div className="space-y-1">
+                <Label htmlFor="password">Kata Sandi</Label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                  <Input
+                    id="password"
+                    name="password"
+                    type={showPassword ? "text" : "password"}
+                    placeholder="Buat kata sandi yang kuat"
+                    className="pl-10 pr-10"
+                    required
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8"
+                    onClick={() => setShowPassword(!showPassword)}
+                    aria-label={showPassword ? "Sembunyikan kata sandi" : "Tampilkan kata sandi"}
+                  >
+                    {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                  </Button>
+                </div>
               </div>
-            </div>
-            <Button type="submit" className="w-full text-lg py-6 mt-2" disabled={isLoading}>
-              {isLoading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : null}
-              {isLoading ? "Mendaftar..." : "Daftar Akun"}
-            </Button>
-          </CardContent>
-        </form>
-        <CardFooter>
-          <p className="w-full text-center text-sm text-muted-foreground">
-            Sudah punya akun?{" "}
-            <Link href="/login" className="font-semibold text-primary hover:underline">
-              Masuk di sini
-            </Link>
-          </p>
-        </CardFooter>
-      </Card>
+              <div className="space-y-1">
+                <Label htmlFor="confirmPassword">Konfirmasi Kata Sandi</Label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                  <Input
+                    id="confirmPassword"
+                    name="confirmPassword"
+                    type={showConfirmPassword ? "text" : "password"}
+                    placeholder="Ulangi kata sandi Anda"
+                    className="pl-10 pr-10"
+                    required
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    aria-label={showConfirmPassword ? "Sembunyikan konfirmasi kata sandi" : "Tampilkan konfirmasi kata sandi"}
+                  >
+                    {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                  </Button>
+                </div>
+              </div>
+              <Button type="submit" className="w-full text-lg py-6 mt-2" disabled={isLoading}>
+                {isLoading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : null}
+                {isLoading ? "Mendaftar..." : "Daftar Akun"}
+              </Button>
+            </CardContent>
+          </form>
+          <CardFooter>
+            <p className="w-full text-center text-sm text-muted-foreground">
+              Sudah punya akun?{" "}
+              <Link href="/login" className="font-semibold text-primary hover:underline">
+                Masuk di sini
+              </Link>
+            </p>
+          </CardFooter>
+        </Card>
+      </div>
     </div>
   );
 }

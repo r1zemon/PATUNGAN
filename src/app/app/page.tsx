@@ -449,7 +449,7 @@ export default function SplitBillAppPage() {
 
   return (
     <div className="relative flex flex-col min-h-screen bg-background bg-money-pattern bg-[length:120px_auto] before:content-[''] before:absolute before:inset-0 before:bg-white/[.90] before:dark:bg-black/[.90] before:z-0">
-       <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/80 backdrop-blur-md shadow-sm">
+      <header className="sticky top-0 z-30 w-full border-b border-border/40 bg-background/80 backdrop-blur-md shadow-sm">
         <div className="container mx-auto flex h-20 items-center justify-between px-4 sm:px-6"> 
           <Link href="/" className="flex items-center gap-2 text-primary hover:text-primary/80 transition-colors">
             <Image src="/logo.png" alt="Patungan Logo" width={56} height={56} className="rounded-lg shadow-sm" data-ai-hint="logo company"/>
@@ -458,8 +458,8 @@ export default function SplitBillAppPage() {
             </h1>
           </Link>
           <div className="flex items-center gap-2 sm:gap-4">
-             <Button variant="ghost" size="icon" aria-label="Kembali ke Beranda" onClick={() => router.push('/')} disabled={!authUser}>
-                <Home className="h-5 w-5" />
+            <Button variant="ghost" className="rounded-md p-1 sm:p-1.5 h-auto" onClick={() => router.push('/')} disabled={!authUser} aria-label="Kembali ke Beranda">
+                <Home className="h-7 w-7" />
             </Button>
             {authUser ? (
               <DropdownMenu>
@@ -859,3 +859,4 @@ export default function SplitBillAppPage() {
 
 
     
+

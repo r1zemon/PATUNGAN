@@ -71,9 +71,9 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
-  // If user is logged in and trying to access /login or /signup, redirect to /app
+  // If user is logged in and trying to access /login or /signup, redirect to / (landing page)
   if (session && (pathname === '/login' || pathname === '/signup')) {
-    return NextResponse.redirect(new URL('/app', request.url))
+    return NextResponse.redirect(new URL('/', request.url))
   }
 
   return response

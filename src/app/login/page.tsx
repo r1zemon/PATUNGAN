@@ -39,10 +39,10 @@ export default function LoginPage() {
       if (result.success) {
         toast({
           title: "Login Berhasil!",
-          description: "Anda akan diarahkan ke halaman aplikasi.",
+          description: "Anda akan diarahkan ke halaman beranda.",
         });
         router.refresh(); 
-        router.push("/app"); 
+        router.push("/"); 
       } else {
         toast({
           variant: "destructive",

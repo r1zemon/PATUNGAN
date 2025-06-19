@@ -1,10 +1,11 @@
+
 "use client";
 
 import Link from 'next/link';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
-import { Menu, LogOut, UserCircle, Settings, FilePlus, History as HistoryIconLucide, Home } from 'lucide-react'; 
+import { Menu, LogOut, UserCircle, Settings, FilePlus, History as HistoryIconLucide, Home } from 'lucide-react';
 import { useEffect, useState, useCallback } from 'react';
 import { getCurrentUserAction, logoutUserAction } from '@/lib/actions';
 import type { User as SupabaseUser } from "@supabase/supabase-js";
@@ -22,7 +23,7 @@ import {
 
 const navLinks = [
   { href: '/', label: 'Beranda' },
-  { href: '/app/history', label: 'Riwayat' }, 
+  { href: '/app/history', label: 'Riwayat' },
   { href: '#contact', label: 'Kontak' },
 ];
 
@@ -40,7 +41,7 @@ export function LandingHeader() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const router = useRouter();
-  const pathname = usePathname(); 
+  const pathname = usePathname();
   const { toast } = useToast();
 
   const fetchUser = useCallback(async () => {
@@ -61,13 +62,13 @@ export function LandingHeader() {
       toast({ title: "Logout Berhasil" });
       setAuthUser(null);
       setUserProfile(null);
-      setIsMobileMenuOpen(false); 
-      router.push("/"); 
+      setIsMobileMenuOpen(false);
+      router.push("/");
     } else {
       toast({ variant: "destructive", title: "Logout Gagal", description: error });
     }
   };
-  
+
   const displayName = userProfile?.username || userProfile?.full_name || authUser?.email || "Pengguna";
   const avatarInitial = displayName ? displayName.substring(0,1).toUpperCase() : "P";
   const shortDisplayName = userProfile?.username || (userProfile?.full_name ? userProfile.full_name.split(' ')[0] : (authUser?.email ? authUser.email.split('@')[0] : "Pengguna"));
@@ -82,7 +83,7 @@ export function LandingHeader() {
       router.push('/login');
     }
   };
-  
+
   const handleProfileClick = () => {
     setIsMobileMenuOpen(false);
     if (authUser) {
@@ -98,20 +99,20 @@ export function LandingHeader() {
       if (pathname === '/') {
         e.preventDefault();
         window.scrollTo({ top: 0, behavior: 'smooth' });
-        setIsMobileMenuOpen(false); 
+        setIsMobileMenuOpen(false);
       } else {
-        setIsMobileMenuOpen(false); 
-        router.push('/'); 
+        setIsMobileMenuOpen(false);
+        router.push('/');
       }
     } else if (href === '/app/history') {
-      e.preventDefault(); 
+      e.preventDefault();
       handleHistoryClick();
     } else if (href === '/app/profile') {
       e.preventDefault();
       handleProfileClick();
     }
     else {
-      setIsMobileMenuOpen(false); 
+      setIsMobileMenuOpen(false);
       if (href.startsWith('#')) {
         // Handle hash links if needed, or let default behavior
       } else {
@@ -275,317 +276,5 @@ export function LandingHeader() {
     </header>
   );
 }
+
     
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-_GELAP_
-Modifikasi ini menghilangkan teks yang salah yang menyebabkan error parsing di `src/components/landing-header.tsx`. Sekarang komponen akan dirender dengan benar, dan `SheetHeader` serta `SheetTitle` akan memastikan aksesibilitas yang lebih baik untuk menu mobile.

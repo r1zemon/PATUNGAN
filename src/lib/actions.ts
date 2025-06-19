@@ -119,7 +119,7 @@ export async function loginUserAction(formData: FormData) {
   }
   
   revalidatePath('/', 'layout');
-  revalidatePath('/', 'page'); // Specifically revalidate the homepage
+  revalidatePath('/', 'page'); 
   return { success: true, user: data.user };
 }
 
@@ -158,7 +158,7 @@ export async function logoutUserAction() {
     return { success: false, error: error.message };
   }
   revalidatePath('/', 'layout');
-  revalidatePath('/', 'page'); // Specifically revalidate the homepage
+  revalidatePath('/', 'page'); 
   return { success: true };
 }
 
@@ -502,7 +502,7 @@ export async function handleSummarizeBillAction(
         }
     }
     
-    revalidatePath('/', 'page'); // For dashboard
+    revalidatePath('/', 'page'); 
     revalidatePath('/app/history', 'page'); 
     return { success: true, data: rawSummary };
   } catch (error) {
@@ -575,7 +575,7 @@ export async function updateUserProfileAction(
                     .from('profiles')
                     .select('id')
                     .eq('username', newUsernameTrimmed)
-                    .neq('id', userId) // Ensure it's not the current user's own username
+                    .neq('id', userId) 
                     .single();
 
                 if (usernameCheckErr && usernameCheckErr.code !== 'PGRST116') {
@@ -643,7 +643,7 @@ export async function updateUserProfileAction(
     
     const hasAvatarDBChange = updatesForDB.avatar_url !== undefined;
 
-    if (errorMessages.length > 0) { // If there were validation errors for username/fullname or avatar upload
+    if (errorMessages.length > 0) { 
         return { success: false, data: currentProfileData, error: errorMessages };
     }
 
@@ -668,7 +668,7 @@ export async function updateUserProfileAction(
       revalidatePath('/app/profile', 'page');
       revalidatePath('/app/history', 'page');
       revalidatePath('/', 'layout'); 
-      revalidatePath('/', 'page'); // For dashboard
+      revalidatePath('/', 'page'); 
       
       return { success: true, data: updatedProfile };
     }
@@ -723,7 +723,7 @@ export async function removeAvatarAction(userId: string): Promise<{ success: boo
             }
             revalidatePath('/app/profile', 'page');
             revalidatePath('/', 'layout');
-            revalidatePath('/', 'page'); // For dashboard
+            revalidatePath('/', 'page'); 
             return { success: true, data: { avatar_url: null } }; 
         }
         
@@ -738,7 +738,7 @@ export async function removeAvatarAction(userId: string): Promise<{ success: boo
             }
             revalidatePath('/app/profile', 'page');
             revalidatePath('/', 'layout');
-            revalidatePath('/', 'page'); // For dashboard
+            revalidatePath('/', 'page'); 
             return { success: true, data: { avatar_url: null } };
         }
 
@@ -770,7 +770,7 @@ export async function removeAvatarAction(userId: string): Promise<{ success: boo
 
         revalidatePath('/app/profile', 'page');
         revalidatePath('/', 'layout'); 
-        revalidatePath('/', 'page'); // For dashboard
+        revalidatePath('/', 'page'); 
         revalidatePath('/app', 'layout'); 
         revalidatePath('/app/history', 'page');
 
@@ -852,150 +852,17 @@ export async function getBillsHistoryAction(): Promise<{ success: boolean; data?
 
 // ===== DASHBOARD ACTIONS =====
 
-const PREDEFINED_CATEGORIES = ["Makanan", "Transportasi", "Hiburan", "Penginapan"];
-const CATEGORY_ICONS: { [key: string]: React.ElementType } = {
-  "Makanan": Utensils,
-  "Transportasi": Car,
-  "Hiburan": Gamepad2,
-  "Penginapan": BedDouble,
-  "Lainnya": Shapes,
-};
-const CATEGORY_COLORS: { [key: string]: string } = {
-  "Makanan": "hsl(var(--chart-1))",
-  "Transportasi": "hsl(var(--chart-2))",
-  "Hiburan": "hsl(var(--chart-3))",
-  "Penginapan": "hsl(var(--chart-4))",
-  "Lainnya": "hsl(var(--chart-5))",
-};
-
-
 export async function getDashboardDataAction(): Promise<{ success: boolean; data?: DashboardData; error?: string }> {
-  const supabase = createSupabaseServerClient();
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-  if (authError || !user) {
-    return { success: false, error: "Pengguna tidak terautentikasi." };
-  }
-
-  try {
-    // 1. Monthly Expenses by Category
-    const today = new Date();
-    const currentMonthStart = startOfMonth(today);
-    const currentMonthEnd = endOfMonth(today);
-
-    const { data: monthlyBills, error: monthlyError } = await supabase
-      .from('bills')
-      .select('grand_total, bill_categories(name)')
-      .eq('user_id', user.id)
-      .is('grand_total', 'not.null') // Only consider completed bills
-      .gte('created_at', currentMonthStart.toISOString())
-      .lte('created_at', currentMonthEnd.toISOString());
-
-    if (monthlyError) throw new Error(`Gagal mengambil pengeluaran bulanan: ${monthlyError.message}`);
-
-    const expensesMap: Record<string, number> = {};
-    PREDEFINED_CATEGORIES.forEach(cat => expensesMap[cat] = 0);
-    expensesMap["Lainnya"] = 0;
-
-    monthlyBills?.forEach(bill => {
-      const categoryName = (bill.bill_categories as { name: string } | null)?.name || "Lainnya";
-      const amount = bill.grand_total || 0;
-      if (PREDEFINED_CATEGORIES.includes(categoryName)) {
-        expensesMap[categoryName] = (expensesMap[categoryName] || 0) + amount;
-      } else {
-        expensesMap["Lainnya"] = (expensesMap["Lainnya"] || 0) + amount;
-      }
-    });
-
-    const monthlyExpenses: MonthlyExpenseByCategory[] = Object.entries(expensesMap).map(([categoryName, totalAmount]) => ({
-      categoryName,
-      totalAmount,
-      icon: CATEGORY_ICONS[categoryName],
-      color: CATEGORY_COLORS[categoryName],
-    })).filter(expense => expense.totalAmount > 0 || PREDEFINED_CATEGORIES.includes(expense.categoryName) || expense.categoryName === "Lainnya");
-
-
-    // 2. Expense Chart Data (Example: Last 6 months)
-    // For simplicity, let's also use the monthlyExpenses data for an initial chart (total per category this month)
-    const expenseChartData: ExpenseChartDataPoint[] = monthlyExpenses
-      .map(e => ({ name: e.categoryName, total: e.totalAmount }))
-      .filter(e => e.total > 0);
-
-
-    // 3. Recent Completed Bills (Last 3)
-    const { data: recentDbBills, error: recentError } = await supabase
-      .from('bills')
-      .select('id, name, created_at, grand_total, payer_participant_id, bill_categories(name)')
-      .eq('user_id', user.id)
-      .is('grand_total', 'not.null')
-      // .or(`scheduled_at.is.null,scheduled_at.lte.${today.toISOString()}`) // Completed or past scheduled
-      .order('created_at', { ascending: false })
-      .limit(3);
-    
-    if (recentError) throw new Error(`Gagal mengambil riwayat tagihan terbaru: ${recentError.message}`);
-
-    const recentBills: RecentBillDisplayItem[] = [];
-    if (recentDbBills) {
-        for (const bill of recentDbBills) {
-            const { count: participantCount } = await supabase
-                .from('bill_participants')
-                .select('*', { count: 'exact', head: true })
-                .eq('bill_id', bill.id);
-            
-            recentBills.push({
-                id: bill.id,
-                name: bill.name,
-                createdAt: bill.created_at || new Date().toISOString(),
-                grandTotal: bill.grand_total || 0,
-                categoryName: (bill.bill_categories as { name: string } | null)?.name || null,
-                participantCount: participantCount || 0,
-            });
-        }
-    }
-    
-
-    // 4. Scheduled Bills
-    const { data: scheduledDbBills, error: scheduledError } = await supabase
-      .from('bills')
-      .select('id, name, scheduled_at, bill_categories(name)')
-      .eq('user_id', user.id)
-      .is('grand_total', 'null') // Not yet completed
-      .gt('scheduled_at', today.toISOString()) // Scheduled in the future
-      .order('scheduled_at', { ascending: true });
-
-    if (scheduledError) throw new Error(`Gagal mengambil tagihan terjadwal: ${scheduledError.message}`);
-    
-    const scheduledBills: ScheduledBillDisplayItem[] = [];
-    if (scheduledDbBills) {
-        for (const bill of scheduledDbBills) {
-            const { count: participantCount } = await supabase
-                .from('bill_participants')
-                .select('*', { count: 'exact', head: true })
-                .eq('bill_id', bill.id);
-
-            scheduledBills.push({
-                id: bill.id,
-                name: bill.name,
-                scheduled_at: bill.scheduled_at || new Date().toISOString(),
-                categoryName: (bill.bill_categories as { name: string } | null)?.name || null,
-                participantCount: participantCount || 0,
-            });
-        }
-    }
-
-    return {
-      success: true,
-      data: {
-        monthlyExpenses,
-        expenseChartData,
-        recentBills,
-        scheduledBills,
-      },
-    };
-
-  } catch (e: any) {
-    console.error("Error in getDashboardDataAction:", e);
-    return { success: false, error: e.message || "Terjadi kesalahan saat mengambil data dashboard." };
-  }
+  // This is a placeholder. The actual implementation will fetch data from Supabase.
+  // For now, DashboardClient.tsx will use its own dummy data.
+  // We return a structure that the client might expect if it were calling this.
+  return {
+    success: true,
+    data: {
+      monthlyExpenses: [],
+      expenseChartData: [],
+      recentBills: [],
+      scheduledBills: [],
+    },
+  };
 }
-    

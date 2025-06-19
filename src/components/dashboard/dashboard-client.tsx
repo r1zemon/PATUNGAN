@@ -4,14 +4,14 @@
 import { useEffect, useState, useMemo } from 'react';
 import type { User as SupabaseUser } from "@supabase/supabase-js";
 import type { DashboardData, MonthlyExpenseByCategory, ExpenseChartDataPoint, RecentBillDisplayItem, ScheduledBillDisplayItem } from '@/lib/types';
-import { getDashboardDataAction } from '@/lib/actions';
+// import { getDashboardDataAction } from '@/lib/actions'; // Comment out for now
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { BarChart, CalendarClock, ChevronRight, ChevronsUpDown, Info, ListChecks, Loader2, PieChart, TrendingUp, Users, Wallet, XCircle, Tag, Clock } from 'lucide-react';
+import { BarChart, CalendarClock, ChevronRight, ChevronsUpDown, Info, ListChecks, Loader2, PieChart, TrendingUp, Users, Wallet, XCircle, Tag, Clock, Utensils, Car, Gamepad2, BedDouble, Shapes } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils';
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, addDays, subDays } from 'date-fns';
 import { id as IndonesianLocale } from 'date-fns/locale';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -32,6 +32,34 @@ const PREDEFINED_CATEGORY_COLORS: { [key: string]: string } = {
   "Lainnya": "hsl(var(--chart-5))",
 };
 
+const getDummyDashboardData = (): DashboardData => {
+  const now = new Date();
+  return {
+    monthlyExpenses: [
+      { categoryName: "Makanan", totalAmount: 750000, icon: Utensils, color: PREDEFINED_CATEGORY_COLORS["Makanan"] },
+      { categoryName: "Transportasi", totalAmount: 250000, icon: Car, color: PREDEFINED_CATEGORY_COLORS["Transportasi"] },
+      { categoryName: "Hiburan", totalAmount: 300000, icon: Gamepad2, color: PREDEFINED_CATEGORY_COLORS["Hiburan"] },
+      { categoryName: "Penginapan", totalAmount: 0, icon: BedDouble, color: PREDEFINED_CATEGORY_COLORS["Penginapan"] }, // Example of zero expense
+      { categoryName: "Belanja Online", totalAmount: 450000, icon: Shapes, color: PREDEFINED_CATEGORY_COLORS["Lainnya"] }, // Example "Lainnya" category
+    ],
+    expenseChartData: [ // Dummy data for Bar Chart (monthly expenses by category)
+      { name: "Makanan", total: 750000 },
+      { name: "Transportasi", total: 250000 },
+      { name: "Hiburan", total: 300000 },
+      { name: "Belanja Online", total: 450000 },
+    ],
+    recentBills: [
+      { id: "rb1", name: "Makan Malam Tim", createdAt: subDays(now, 2).toISOString(), grandTotal: 680000, categoryName: "Makanan", participantCount: 5 },
+      { id: "rb2", name: "Bensin Mingguan", createdAt: subDays(now, 5).toISOString(), grandTotal: 150000, categoryName: "Transportasi", participantCount: 2 },
+      { id: "rb3", name: "Nonton Bioskop", createdAt: subDays(now, 7).toISOString(), grandTotal: 220000, categoryName: "Hiburan", participantCount: 4 },
+    ],
+    scheduledBills: [
+      { id: "sb1", name: "Trip ke Puncak", scheduled_at: addDays(now, 7).toISOString(), categoryName: "Hiburan", participantCount: 3 },
+      { id: "sb2", name: "Sewa Villa Bulanan", scheduled_at: addDays(now, 15).toISOString(), categoryName: "Penginapan", participantCount: 6 },
+    ],
+  };
+};
+
 
 export function DashboardClient({ authUser }: DashboardClientProps) {
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
@@ -41,29 +69,41 @@ export function DashboardClient({ authUser }: DashboardClientProps) {
   const { toast } = useToast();
 
   useEffect(() => {
-    async function fetchData() {
-      setIsLoading(true);
-      setError(null);
-      const result = await getDashboardDataAction();
-      if (result.success && result.data) {
-        setDashboardData(result.data);
-      } else {
-        setError(result.error || "Gagal memuat data dashboard.");
-        toast({ variant: "destructive", title: "Error Memuat Dashboard", description: result.error });
-      }
+    // Simulate fetching data with dummy data
+    setIsLoading(true);
+    setError(null);
+    setTimeout(() => {
+      setDashboardData(getDummyDashboardData());
       setIsLoading(false);
-    }
-    fetchData();
-  }, [authUser, toast]);
+    }, 500); // Simulate network delay
+  }, [authUser]);
 
   const chartConfig = useMemo(() => {
     const config: ChartConfig = {};
+    // Ensure "Lainnya" category gets a default icon if not explicitly set by dummy data.
+    const defaultOtherIcon = Shapes;
+
     dashboardData?.monthlyExpenses.forEach(expense => {
       config[expense.categoryName] = {
         label: expense.categoryName,
-        color: PREDEFINED_CATEGORY_COLORS[expense.categoryName] || PREDEFINED_CATEGORY_COLORS["Lainnya"],
-        icon: expense.icon,
+        color: expense.color || PREDEFINED_CATEGORY_COLORS[expense.categoryName] || PREDEFINED_CATEGORY_COLORS["Lainnya"],
+        icon: expense.icon || (expense.categoryName === "Lainnya" ? defaultOtherIcon : Shapes),
       };
+    });
+     // Ensure all predefined categories and "Lainnya" have a config entry for the legend, even if no expense
+    const allCategoriesForLegend = ["Makanan", "Transportasi", "Hiburan", "Penginapan", "Lainnya"];
+    dashboardData?.monthlyExpenses.map(e => e.categoryName).forEach(cn => {
+        if (!allCategoriesForLegend.includes(cn)) allCategoriesForLegend.push(cn);
+    });
+
+    allCategoriesForLegend.forEach(catName => {
+        if (!config[catName]) {
+            config[catName] = {
+                label: catName,
+                color: PREDEFINED_CATEGORY_COLORS[catName] || PREDEFINED_CATEGORY_COLORS["Lainnya"],
+                icon: CATEGORY_ICONS[catName] || (catName === "Lainnya" ? defaultOtherIcon : Shapes),
+            };
+        }
     });
     return config;
   }, [dashboardData?.monthlyExpenses]);
@@ -145,42 +185,41 @@ export function DashboardClient({ authUser }: DashboardClientProps) {
         </Card>
       </section>
 
-      {/* Expense Chart */}
+      {/* Expense Bar Chart */}
       {expenseChartData.length > 0 ? (
         <section>
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center"><PieChart className="mr-2 h-5 w-5 text-primary"/>Diagram Pengeluaran Bulan Ini</CardTitle>
-              <CardDescription>Visualisasi pengeluaran Anda per kategori untuk bulan ini.</CardDescription>
+              <CardTitle className="flex items-center"><BarChart className="mr-2 h-5 w-5 text-primary"/>Diagram Pengeluaran</CardTitle>
+              <CardDescription>Visualisasi pengeluaran Anda per kategori untuk bulan ini. (Sortir per periode akan datang)</CardDescription>
             </CardHeader>
             <CardContent>
-              <ChartContainer config={chartConfig} className="mx-auto aspect-square max-h-[300px] sm:max-h-[350px]">
-                <RechartsPieChart>
-                  <ChartTooltip content={<ChartTooltipContent hideLabel nameKey="categoryName" />} />
-                  <Pie data={expenseChartData} dataKey="total" nameKey="name" cx="50%" cy="50%" outerRadius={100} labelLine={false} label={({ cx, cy, midAngle, innerRadius, outerRadius, percent, index, name }) => {
-                      const RADIAN = Math.PI / 180;
-                      const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
-                      const x = cx + radius * Math.cos(-midAngle * RADIAN);
-                      const y = cy + radius * Math.sin(-midAngle * RADIAN);
-                      return (
-                        <text x={x} y={y} fill="white" textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central" fontSize="10px">
-                          {`${(percent * 100).toFixed(0)}%`}
-                        </text>
-                      );
-                    }}>
-                    {expenseChartData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={PREDEFINED_CATEGORY_COLORS[entry.name] || PREDEFINED_CATEGORY_COLORS["Lainnya"]} />
-                    ))}
-                  </Pie>
-                  <ChartLegend content={<ChartLegendContent nameKey="name"/>} />
-                </RechartsPieChart>
+              <ChartContainer config={chartConfig} className="mx-auto aspect-video max-h-[350px]">
+                <RechartsBarChart data={expenseChartData} layout="vertical" margin={{ left: 10, right: 30 }}>
+                   <XAxis type="number" hide />
+                   <YAxis 
+                    dataKey="name" 
+                    type="category" 
+                    tickLine={false} 
+                    axisLine={false}
+                    tickFormatter={(value) => chartConfig[value]?.label || value}
+                    width={100}
+                    />
+                  <ChartTooltip cursor={false} content={<ChartTooltipContent hideLabel />} />
+                  <Bar dataKey="total" layout="vertical" radius={5}>
+                     {expenseChartData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={chartConfig[entry.name]?.color || PREDEFINED_CATEGORY_COLORS["Lainnya"]} />
+                      ))}
+                  </Bar>
+                  <ChartLegend content={<ChartLegendContent />} />
+                </RechartsBarChart>
               </ChartContainer>
             </CardContent>
           </Card>
         </section>
       ) : (
          <Card>
-            <CardHeader><CardTitle className="flex items-center"><PieChart className="mr-2 h-5 w-5 text-primary"/>Diagram Pengeluaran</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="flex items-center"><BarChart className="mr-2 h-5 w-5 text-primary"/>Diagram Pengeluaran</CardTitle></CardHeader>
             <CardContent><p className="text-muted-foreground text-center py-4">Belum ada data pengeluaran yang cukup untuk ditampilkan pada diagram.</p></CardContent>
         </Card>
       )}

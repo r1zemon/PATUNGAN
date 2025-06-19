@@ -83,8 +83,6 @@ export interface ScheduledBillDisplayItem {
   scheduled_at: string; // ISO string
   categoryName?: string | null;
   participantCount: number;
-  // Add participant avatars array if needed for UI
-  // participantAvatars?: string[]; 
 }
 
 export interface RecentBillDisplayItem {
@@ -94,24 +92,24 @@ export interface RecentBillDisplayItem {
   grandTotal: number;
   categoryName?: string | null;
   participantCount: number;
-  // participantAvatars?: string[];
 }
 
 export interface MonthlyExpenseByCategory {
-  categoryName: string; // e.g., "Makanan", "Transportasi", "Lainnya"
+  categoryName: string; 
   totalAmount: number;
-  icon?: React.ElementType; // Lucide icon for display
-  color?: string; // Hex color for chart/display consistency
+  icon?: React.ElementType; 
+  color?: string; 
 }
 
 export interface ExpenseChartDataPoint {
   name: string; // Label for the axis (e.g., month name, date, category name)
   total: number; // Value for the bar/line
+  // fill?: string; // Optional: for individual bar colors if needed directly in data
 }
 
 export interface DashboardData {
   monthlyExpenses: MonthlyExpenseByCategory[];
-  expenseChartData: ExpenseChartDataPoint[]; // For a specific period, e.g., this month by day, or last 6 months by month
+  expenseChartData: ExpenseChartDataPoint[]; 
   recentBills: RecentBillDisplayItem[];
   scheduledBills: ScheduledBillDisplayItem[];
 }

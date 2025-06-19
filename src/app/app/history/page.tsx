@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
-import { Home, LogOut, Settings, UserCircle, Power, Info, FilePlus, Loader2, History as HistoryIconLucide, Users, Coins, CalendarDays, BarChart2 } from "lucide-react"; 
+import { Home, LogOut, Settings, UserCircle, Power, Info, FilePlus, Loader2, History as HistoryIconLucide, Users, Coins, CalendarDays, BarChart2, Star, Zap, ShoppingBag } from "lucide-react"; 
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -35,6 +35,8 @@ interface Profile {
   email?: string; 
 }
 
+const MAX_FREE_HISTORY_ITEMS = 3; // Batas item riwayat gratis
+
 export default function HistoryPage() {
   const [billsHistory, setBillsHistory] = useState<BillHistoryEntry[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
@@ -43,6 +45,7 @@ export default function HistoryPage() {
   const [authUser, setAuthUser] = useState<SupabaseUser | null>(null);
   const [userProfile, setUserProfile] = useState<Profile | null>(null);
   const [isLoadingUser, setIsLoadingUser] = useState(true);
+  const [isPremiumUser, setIsPremiumUser] = useState(false); // Nanti ini akan dari data pengguna
 
   const { toast } = useToast();
   const router = useRouter();
@@ -62,6 +65,10 @@ export default function HistoryPage() {
     setAuthUser(user);
     setUserProfile(profile);
     setIsLoadingUser(false);
+    // TODO: Cek status premium pengguna di sini dan set setIsPremiumUser
+    // Untuk sekarang, kita asumsikan bukan premium:
+    // setIsPremiumUser(profile?.is_premium || false); 
+
 
     const historyResult = await getBillsHistoryAction();
     if (historyResult.success && historyResult.data) {
@@ -122,6 +129,8 @@ export default function HistoryPage() {
       </div>
     );
   }
+
+  const displayedBills = isPremiumUser ? billsHistory : billsHistory.slice(0, MAX_FREE_HISTORY_ITEMS);
 
   return (
     <div className="relative flex flex-col min-h-screen bg-background bg-money-pattern bg-[length:120px_auto] before:content-[''] before:absolute before:inset-0 before:bg-white/[.90] before:dark:bg-black/[.90] before:z-0">
@@ -187,23 +196,6 @@ export default function HistoryPage() {
       </header>
 
       <main className="relative z-10 container mx-auto px-4 py-8 md:px-6 md:py-12 flex-grow">
-        <Card className="shadow-lg mb-8">
-            <CardHeader>
-              <CardTitle className="flex items-center"><BarChart2 className="mr-2 h-5 w-5 text-primary"/> Ringkasan Finansial</CardTitle>
-              <CardDescription>Statistik penggunaan aplikasi Patungan Anda.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <h4 className="font-medium">Total Pengeluaran Bulan Ini:</h4>
-                <p className="text-muted-foreground">Segera hadir! (Fitur grafik pengeluaran bulanan sedang dikembangkan).</p>
-              </div>
-              <div>
-                <h4 className="font-medium">Total Tagihan Dibuat:</h4>
-                <p className="text-muted-foreground">Segera hadir! (Jumlah tagihan yang pernah Anda inisiasi).</p>
-              </div>
-            </CardContent>
-        </Card>
-
         <div className="flex flex-col sm:flex-row justify-between items-center mb-8 gap-4">
             <h2 className="text-3xl font-semibold tracking-tight text-foreground flex items-center">
                 <HistoryIconLucide className="mr-3 h-8 w-8 text-primary" />
@@ -232,30 +224,42 @@ export default function HistoryPage() {
           </Card>
         )}
 
-        {billsHistory.length > 0 && (
+        {displayedBills.length > 0 && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {billsHistory.map((bill) => (
+            {displayedBills.map((bill) => (
               <Card key={bill.id} className="shadow-lg hover:shadow-xl transition-shadow duration-300 ease-in-out flex flex-col">
                 <CardHeader>
                   <CardTitle className="truncate text-xl">{bill.name || "Tagihan Tanpa Nama"}</CardTitle>
                   <CardDescription className="flex items-center text-sm">
                     <CalendarDays className="mr-2 h-4 w-4 text-muted-foreground" />
-                    {format(new Date(bill.createdAt), "dd MMMM yyyy, HH:mm", { locale: IndonesianLocale })}
+                    {bill.scheduled_at ? 
+                        `Dijadwalkan: ${format(new Date(bill.scheduled_at), "dd MMMM yyyy, HH:mm", { locale: IndonesianLocale })}` :
+                        format(new Date(bill.createdAt), "dd MMMM yyyy, HH:mm", { locale: IndonesianLocale })
+                    }
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3 flex-grow">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground flex items-center"><Coins className="mr-2 h-4 w-4"/>Total Tagihan:</span>
-                    <span className="font-semibold text-primary">{formatCurrency(bill.grandTotal || 0, "IDR")}</span>
-                  </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground flex items-center"><UserCircle className="mr-2 h-4 w-4"/>Dibayar Oleh:</span>
-                    <span className="font-medium truncate">{bill.payerName || "-"}</span>
-                  </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground flex items-center"><Users className="mr-2 h-4 w-4"/>Partisipan:</span>
-                    <span className="font-medium">{bill.participantCount} orang</span>
-                  </div>
+                   {bill.grandTotal !== null ? (
+                    <>
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground flex items-center"><Coins className="mr-2 h-4 w-4"/>Total Tagihan:</span>
+                        <span className="font-semibold text-primary">{formatCurrency(bill.grandTotal || 0, "IDR")}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground flex items-center"><UserCircle className="mr-2 h-4 w-4"/>Dibayar Oleh:</span>
+                        <span className="font-medium truncate">{bill.payerName || "-"}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground flex items-center"><Users className="mr-2 h-4 w-4"/>Partisipan:</span>
+                        <span className="font-medium">{bill.participantCount} orang</span>
+                      </div>
+                    </>
+                   ) : (
+                    <div className="text-sm text-muted-foreground flex items-center">
+                        <ShoppingBag className="mr-2 h-4 w-4 text-amber-500" />
+                        Tagihan ini dijadwalkan dan detailnya belum diisi.
+                    </div>
+                   )}
                 </CardContent>
                 <CardFooter>
                   <Button variant="outline" className="w-full" onClick={() => toast({title: "Info", description:"Fitur lihat detail riwayat belum tersedia."})}>
@@ -266,6 +270,49 @@ export default function HistoryPage() {
             ))}
           </div>
         )}
+
+        {!isPremiumUser && billsHistory.length > MAX_FREE_HISTORY_ITEMS && (
+          <Card className="mt-8 shadow-lg border-primary/50 bg-primary/5 hover:shadow-xl transition-shadow duration-300 ease-in-out">
+            <CardHeader>
+              <CardTitle className="flex items-center text-primary">
+                <Star className="mr-2 h-5 w-5" /> Akses Riwayat Lengkap
+              </CardTitle>
+              <CardDescription>
+                Anda telah melihat {MAX_FREE_HISTORY_ITEMS} tagihan terbaru. Total {billsHistory.length} tagihan tercatat.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground mb-4">
+                Dengan Patungan Premium, Anda mendapatkan akses tak terbatas ke semua riwayat tagihan, fitur analitik lanjutan, ekspor data, dan banyak lagi!
+              </p>
+            </CardContent>
+            <CardFooter>
+              <Button
+                className="w-full bg-gradient-to-r from-primary to-accent text-primary-foreground hover:opacity-90 transition-opacity"
+                onClick={() => toast({ title: "Fitur Premium", description: "Tingkatkan ke Premium untuk melihat semua riwayat. (Fitur ini belum tersedia)" })}
+              >
+                <Zap className="mr-2 h-4 w-4" /> Tingkatkan ke Premium
+              </Button>
+            </CardFooter>
+          </Card>
+        )}
+
+        <Card className="shadow-lg mt-10 mb-8"> {/* Ringkasan Finansial dipindah ke sini */}
+            <CardHeader>
+              <CardTitle className="flex items-center"><BarChart2 className="mr-2 h-5 w-5 text-primary"/> Ringkasan Finansial</CardTitle>
+              <CardDescription>Statistik penggunaan aplikasi Patungan Anda.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <h4 className="font-medium">Total Pengeluaran Bulan Ini:</h4>
+                <p className="text-muted-foreground">Segera hadir! (Fitur grafik pengeluaran bulanan sedang dikembangkan).</p>
+              </div>
+              <div>
+                <h4 className="font-medium">Total Tagihan Dibuat:</h4>
+                <p className="text-muted-foreground">Segera hadir! (Jumlah tagihan yang pernah Anda inisiasi).</p>
+              </div>
+            </CardContent>
+        </Card>
       </main>
 
       <footer className="relative z-10 mt-auto pt-8 border-t border-border/40 text-center text-sm text-muted-foreground">
@@ -275,12 +322,5 @@ export default function HistoryPage() {
     </div>
   );
 }
-
-
-    
-
-
-
-
 
     

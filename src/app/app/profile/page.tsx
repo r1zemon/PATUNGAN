@@ -8,7 +8,7 @@ import { useRouter } from "next/navigation";
 import type { User as SupabaseUser } from "@supabase/supabase-js";
 
 import { getCurrentUserAction, logoutUserAction, updateUserProfileAction, removeAvatarAction } from "@/lib/actions";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -46,6 +46,7 @@ import {
 } from "@/components/ui/dialog";
 
 import ReactCrop, { type Crop, centerCrop, makeAspectCrop, PixelCrop } from 'react-image-crop';
+import { cn } from "@/lib/utils";
 
 
 interface Profile {
@@ -131,7 +132,6 @@ export default function ProfilePage() {
         username: typedProfile.username || "",
         phoneNumber: typedProfile.phone_number || "",
       });
-      // Initialize header state from profile, not form data
       setHeaderAvatarUrl(typedProfile.avatar_url || null);
       const initialDisplayName = typedProfile.full_name || typedProfile.username || user.email || "Pengguna";
       setHeaderDisplayName(initialDisplayName);
@@ -342,7 +342,6 @@ export default function ProfilePage() {
       setAvatarFile(null); 
       if (avatarFileInputRef.current) avatarFileInputRef.current.value = "";
       
-      // Update header avatar state only after successful save
       setHeaderAvatarUrl(typedUpdatedProfile.avatar_url || null);
       const newHeaderDisplayName = typedUpdatedProfile.full_name || typedUpdatedProfile.username || authUser.email || "Pengguna";
       setHeaderDisplayName(newHeaderDisplayName);
@@ -371,7 +370,6 @@ export default function ProfilePage() {
         setAvatarFile(null);
         if (avatarFileInputRef.current) avatarFileInputRef.current.value = "";
 
-        // Update header avatar state
         setHeaderAvatarUrl(null);
         const newHeaderDisplayName = formData.fullName || formData.username || authUser.email || "Pengguna";
         setHeaderDisplayName(newHeaderDisplayName);
@@ -445,7 +443,7 @@ export default function ProfilePage() {
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="relative h-10 w-10 rounded-full">
                   <Avatar className="h-9 w-9">
-                    <AvatarImage src={headerAvatarUrl || `https://placehold.co/40x40.png?text=${headerAvatarInitial}`} alt={headerDisplayName} data-ai-hint="profile avatar"/>
+                    <AvatarImage src={headerAvatarUrl || undefined} alt={headerDisplayName} data-ai-hint="profile avatar"/>
                     <AvatarFallback>{headerAvatarInitial}</AvatarFallback>
                   </Avatar>
                 </Button>
@@ -502,21 +500,25 @@ export default function ProfilePage() {
               <CardContent className="space-y-6">
                 <div className="flex flex-col items-center space-y-3">
                     <Avatar className="h-24 w-24 rounded-full">
-                        <AvatarImage src={formAvatarDisplayUrl || `https://placehold.co/96x96.png?text=${formAvatarDisplayInitial}`} alt={formDisplayFullName} className="rounded-full" data-ai-hint="user avatar large"/>
+                        <AvatarImage src={formAvatarDisplayUrl || undefined} alt={formDisplayFullName} className="rounded-full" data-ai-hint="user avatar large"/>
                         <AvatarFallback className="text-3xl rounded-full">{formAvatarDisplayInitial}</AvatarFallback>
                     </Avatar>
                     <div className="grid w-full max-w-sm items-center gap-1.5">
-                        <Label htmlFor="avatarFile">Ubah Foto Profil</Label>
+                        <Label htmlFor="avatarFile" className={cn(buttonVariants({ variant: "outline" }), "cursor-pointer w-full")}>
+                           <FileImage className="mr-2 h-4 w-4" />
+                           Ubah Foto Profil
+                        </Label>
                         <Input 
                             id="avatarFile" 
                             type="file" 
                             accept="image/jpeg,image/png,image/webp,image/gif" 
                             onChange={handleAvatarFileSelect} 
                             ref={avatarFileInputRef}
+                            className="hidden"
                         />
-                        <p className="text-xs text-muted-foreground">Pilih file untuk dipotong dan diunggah.</p>
+                        <p className="text-xs text-muted-foreground text-center">Pilih file untuk dipotong dan diunggah.</p>
                     </div>
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-wrap gap-2 justify-center">
                         {userProfile.avatar_url && !croppedAvatarPreview && !avatarFile && ( 
                             <AlertDialog>
                                 <AlertDialogTrigger asChild>

@@ -75,3 +75,43 @@ export interface Notification {
     avatarUrl?: string;
   };
 }
+
+// ===== DASHBOARD TYPES =====
+export interface ScheduledBillDisplayItem {
+  id: string;
+  name: string | null;
+  scheduled_at: string; // ISO string
+  categoryName?: string | null;
+  participantCount: number;
+  // Add participant avatars array if needed for UI
+  // participantAvatars?: string[]; 
+}
+
+export interface RecentBillDisplayItem {
+  id: string;
+  name: string | null;
+  createdAt: string; // ISO string
+  grandTotal: number;
+  categoryName?: string | null;
+  participantCount: number;
+  // participantAvatars?: string[];
+}
+
+export interface MonthlyExpenseByCategory {
+  categoryName: string; // e.g., "Makanan", "Transportasi", "Lainnya"
+  totalAmount: number;
+  icon?: React.ElementType; // Lucide icon for display
+  color?: string; // Hex color for chart/display consistency
+}
+
+export interface ExpenseChartDataPoint {
+  name: string; // Label for the axis (e.g., month name, date, category name)
+  total: number; // Value for the bar/line
+}
+
+export interface DashboardData {
+  monthlyExpenses: MonthlyExpenseByCategory[];
+  expenseChartData: ExpenseChartDataPoint[]; // For a specific period, e.g., this month by day, or last 6 months by month
+  recentBills: RecentBillDisplayItem[];
+  scheduledBills: ScheduledBillDisplayItem[];
+}

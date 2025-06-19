@@ -46,7 +46,7 @@ export default function ProfilePage() {
     fullName: "",
     username: "",
     phoneNumber: "",
-    avatarUrl: "",
+    avatarUrl: "", // For manual URL input
   });
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
@@ -72,11 +72,9 @@ export default function ProfilePage() {
         fullName: profile.full_name || "",
         username: profile.username || "",
         phoneNumber: profile.phone_number || "",
-        avatarUrl: profile.avatar_url || "",
+        avatarUrl: profile.avatar_url || "", // Initialize with current DB avatar_url
       });
-      if (profile.avatar_url) {
-        setAvatarPreview(profile.avatar_url);
-      }
+      setAvatarPreview(profile.avatar_url || null); // Set initial preview from DB
     }
     setIsLoadingUser(false);
   }, [router, toast]);
@@ -98,10 +96,14 @@ export default function ProfilePage() {
 
       if (!allowedTypes.includes(file.type)) {
         toast({ variant: "destructive", title: "Jenis File Tidak Valid", description: "Hanya file JPG, PNG, WEBP, GIF yang diizinkan."});
+        setAvatarFile(null); // Clear invalid file
+        if (e.target) e.target.value = ""; // Reset file input
         return;
       }
       if (file.size > maxSize) {
         toast({ variant: "destructive", title: "Ukuran File Terlalu Besar", description: "Ukuran file maksimal 5MB."});
+        setAvatarFile(null); // Clear oversized file
+        if (e.target) e.target.value = ""; // Reset file input
         return;
       }
       setAvatarFile(file);
@@ -110,9 +112,12 @@ export default function ProfilePage() {
         setAvatarPreview(reader.result as string);
       };
       reader.readAsDataURL(file);
-      // Do not clear formData.avatarUrl here, let user manage manual URL input separately if they wish,
-      // but file selection will take precedence in terms of UI preview.
-      // Saving logic will determine if file or URL is used.
+      // When a file is selected, clear the manual avatarUrl field to avoid confusion
+      // setFormData(prev => ({ ...prev, avatarUrl: "" })); 
+    } else {
+      setAvatarFile(null);
+      // If file selection is cleared, revert preview to DB avatar_url or initial if no DB URL
+      setAvatarPreview(userProfile?.avatar_url || null);
     }
   };
 
@@ -122,77 +127,92 @@ export default function ProfilePage() {
     if (!authUser || !userProfile) return;
     setIsSaving(true);
 
+    const profileUpdates: Partial<Profile> = {};
+    let hasChanges = false;
+
     const trimmedFullName = formData.fullName.trim();
-    const trimmedUsername = formData.username.trim();
-    
-    let trimmedPhoneNumber: string | null = null;
-    if (typeof formData.phoneNumber === 'string' && formData.phoneNumber.trim() !== '') {
-      trimmedPhoneNumber = formData.phoneNumber.trim();
-    } else if (formData.phoneNumber === '') { // Explicitly clear if empty string
-        trimmedPhoneNumber = null;
+    if (trimmedFullName && trimmedFullName !== (userProfile.full_name || "")) {
+      profileUpdates.full_name = trimmedFullName;
+      hasChanges = true;
+    } else if (!trimmedFullName && userProfile.full_name) { // Clearing a name
+      profileUpdates.full_name = null; 
+      hasChanges = true;
+    }
+    if (!trimmedFullName) {
+       toast({ variant: "destructive", title: "Validasi Gagal", description: "Nama lengkap tidak boleh kosong."});
+       setIsSaving(false);
+       return;
     }
 
 
-    if (!trimmedFullName) {
-        toast({ variant: "destructive", title: "Validasi Gagal", description: "Nama lengkap tidak boleh kosong."});
-        setIsSaving(false);
-        return;
+    const trimmedUsername = formData.username.trim();
+     if (trimmedUsername && trimmedUsername !== (userProfile.username || "")) {
+      profileUpdates.username = trimmedUsername;
+      hasChanges = true;
+    } else if (!trimmedUsername && userProfile.username) {
+       profileUpdates.username = null;
+       hasChanges = true;
     }
      if (!trimmedUsername) {
         toast({ variant: "destructive", title: "Validasi Gagal", description: "Username tidak boleh kosong."});
         setIsSaving(false);
         return;
     }
+    
 
-    const updates: Partial<Profile> = {
-      full_name: trimmedFullName,
-      username: trimmedUsername,
-      phone_number: trimmedPhoneNumber,
-    };
-
-    let avatarUrlChanged = false;
-
-    if (avatarFile) {
-        // A file has been selected. Inform the user that file upload is not yet implemented for saving.
-        toast({ 
-            title: "Info Unggah Avatar", 
-            description: "Fitur unggah avatar dari file belum sepenuhnya terimplementasi. Untuk saat ini, perubahan foto profil melalui file belum disimpan. Silakan gunakan input URL manual jika ingin mengubah foto." 
-        });
-        // We do not set updates.avatar_url here, so the DB value remains unchanged if a file is selected.
-    } else {
-        // No file selected, process the manual avatarUrl input.
-        const manualUrl = formData.avatarUrl.trim();
-        const currentDbUrl = userProfile.avatar_url || ""; // Treat null/undefined from DB as empty string for comparison
-
-        if (manualUrl !== currentDbUrl) {
-            updates.avatar_url = manualUrl || null; // If manualUrl is empty string, save null (clears avatar)
-            avatarUrlChanged = true;
-        }
+    let trimmedPhoneNumber: string | null = null;
+    if (typeof formData.phoneNumber === 'string' && formData.phoneNumber.trim() !== '') {
+      trimmedPhoneNumber = formData.phoneNumber.trim();
+    }
+    if (trimmedPhoneNumber !== (userProfile.phone_number || null)) {
+      profileUpdates.phone_number = trimmedPhoneNumber;
+      hasChanges = true;
     }
 
-    const hasProfileDetailChanges = updates.full_name !== (userProfile.full_name || "") ||
-                                 updates.username !== (userProfile.username || "") ||
-                                 updates.phone_number !== (userProfile.phone_number || null);
+    // Pass manual avatar URL for logic in action if no file is selected.
+    // If a file is selected, avatarFile will be passed, and manual URL is ignored by action.
+    if (!avatarFile && formData.avatarUrl.trim() !== (userProfile.avatar_url || "")) {
+        profileUpdates.avatar_url = formData.avatarUrl.trim() || null; // Send null if cleared
+        hasChanges = true;
+    } else if (avatarFile) {
+        hasChanges = true; // File selection itself is a change intent
+    }
 
-    if (!hasProfileDetailChanges && !avatarUrlChanged) {
+
+    if (!hasChanges && !avatarFile) {
         toast({ title: "Tidak Ada Perubahan", description: "Tidak ada informasi yang diubah untuk disimpan." });
         setIsSaving(false);
         return;
     }
+    
+    // Pass avatarFile to the action.
+    // The action will handle uploading it and getting the new URL.
+    // Or it will use profileUpdates.avatar_url if avatarFile is null.
+    const { success, data: updatedProfileData, error: updateError } = await updateUserProfileAction(
+        authUser.id, 
+        profileUpdates,
+        avatarFile // Pass the file object here
+    );
 
-    const { success, data, error } = await updateUserProfileAction(authUser.id, updates);
-
-    if (success && data) {
+    if (success && updatedProfileData) {
       toast({ title: "Profil Diperbarui", description: "Informasi akun Anda berhasil disimpan." });
-      setUserProfile(prevProfile => ({...prevProfile, ...data} as Profile) ); // Update local profile state
-       if (avatarUrlChanged || (updates.avatar_url === null && userProfile.avatar_url !== null) ) { // if URL was changed or cleared
-           setAvatarPreview(data.avatar_url || null); // Update preview from saved data
-       }
-       // If only file was selected (avatarUrlChanged is false), avatarPreview remains from file selection,
-       // but userProfile.avatar_url (from DB) is the source of truth for display if no file selected next time.
+      setUserProfile(prevProfile => ({...(prevProfile || {}), ...updatedProfileData} as Profile) ); 
+      setAvatarPreview(updatedProfileData.avatar_url || null); // Update preview with new URL from DB
+      setAvatarFile(null); // Clear selected file after successful upload
+      if (document.getElementById('avatarFile')) {
+        (document.getElementById('avatarFile') as HTMLInputElement).value = ""; // Reset file input
+      }
+      setFormData(prev => ({
+          ...prev,
+          fullName: updatedProfileData.full_name || "",
+          username: updatedProfileData.username || "",
+          phoneNumber: updatedProfileData.phone_number || "",
+          avatarUrl: updatedProfileData.avatar_url || "", // Reflect the saved URL
+      }));
       router.refresh(); 
     } else {
-      toast({ variant: "destructive", title: "Gagal Menyimpan", description: error || "Tidak dapat memperbarui profil." });
+      const errorMessages = Array.isArray(updateError) ? updateError.join('; ') : updateError;
+      toast({ variant: "destructive", title: "Gagal Menyimpan", description: errorMessages || "Tidak dapat memperbarui profil." });
     }
     setIsSaving(false);
   };
@@ -259,7 +279,7 @@ export default function ProfilePage() {
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="relative h-10 w-10 rounded-full">
                   <Avatar className="h-9 w-9">
-                    <AvatarImage src={avatarPreview || userProfile?.avatar_url || `https://placehold.co/40x40.png?text=${currentAvatarInitial}`} alt={currentDisplayName} data-ai-hint="profile avatar"/>
+                    <AvatarImage src={avatarPreview || `https://placehold.co/40x40.png?text=${currentAvatarInitial}`} alt={currentDisplayName} data-ai-hint="profile avatar"/>
                     <AvatarFallback>{currentAvatarInitial}</AvatarFallback>
                   </Avatar>
                 </Button>
@@ -321,17 +341,18 @@ export default function ProfilePage() {
                     </Avatar>
                     <div className="grid w-full max-w-sm items-center gap-1.5">
                         <Label htmlFor="avatarFile">Ubah Foto Profil (Opsional)</Label>
-                        <Input id="avatarFile" type="file" accept="image/*" onChange={handleAvatarFileChange} />
-                        <p className="text-xs text-muted-foreground">Pilih file atau masukkan URL foto profil di bawah ini.</p>
+                        <Input id="avatarFile" type="file" accept="image/jpeg,image/png,image/webp,image/gif" onChange={handleAvatarFileChange} />
+                        <p className="text-xs text-muted-foreground">Pilih file untuk diunggah, atau masukkan URL di bawah.</p>
                     </div>
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="avatarUrl">URL Foto Profil (Opsional)</Label>
+                  <Label htmlFor="avatarUrl">URL Foto Profil (Alternatif)</Label>
                   <div className="relative">
                     <FileImage className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                     <Input id="avatarUrl" name="avatarUrl" type="url" placeholder="https://example.com/avatar.png" value={formData.avatarUrl} onChange={handleInputChange} className="pl-10"/>
                   </div>
+                   <p className="text-xs text-muted-foreground">Jika Anda tidak mengunggah file, URL ini akan digunakan.</p>
                 </div>
                 
                 <div className="space-y-2">
@@ -425,6 +446,4 @@ export default function ProfilePage() {
     </div>
   );
 }
-    
-
     

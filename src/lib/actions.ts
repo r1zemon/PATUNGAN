@@ -1,5 +1,4 @@
 
-
 "use server";
 
 import { scanReceipt, ScanReceiptOutput, ReceiptItem as AiReceiptItem } from "@/ai/flows/scan-receipt";
@@ -159,7 +158,6 @@ export async function createBillAction(
     name: billName || "Tagihan Baru",
     user_id: user.id,
     scheduled_at: scheduledAt || null,
-    // grand_total, payer_participant_id, etc. will be NULL initially
   };
 
   const { data: billData, error: billInsertError } = await supabase
@@ -281,7 +279,7 @@ export async function handleSummarizeBillAction(
   if (!payerParticipantId) {
     return { success: false, error: "ID Pembayar tidak disediakan." };
   }
-   if (people.length < 2) { // Changed from people.length === 0
+   if (people.length < 2) { 
     return { success: false, error: "Minimal dua orang diperlukan untuk membagi tagihan." };
   }
   if (splitItems.length === 0 && taxAmount === 0 && tipAmount === 0) {
@@ -292,7 +290,7 @@ export async function handleSummarizeBillAction(
         const { error: updateError } = await supabase.from('bill_participants').update({ total_share_amount: 0 }).eq('id', person.id);
         if (updateError) console.warn(`Error setting share to 0 for ${person.name}: ${updateError.message}`);
     }
-    // Update the bill to mark it as "completed" even if total is 0
+    
     await supabase.from('bills').update({ 
         grand_total: 0, 
         tax_amount:0, 
@@ -343,7 +341,7 @@ export async function handleSummarizeBillAction(
         calculatedGrandTotal += share;
         const { error: updateError } = await supabase.from('bill_participants').update({ total_share_amount: share }).eq('id', person.id);
         if (updateError) return { personId: person.id, error: updateError, success: false as const };
-      } else if (rawSummary[person.name] === undefined) { // If AI didn't return a share, assume 0
+      } else if (rawSummary[person.name] === undefined) { 
         const { error: updateError } = await supabase.from('bill_participants').update({ total_share_amount: 0 }).eq('id', person.id);
         if (updateError) return { personId: person.id, error: updateError, success: false as const };
       }
@@ -359,7 +357,6 @@ export async function handleSummarizeBillAction(
       }
     }
     
-    // Update the main bill entry to mark it as "completed"
     const { error: billUpdateError } = await supabase
         .from('bills')
         .update({
@@ -367,7 +364,7 @@ export async function handleSummarizeBillAction(
         tax_amount: taxAmount,
         tip_amount: tipAmount,
         tax_tip_split_strategy: taxTipSplitStrategy,
-        grand_total: calculatedGrandTotal // This is key for history
+        grand_total: calculatedGrandTotal 
         })
         .eq('id', billId);
 
@@ -407,7 +404,7 @@ export async function handleSummarizeBillAction(
         }
     }
     
-    revalidatePath('/app/history', 'page'); // Revalidate history page after a bill is completed
+    revalidatePath('/app/history', 'page'); 
     return { success: true, data: rawSummary };
   } catch (error) {
     console.error("Error summarizing bill with AI or saving summary:", error);
@@ -432,47 +429,123 @@ export async function handleSummarizeBillAction(
 
 export async function updateUserProfileAction(
   userId: string, 
-  updates: { 
+  profileUpdates: { 
     full_name?: string | null; 
     username?: string | null; 
-    avatar_url?: string | null; 
+    avatar_url?: string | null; // This will now primarily be set by file upload logic
     phone_number?: string | null;
-  }
-): Promise<{ success: boolean; data?: any; error?: string }> {
+  },
+  avatarFile?: File | null // New parameter for the avatar file
+): Promise<{ success: boolean; data?: any; error?: string | string[] }> {
   const supabase = createSupabaseServerClient();
   if (!userId) return { success: false, error: "User ID is required." };
 
-  // Filter out any undefined values to prevent errors during update
-  const validUpdates: Record<string, any> = {};
-  for (const key in updates) {
-    if (updates[key as keyof typeof updates] !== undefined) {
-      validUpdates[key] = updates[key as keyof typeof updates];
-    }
-  }
+  const updatesForDB: Partial<Database['public']['Tables']['profiles']['Update']> = {};
+  let hasProfileDetailChanges = false;
+  let avatarUrlChangedOrUploaded = false;
+  const errorMessages: string[] = [];
 
-  if (Object.keys(validUpdates).length === 0) {
-    return { success: true, data: null, error: "No changes to save." }; // Or handle as no-op
-  }
-  
-  const { data, error } = await supabase
+  // Fetch current profile to compare
+  const { data: currentProfileData, error: fetchError } = await supabase
     .from('profiles')
-    .update(validUpdates)
+    .select('avatar_url, full_name, username, phone_number')
     .eq('id', userId)
-    .select()
     .single();
 
-  if (error) {
-    console.error("Error updating profile:", error);
-    return { success: false, error: `Gagal memperbarui profil: ${error.message}`, data: null };
+  if (fetchError && fetchError.code !== 'PGRST116') { // PGRST116 means no rows found, which is an error here
+    console.error("Error fetching current profile:", fetchError);
+    return { success: false, error: `Gagal mengambil profil saat ini: ${fetchError.message}` };
   }
 
-  // Revalidate paths that might display user profile information
-  revalidatePath('/app', 'layout'); 
-  revalidatePath('/app/profile', 'page');
-  revalidatePath('/app/history', 'page');
-  revalidatePath('/', 'layout'); // For landing page header
+
+  // 1. Handle Avatar Upload
+  if (avatarFile) {
+    const fileExt = avatarFile.name.split('.').pop();
+    const filePath = `public/${userId}/avatar.${fileExt}`; // Store in public/user_id/avatar.ext
+
+    const { error: uploadError } = await supabase.storage
+      .from('avatars') // Make sure this bucket name 'avatars' matches your Supabase setup
+      .upload(filePath, avatarFile, {
+        cacheControl: '3600',
+        upsert: true, // Overwrite if exists
+      });
+
+    if (uploadError) {
+      console.error("Error uploading avatar:", uploadError);
+      errorMessages.push(`Gagal mengunggah avatar: ${uploadError.message}`);
+    } else {
+      const { data: publicUrlData } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(filePath);
+
+      if (publicUrlData) {
+        updatesForDB.avatar_url = publicUrlData.publicUrl;
+        avatarUrlChangedOrUploaded = true;
+      } else {
+        errorMessages.push('Gagal mendapatkan URL publik avatar setelah unggah.');
+      }
+    }
+  } else if (profileUpdates.avatar_url !== undefined && profileUpdates.avatar_url !== (currentProfileData?.avatar_url || null)) {
+    // Handle manual URL input if no file is uploaded and URL is explicitly changed or cleared
+    updatesForDB.avatar_url = profileUpdates.avatar_url?.trim() || null;
+    avatarUrlChangedOrUploaded = true;
+  }
+
+
+  // 2. Handle other profile details
+  if (profileUpdates.full_name !== undefined && profileUpdates.full_name !== (currentProfileData?.full_name || "")) {
+    updatesForDB.full_name = profileUpdates.full_name;
+    hasProfileDetailChanges = true;
+  }
+  if (profileUpdates.username !== undefined && profileUpdates.username !== (currentProfileData?.username || "")) {
+    updatesForDB.username = profileUpdates.username;
+    hasProfileDetailChanges = true;
+  }
+  if (profileUpdates.phone_number !== undefined && profileUpdates.phone_number !== (currentProfileData?.phone_number || null)) {
+    updatesForDB.phone_number = profileUpdates.phone_number;
+    hasProfileDetailChanges = true;
+  }
+
+  // Only proceed with DB update if there are actual changes
+  if (!hasProfileDetailChanges && !avatarUrlChangedOrUploaded && errorMessages.length === 0) {
+    return { success: true, data: currentProfileData, error: "Tidak ada perubahan untuk disimpan." };
+  }
+  if (!hasProfileDetailChanges && !avatarUrlChangedOrUploaded && errorMessages.length > 0) {
+     return { success: false, data: currentProfileData, error: errorMessages.join('; ') };
+  }
+
+
+  if (Object.keys(updatesForDB).length > 0) {
+    const { data: updatedProfile, error: dbUpdateError } = await supabase
+      .from('profiles')
+      .update(updatesForDB)
+      .eq('id', userId)
+      .select()
+      .single();
+
+    if (dbUpdateError) {
+      console.error("Error updating profile in DB:", dbUpdateError);
+      errorMessages.push(`Gagal memperbarui profil di database: ${dbUpdateError.message}`);
+      return { success: false, data: currentProfileData, error: errorMessages.join('; ') };
+    }
+    
+    if (errorMessages.length > 0) {
+        return { success: false, data: updatedProfile || currentProfileData, error: errorMessages.join('; ') };
+    }
+
+    revalidatePath('/app', 'layout'); 
+    revalidatePath('/app/profile', 'page');
+    revalidatePath('/app/history', 'page');
+    revalidatePath('/', 'layout'); 
+    
+    return { success: true, data: updatedProfile, error: undefined };
+  } else if (errorMessages.length > 0) {
+     // Only avatar upload failed, but no other profile details changed
+     return { success: false, data: currentProfileData, error: errorMessages.join('; ') };
+  }
   
-  return { success: true, data, error: null };
+  // Should not be reached if logic is correct, but as a fallback
+  return { success: true, data: currentProfileData, error: "Tidak ada operasi pembaruan yang dilakukan." };
 }
 
 
@@ -484,13 +557,11 @@ export async function getBillsHistoryAction(): Promise<{ success: boolean; data?
     return { success: false, error: "Pengguna tidak terautentikasi atau sesi tidak valid." };
   }
 
-  // Only fetch bills that have been "completed" (i.e., grand_total is not NULL and payer_participant_id is not NULL)
-  // OR bills that are scheduled (scheduled_at is not NULL)
   const { data: bills, error: billsError } = await supabase
     .from('bills')
-    .select('id, name, created_at, grand_total, payer_participant_id, scheduled_at') // Added scheduled_at
+    .select('id, name, created_at, grand_total, payer_participant_id, scheduled_at') 
     .eq('user_id', user.id)
-    .or('grand_total.not.is.null,scheduled_at.not.is.null') // Fetch completed OR scheduled bills
+    .or('grand_total.not.is.null,scheduled_at.not.is.null') 
     .order('created_at', { ascending: false });
 
   if (billsError) {
@@ -535,12 +606,10 @@ export async function getBillsHistoryAction(): Promise<{ success: boolean; data?
       grandTotal: bill.grand_total, 
       payerName: payerName,
       participantCount: participantCount || 0,
-      scheduled_at: bill.scheduled_at, // Add scheduled_at to history entry
+      scheduled_at: bill.scheduled_at, 
     });
   }
   
   return { success: true, data: historyEntries };
 }
-
-
     

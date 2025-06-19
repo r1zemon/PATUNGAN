@@ -432,7 +432,7 @@ export async function updateUserProfileAction(
   profileUpdates: { 
     full_name?: string | null; 
     username?: string | null; 
-    avatar_url?: string | null;
+    avatar_url?: string | null; // This can still be sent by removeAvatarAction to set to null
     phone_number?: string | null;
   },
   avatarFile?: File | null
@@ -451,7 +451,7 @@ export async function updateUserProfileAction(
     .eq('id', userId)
     .single();
 
-  if (fetchError && fetchError.code !== 'PGRST116') { // PGRST116 means no rows found, which is fine if creating new
+  if (fetchError && fetchError.code !== 'PGRST116') { 
     console.error("Error fetching current profile:", fetchError);
     return { success: false, error: `Gagal mengambil profil saat ini: ${fetchError.message}` };
   }
@@ -483,9 +483,8 @@ export async function updateUserProfileAction(
       }
     }
   } else if (profileUpdates.avatar_url !== undefined && profileUpdates.avatar_url !== (currentProfileData?.avatar_url || null)) {
-    // This case handles explicitly setting avatar_url to null or a new URL if no file is uploaded.
-    // If profileUpdates.avatar_url is an empty string from the form, it means user wants to remove by URL field.
-    updatesForDB.avatar_url = profileUpdates.avatar_url?.trim() || null;
+    // This case is primarily for when removeAvatarAction calls this to set avatar_url to null
+    updatesForDB.avatar_url = profileUpdates.avatar_url; // which will be null
     avatarUrlChangedOrUploaded = true;
   }
 
@@ -564,16 +563,12 @@ export async function removeAvatarAction(userId: string): Promise<{ success: boo
     }
 
     if (!currentProfile?.avatar_url) {
-        return { success: true, data: { avatar_url: null }, error: "Tidak ada foto profil untuk dihapus." }; // Already no avatar
+        return { success: true, data: { avatar_url: null }, error: "Tidak ada foto profil untuk dihapus." }; 
     }
 
-    // Extract file path from public URL
-    // Example URL: https://<project_ref>.supabase.co/storage/v1/object/public/avatars/public/avatars/user-id-123/avatar.png
-    // We need to extract: public/avatars/user-id-123/avatar.png
-    const urlParts = currentProfile.avatar_url.split('/avatars/'); // Split by bucket name
+    const urlParts = currentProfile.avatar_url.split('/avatars/'); 
     if (urlParts.length < 2) {
         console.warn("Could not parse avatar_url to get storage path:", currentProfile.avatar_url);
-        // Fallback: try to remove from DB anyway
         const { error: dbOnlyError } = await supabase
             .from('profiles')
             .update({ avatar_url: null })
@@ -583,18 +578,16 @@ export async function removeAvatarAction(userId: string): Promise<{ success: boo
         }
         revalidatePath('/app/profile', 'page');
         revalidatePath('/', 'layout');
-        return { success: true, data: { avatar_url: null } }; // Successfully removed from DB
+        return { success: true, data: { avatar_url: null } }; 
     }
     
-    const filePathInBucket = urlParts.slice(1).join('/avatars/'); // Reconstruct path after bucket name
+    const filePathInBucket = urlParts.slice(1).join('/avatars/'); 
     
     const { error: storageError } = await supabase.storage
-        .from('avatars') // Bucket name
+        .from('avatars') 
         .remove([filePathInBucket]);
 
     if (storageError) {
-        // Log the error but proceed to update DB if it's a "Not found" type error,
-        // as the file might have been deleted manually or path mismatch.
         if (storageError.message.toLowerCase().includes('not found')) {
             console.warn(`Avatar file not found in storage at path ${filePathInBucket}, but proceeding to clear DB link.`);
         } else {
@@ -603,18 +596,16 @@ export async function removeAvatarAction(userId: string): Promise<{ success: boo
         }
     }
 
-    const { error: dbUpdateError } = await supabase
-        .from('profiles')
-        .update({ avatar_url: null })
-        .eq('id', userId);
+    // Call updateUserProfileAction to set avatar_url to null in the database
+    const { success, error: dbUpdateError } = await updateUserProfileAction(userId, { avatar_url: null }, null);
 
-    if (dbUpdateError) {
-        console.error("Error clearing avatar_url in DB:", dbUpdateError);
-        return { success: false, error: `Gagal mengosongkan URL avatar di database: ${dbUpdateError.message}` };
+    if (!success) {
+        console.error("Error clearing avatar_url in DB via updateUserProfileAction:", dbUpdateError);
+        return { success: false, error: `Gagal mengosongkan URL avatar di database: ${dbUpdateError}` };
     }
 
     revalidatePath('/app/profile', 'page');
-    revalidatePath('/', 'layout'); // For header updates
+    revalidatePath('/', 'layout'); 
     revalidatePath('/app', 'layout'); 
     revalidatePath('/app/history', 'page');
 

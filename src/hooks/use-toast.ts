@@ -1,10 +1,11 @@
+
 "use client"
 
 // Inspired by react-hot-toast library
-import * as React from "react"
+import { useState, useEffect, type ReactNode, type ReactElement } from "react"
 
 import type {
-  ToastActionElement,
+  ToastActionElement as UIToastActionElement,
   ToastProps,
 } from "@/components/ui/toast"
 
@@ -13,9 +14,9 @@ const TOAST_REMOVE_DELAY = 1000000
 
 type ToasterToast = ToastProps & {
   id: string
-  title?: React.ReactNode
-  description?: React.ReactNode
-  action?: ToastActionElement
+  title?: ReactNode
+  description?: ReactNode
+  action?: UIToastActionElement // Renamed to avoid conflict if ReactElement was named ToastActionElement
 }
 
 const actionTypes = {
@@ -172,9 +173,9 @@ function toast({ ...props }: Toast) {
 }
 
 function useToast() {
-  const [state, setState] = React.useState<State>(memoryState)
+  const [state, setState] = useState<State>(memoryState)
 
-  React.useEffect(() => {
+  useEffect(() => {
     listeners.push(setState)
     return () => {
       const index = listeners.indexOf(setState)
@@ -192,3 +193,7 @@ function useToast() {
 }
 
 export { useToast, toast }
+// Type alias for ToastActionElement to be used within this file if needed,
+// ensuring it doesn't clash with ReactElement from react import.
+// This is more of a clarification as UIToastActionElement is already imported and used.
+export type ToastActionElement = UIToastActionElement;

@@ -5,7 +5,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
-import { Menu, LogOut, UserCircle, Settings, FilePlus, Home, Users, ListChecks } from 'lucide-react'; // Added ListChecks for Riwayat
+import { Menu, LogOut, UserCircle, Settings, FilePlus, Home, Users, ListChecks } from 'lucide-react';
 import { useEffect, useState, useCallback } from 'react';
 import { getCurrentUserAction, logoutUserAction } from '@/lib/actions';
 import type { User as SupabaseUser } from "@supabase/supabase-js";
@@ -96,12 +96,10 @@ export function LandingHeader() {
     }
   };
 
-  // This function handles the "Teman" link/button click from both main nav and dropdown
   const handleFriendsNavigation = () => {
     setIsMobileMenuOpen(false);
     if (authUser) {
-      // router.push('/app/social'); // Future navigation
-      toast({title: "Segera Hadir", description: "Fitur Teman & Sosial belum diimplementasikan."});
+      router.push('/app/social');
     } else {
       toast({title: "Akses Ditolak", description: "Anda harus login untuk mengakses fitur sosial.", duration: 3000});
       router.push('/login');
@@ -110,7 +108,7 @@ export function LandingHeader() {
 
 
   const handleNavLinkClick = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
-    e.preventDefault(); // Prevent default for all nav links handled here
+    e.preventDefault(); 
     setIsMobileMenuOpen(false);
 
     if (href === '/') {
@@ -121,13 +119,14 @@ export function LandingHeader() {
       }
     } else if (href === '/app/history') {
       handleHistoryClick();
-    } else if (href === '/app/profile') { // Though profile is not in main nav, good to keep if used elsewhere
+    } else if (href === '/app/profile') { 
       handleProfileClick();
-    } else if (href === '/app/social') { // Handling "Teman" link
+    } else if (href === '/app/social') { 
       handleFriendsNavigation();
     }
     else {
       if (href.startsWith('#')) {
+        // Handle hash links if any for same page scrolling
       } else {
         router.push(href);
       }
@@ -293,3 +292,5 @@ export function LandingHeader() {
     </header>
   );
 }
+
+    

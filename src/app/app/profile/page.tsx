@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useToast } from "@/hooks/use-toast";
-import { Home, LogOut, Settings, UserCircle, Save, Edit3, Shield, BarChart2, Bell, AlertTriangle, FileImage, Loader2, History as HistoryIconLucide, Phone, AtSign, UserSquare2, Trash2, Crop, Check, X } from "lucide-react";
+import { Home, LogOut, Settings, UserCircle, Save, Edit3, Shield, BarChart2, Bell, AlertTriangle, FileImage, Loader2, History as HistoryIconLucide, Phone, AtSign, UserSquare2, Trash2, Crop, Check, X, Undo2 } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import {
   DropdownMenu,
@@ -43,7 +43,6 @@ import {
   DialogTitle,
   DialogDescription,
   DialogFooter,
-  DialogClose,
 } from "@/components/ui/dialog";
 
 import ReactCrop, { type Crop, centerCrop, makeAspectCrop, PixelCrop } from 'react-image-crop';
@@ -95,17 +94,16 @@ export default function ProfilePage() {
     fullName: "",
     username: "",
     phoneNumber: "",
-    avatarUrlInput: "", // For manual URL input
+    avatarUrlInput: "", 
   });
 
-  const [avatarFile, setAvatarFile] = useState<File | null>(null); // This will hold the CROPPED image file
+  const [avatarFile, setAvatarFile] = useState<File | null>(null); 
   
-  // Cropper state
   const [imgSrcForCropper, setImgSrcForCropper] = useState<string>('');
   const [crop, setCrop] = useState<Crop | undefined>();
   const [completedCrop, setCompletedCrop] = useState<PixelCrop | null>(null);
   const [showCropperDialog, setShowCropperDialog] = useState(false);
-  const [croppedAvatarPreview, setCroppedAvatarPreview] = useState<string | null>(null); // Preview of cropped image on the form
+  const [croppedAvatarPreview, setCroppedAvatarPreview] = useState<string | null>(null); 
 
   const imgRef = useRef<HTMLImageElement>(null);
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -179,12 +177,12 @@ export default function ProfilePage() {
       reader.addEventListener('load', () => {
         setImgSrcForCropper(reader.result?.toString() || '');
         setShowCropperDialog(true);
-        if (avatarFileInputRef.current) avatarFileInputRef.current.value = "";
+        if (avatarFileInputRef.current) avatarFileInputRef.current.value = ""; 
       });
       reader.readAsDataURL(file);
       setAvatarFile(null); 
       setCroppedAvatarPreview(null); 
-      setFormData(prev => ({ ...prev, avatarUrlInput: "" })); 
+      setFormData(prev => ({ ...prev, avatarUrlInput: userProfile?.avatar_url || "" })); // Reset URL input if file is chosen
     }
   };
 
@@ -235,15 +233,6 @@ export default function ProfilePage() {
     const cropWidth = completedCrop.width * scaleX;
     const cropHeight = completedCrop.height * scaleY;
     
-    // Create a circular clipping path
-    const centerX = (completedCrop.width * scaleX) / 2;
-    const centerY = (completedCrop.height * scaleY) / 2;
-    const radius = Math.min(centerX, centerY);
-
-    // Translate context to center of crop, draw circle, clip, translate back
-    // Or, more simply, set up canvas, draw image, then clip circle for final output (if needed here, usually for display)
-    // For saving, we save the square containing the circle. The circular display is handled by CSS.
-
     ctx.drawImage(
       image,
       cropX,
@@ -262,12 +251,26 @@ export default function ProfilePage() {
     const croppedFile = dataURLtoFile(base64Image, 'avatar.png');
     if (croppedFile) {
       setAvatarFile(croppedFile); 
+      setFormData(prev => ({ ...prev, avatarUrlInput: "" })); // Clear manual URL if file is cropped
     } else {
       toast({ variant: "destructive", title: "Gagal Membuat File", description: "Tidak dapat mengonversi gambar yang dipotong."});
     }
     setShowCropperDialog(false);
   }
 
+  const handleCancelAvatarChanges = () => {
+    setCroppedAvatarPreview(null);
+    setAvatarFile(null);
+    setImgSrcForCropper('');
+    if (avatarFileInputRef.current) {
+        avatarFileInputRef.current.value = "";
+    }
+    setFormData(prev => ({
+        ...prev,
+        avatarUrlInput: userProfile?.avatar_url || "" 
+    }));
+    toast({ title: "Perubahan Avatar Dibatalkan", description: "Foto profil kembali ke versi tersimpan."});
+  };
 
   const handleSaveChanges = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -312,11 +315,14 @@ export default function ProfilePage() {
       hasChanges = true;
     }
 
-    if (!avatarFile && formData.avatarUrlInput.trim() !== (userProfile.avatar_url || "")) {
+    // Avatar change logic:
+    // 1. If avatarFile exists (from cropper), it's a change.
+    // 2. If no avatarFile, but formData.avatarUrlInput is different from userProfile.avatar_url, it's a change.
+    if (avatarFile) {
+        hasChanges = true; 
+    } else if (formData.avatarUrlInput.trim() !== (userProfile.avatar_url || "")) {
         profileUpdates.avatar_url = formData.avatarUrlInput.trim() || null; 
         hasChanges = true;
-    } else if (avatarFile) { 
-        hasChanges = true; 
     }
 
 
@@ -329,7 +335,7 @@ export default function ProfilePage() {
     const { success, data: updatedProfileData, error: updateError } = await updateUserProfileAction(
         authUser.id, 
         profileUpdates,
-        avatarFile 
+        avatarFile // Pass the cropped file if it exists
     );
 
     if (success && updatedProfileData) {
@@ -348,6 +354,7 @@ export default function ProfilePage() {
       setAvatarFile(null); 
       if (avatarFileInputRef.current) avatarFileInputRef.current.value = "";
       
+      // Update header avatar only after successful save
       setHeaderAvatarUrl(typedUpdatedProfile.avatar_url || null);
       const newHeaderDisplayName = typedUpdatedProfile.full_name || typedUpdatedProfile.username || authUser.email || "Pengguna";
       setHeaderDisplayName(newHeaderDisplayName);
@@ -377,7 +384,11 @@ export default function ProfilePage() {
         setAvatarFile(null);
         if (avatarFileInputRef.current) avatarFileInputRef.current.value = "";
 
+        // Update header avatar after successful removal
         setHeaderAvatarUrl(null);
+        const newHeaderDisplayName = formData.fullName || formData.username || authUser.email || "Pengguna";
+        setHeaderDisplayName(newHeaderDisplayName);
+        setHeaderAvatarInitial(newHeaderDisplayName ? newHeaderDisplayName.substring(0,1).toUpperCase() : "P");
     } else {
         toast({ variant: "destructive", title: "Gagal Menghapus Foto", description: error || "Tidak dapat menghapus foto profil." });
     }
@@ -397,6 +408,8 @@ export default function ProfilePage() {
   const formAvatarDisplayUrl = croppedAvatarPreview || formData.avatarUrlInput || userProfile?.avatar_url;
   const formDisplayFullName = formData.fullName || formData.username || authUser?.email || "Pengguna";
   const formAvatarDisplayInitial = formDisplayFullName ? formDisplayFullName.substring(0,1).toUpperCase() : "P";
+
+  const hasAvatarChangesPending = croppedAvatarPreview !== null || (userProfile && formData.avatarUrlInput !== (userProfile.avatar_url || ""));
 
 
   if (isLoadingUser || !authUser || !userProfile) {
@@ -518,36 +531,49 @@ export default function ProfilePage() {
                         />
                         <p className="text-xs text-muted-foreground">Pilih file untuk dipotong dan diunggah, atau masukkan URL di bawah.</p>
                     </div>
-                     {userProfile.avatar_url && !croppedAvatarPreview && !avatarFile && ( 
-                        <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                                <Button 
-                                    type="button" 
-                                    variant="outline" 
-                                    size="sm" 
-                                    className="text-destructive hover:text-destructive hover:bg-destructive/10 border-destructive/50"
-                                    disabled={isRemovingAvatar || isSaving}
-                                >
-                                    {isRemovingAvatar ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Trash2 className="mr-2 h-4 w-4" />}
-                                    Hapus Foto Profil
-                                </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                                <AlertDialogHeader>
-                                <AlertDialogTitle>Anda yakin ingin menghapus foto profil?</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                    Tindakan ini akan menghapus foto profil Anda secara permanen dari server dan database.
-                                </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                <AlertDialogCancel>Batal</AlertDialogCancel>
-                                <AlertDialogAction onClick={handleRemoveAvatar} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">
-                                    Ya, Hapus Foto
-                                </AlertDialogAction>
-                                </AlertDialogFooter>
-                            </AlertDialogContent>
-                        </AlertDialog>
-                    )}
+                    <div className="flex flex-wrap gap-2">
+                        {userProfile.avatar_url && !croppedAvatarPreview && !avatarFile && ( 
+                            <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                    <Button 
+                                        type="button" 
+                                        variant="outline" 
+                                        size="sm" 
+                                        className="text-destructive hover:text-destructive hover:bg-destructive/10 border-destructive/50"
+                                        disabled={isRemovingAvatar || isSaving}
+                                    >
+                                        {isRemovingAvatar ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Trash2 className="mr-2 h-4 w-4" />}
+                                        Hapus Foto Tersimpan
+                                    </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                    <AlertDialogTitle>Anda yakin ingin menghapus foto profil tersimpan?</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                        Tindakan ini akan menghapus foto profil Anda secara permanen dari server dan database.
+                                    </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                    <AlertDialogCancel>Batal</AlertDialogCancel>
+                                    <AlertDialogAction onClick={handleRemoveAvatar} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">
+                                        Ya, Hapus Foto
+                                    </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                </AlertDialogContent>
+                            </AlertDialog>
+                        )}
+                        {hasAvatarChangesPending && (
+                             <Button 
+                                type="button" 
+                                variant="outline" 
+                                size="sm" 
+                                onClick={handleCancelAvatarChanges}
+                                disabled={isSaving || isRemovingAvatar}
+                            >
+                                <Undo2 className="mr-2 h-4 w-4" /> Batalkan Perubahan Avatar
+                            </Button>
+                        )}
+                    </div>
                 </div>
 
                 <div className="space-y-2">
@@ -556,7 +582,7 @@ export default function ProfilePage() {
                     <FileImage className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                     <Input id="avatarUrlInput" name="avatarUrlInput" type="url" placeholder="https://example.com/avatar.png" value={formData.avatarUrlInput} onChange={handleInputChange} className="pl-10"/>
                   </div>
-                   <p className="text-xs text-muted-foreground">Jika Anda tidak mengunggah file, URL ini akan digunakan.</p>
+                   <p className="text-xs text-muted-foreground">Jika Anda tidak mengunggah file, URL ini akan digunakan. Kosongkan untuk menghapus avatar jika tidak ada file dipilih.</p>
                 </div>
                 
                 <div className="space-y-2">
@@ -638,6 +664,7 @@ export default function ProfilePage() {
                   setShowCropperDialog(false);
                   setImgSrcForCropper('');
                   if (avatarFileInputRef.current) avatarFileInputRef.current.value = "";
+                  // Do not reset croppedAvatarPreview or avatarFile here, let cancel button on main page do it
                 }}>
                   <X className="mr-2 h-4 w-4"/> Batal
                 </Button>

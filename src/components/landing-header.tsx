@@ -5,7 +5,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
-import { Menu, LogOut, UserCircle, Settings, FilePlus, Home, Users } from 'lucide-react';
+import { Menu, LogOut, UserCircle, Settings, FilePlus, Home, Users, ListChecks } from 'lucide-react'; // Added ListChecks for Riwayat
 import { useEffect, useState, useCallback } from 'react';
 import { getCurrentUserAction, logoutUserAction } from '@/lib/actions';
 import type { User as SupabaseUser } from "@supabase/supabase-js";
@@ -20,13 +20,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { NotificationBell } from './notification-bell'; 
-
-const navLinks = [
-  { href: '/', label: 'Beranda' },
-  { href: '/app/history', label: 'Riwayat' },
-  { href: '#contact', label: 'Kontak' },
-];
+import { NotificationBell } from './notification-bell';
 
 interface Profile {
   username?: string;
@@ -34,6 +28,13 @@ interface Profile {
   avatar_url?: string;
   email?: string;
 }
+
+// Updated navLinks
+const navLinks = [
+  { href: '/', label: 'Beranda', icon: Home },
+  { href: '/app/history', label: 'Riwayat', icon: ListChecks },
+  { href: '/app/social', label: 'Teman', icon: Users }, // Replaced Kontak with Teman
+];
 
 export function LandingHeader() {
   const [authUser, setAuthUser] = useState<SupabaseUser | null>(null);
@@ -95,7 +96,8 @@ export function LandingHeader() {
     }
   };
 
-  const handleFriendsClick = () => {
+  // This function handles the "Teman" link/button click from both main nav and dropdown
+  const handleFriendsNavigation = () => {
     setIsMobileMenuOpen(false);
     if (authUser) {
       // router.push('/app/social'); // Future navigation
@@ -108,26 +110,27 @@ export function LandingHeader() {
 
 
   const handleNavLinkClick = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
+    e.preventDefault(); // Prevent default for all nav links handled here
+    setIsMobileMenuOpen(false);
+
     if (href === '/') {
       if (pathname === '/') {
-        e.preventDefault();
         window.scrollTo({ top: 0, behavior: 'smooth' });
-        setIsMobileMenuOpen(false);
       } else {
-        setIsMobileMenuOpen(false);
         router.push('/');
       }
     } else if (href === '/app/history') {
-      e.preventDefault();
       handleHistoryClick();
-    } else if (href === '/app/profile') {
-      e.preventDefault();
+    } else if (href === '/app/profile') { // Though profile is not in main nav, good to keep if used elsewhere
       handleProfileClick();
+    } else if (href === '/app/social') { // Handling "Teman" link
+      handleFriendsNavigation();
     }
+    // Removed #contact handling
     else {
-      setIsMobileMenuOpen(false);
+      // For any other unhandled links (if any were added to navLinks)
       if (href.startsWith('#')) {
-        // Handle hash links if needed, or let default behavior
+        // Handle hash links if needed, or let default behavior by not preventing default
       } else {
         router.push(href);
       }
@@ -192,7 +195,7 @@ export function LandingHeader() {
                     <UserCircle className="mr-2 h-4 w-4" />
                     <span>Profil</span>
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={handleFriendsClick}>
+                  <DropdownMenuItem onClick={handleFriendsNavigation}> 
                     <Users className="mr-2 h-4 w-4" />
                     <span>Teman</span>
                   </DropdownMenuItem>
@@ -220,7 +223,7 @@ export function LandingHeader() {
           )}
         </div>
 
-        <div className="md:hidden flex items-center gap-2"> 
+        <div className="md:hidden flex items-center gap-2">
           {authUser && <NotificationBell authUser={authUser} />}
           <Sheet open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
             <SheetTrigger asChild>
@@ -231,24 +234,26 @@ export function LandingHeader() {
             </SheetTrigger>
             <SheetContent side="right" className="w-[300px] sm:w-[400px] bg-background p-0">
               <SheetHeader className="p-4 pb-2 text-left border-b">
-                 <SheetTitle className="flex items-center gap-2"> 
+                 <SheetTitle className="flex items-center gap-2">
                    <Image src="/logo.png" alt="Patungan Logo" width={32} height={32} className="rounded-lg" data-ai-hint="logo company"/>
                    <span className="text-lg font-bold text-foreground">Patungan Menu</span>
                 </SheetTitle>
               </SheetHeader>
               <nav className="flex flex-col space-y-1 p-4 pt-2">
-                {navLinks.map((link) => (
-                  <Link
-                    key={link.label}
-                    href={link.href}
-                    className="text-base font-medium text-foreground hover:text-primary transition-colors flex items-center py-3 px-2 rounded-md hover:bg-muted"
-                     onClick={(e) => handleNavLinkClick(e, link.href)}
-                  >
-                    {link.href === '/app/history' && <Menu className="inline-block mr-3 h-5 w-5 opacity-80" />}
-                    {link.label === "Beranda" && <Home className="inline-block mr-3 h-5 w-5 opacity-80" />}
-                    {link.label}
-                  </Link>
-                ))}
+                {navLinks.map((link) => {
+                  const IconComponent = link.icon;
+                  return (
+                    <Link
+                      key={link.label}
+                      href={link.href}
+                      className="text-base font-medium text-foreground hover:text-primary transition-colors flex items-center py-3 px-2 rounded-md hover:bg-muted"
+                       onClick={(e) => handleNavLinkClick(e, link.href)}
+                    >
+                      <IconComponent className="inline-block mr-3 h-5 w-5 opacity-80" />
+                      {link.label}
+                    </Link>
+                  );
+                })}
                 <div className="border-t border-border pt-4 mt-2 space-y-3">
                   {isLoadingUser ? (
                      <Button variant="outline" className="w-full justify-start py-6" disabled>
@@ -272,9 +277,7 @@ export function LandingHeader() {
                       <Button variant="outline" className="w-full justify-start py-6 text-base" onClick={handleProfileClick}>
                         <UserCircle className="mr-3 h-5 w-5 opacity-80" /> Profil Akun
                       </Button>
-                      <Button variant="outline" className="w-full justify-start py-6 text-base" onClick={handleFriendsClick}>
-                        <Users className="mr-3 h-5 w-5 opacity-80" /> Teman
-                      </Button>
+                      {/* "Teman" is already in main navLinks, so no need to repeat here unless desired for logged-in specific access in mobile */}
                        <Button variant="outline" className="w-full justify-start py-6 text-base" onClick={handleLogout}>
                          <LogOut className="mr-3 h-5 w-5 opacity-80" /> Keluar
                       </Button>

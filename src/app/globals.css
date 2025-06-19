@@ -97,9 +97,10 @@
 }
 
 @layer base {
-  * {
-    @apply border-border;
-  }
+  /* 
+    Global border rule removed from here as it was causing issues.
+    Use specific border utilities or component styles instead.
+  */
   body {
     @apply bg-background text-foreground;
   }

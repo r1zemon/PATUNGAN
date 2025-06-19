@@ -27,12 +27,14 @@ const nextConfig: NextConfig = {
         protocol: 'https',
         // GANTI BAGIAN INI DENGAN ID PROYEK SUPABASE ANDA
         // Contoh: abcdefghijklmnop.supabase.co
-        hostname: '<YOUR_SUPABASE_PROJECT_REF>.supabase.co', 
+        hostname: 'fehsxporwyhbdpmnxwgh.supabase.co', 
         port: '',
-        pathname: '/storage/v1/object/public/avatars/**', // Sesuaikan jika path bucket atau file berbeda
+        // Pathname now reflects bucket 'avatars' and internal path 'public/avatars/...'
+        pathname: '/storage/v1/object/public/avatars/public/avatars/**', 
       }
     ],
   },
 };
 
 export default nextConfig;
+

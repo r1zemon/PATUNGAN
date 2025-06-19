@@ -432,10 +432,10 @@ export async function updateUserProfileAction(
   profileUpdates: { 
     full_name?: string | null; 
     username?: string | null; 
-    avatar_url?: string | null; // This will now primarily be set by file upload logic
+    avatar_url?: string | null;
     phone_number?: string | null;
   },
-  avatarFile?: File | null // New parameter for the avatar file
+  avatarFile?: File | null
 ): Promise<{ success: boolean; data?: any; error?: string | string[] }> {
   const supabase = createSupabaseServerClient();
   if (!userId) return { success: false, error: "User ID is required." };
@@ -445,29 +445,27 @@ export async function updateUserProfileAction(
   let avatarUrlChangedOrUploaded = false;
   const errorMessages: string[] = [];
 
-  // Fetch current profile to compare
   const { data: currentProfileData, error: fetchError } = await supabase
     .from('profiles')
     .select('avatar_url, full_name, username, phone_number')
     .eq('id', userId)
     .single();
 
-  if (fetchError && fetchError.code !== 'PGRST116') { // PGRST116 means no rows found, which is an error here
+  if (fetchError && fetchError.code !== 'PGRST116') {
     console.error("Error fetching current profile:", fetchError);
     return { success: false, error: `Gagal mengambil profil saat ini: ${fetchError.message}` };
   }
 
-
-  // 1. Handle Avatar Upload
   if (avatarFile) {
     const fileExt = avatarFile.name.split('.').pop();
-    const filePath = `public/${userId}/avatar.${fileExt}`; // Store in public/user_id/avatar.ext
+    // New file path: public/avatars/[USER_ID]/avatar.[EXTENSION]
+    const filePath = `public/avatars/${userId}/avatar.${fileExt}`; 
 
     const { error: uploadError } = await supabase.storage
-      .from('avatars') // Make sure this bucket name 'avatars' matches your Supabase setup
+      .from('avatars') // Bucket name is 'avatars'
       .upload(filePath, avatarFile, {
         cacheControl: '3600',
-        upsert: true, // Overwrite if exists
+        upsert: true, 
       });
 
     if (uploadError) {
@@ -475,8 +473,8 @@ export async function updateUserProfileAction(
       errorMessages.push(`Gagal mengunggah avatar: ${uploadError.message}`);
     } else {
       const { data: publicUrlData } = supabase.storage
-        .from('avatars')
-        .getPublicUrl(filePath);
+        .from('avatars') // Bucket name
+        .getPublicUrl(filePath); // Get public URL for the new path
 
       if (publicUrlData) {
         updatesForDB.avatar_url = publicUrlData.publicUrl;
@@ -486,13 +484,10 @@ export async function updateUserProfileAction(
       }
     }
   } else if (profileUpdates.avatar_url !== undefined && profileUpdates.avatar_url !== (currentProfileData?.avatar_url || null)) {
-    // Handle manual URL input if no file is uploaded and URL is explicitly changed or cleared
     updatesForDB.avatar_url = profileUpdates.avatar_url?.trim() || null;
     avatarUrlChangedOrUploaded = true;
   }
 
-
-  // 2. Handle other profile details
   if (profileUpdates.full_name !== undefined && profileUpdates.full_name !== (currentProfileData?.full_name || "")) {
     updatesForDB.full_name = profileUpdates.full_name;
     hasProfileDetailChanges = true;
@@ -506,14 +501,12 @@ export async function updateUserProfileAction(
     hasProfileDetailChanges = true;
   }
 
-  // Only proceed with DB update if there are actual changes
   if (!hasProfileDetailChanges && !avatarUrlChangedOrUploaded && errorMessages.length === 0) {
     return { success: true, data: currentProfileData, error: "Tidak ada perubahan untuk disimpan." };
   }
   if (!hasProfileDetailChanges && !avatarUrlChangedOrUploaded && errorMessages.length > 0) {
      return { success: false, data: currentProfileData, error: errorMessages.join('; ') };
   }
-
 
   if (Object.keys(updatesForDB).length > 0) {
     const { data: updatedProfile, error: dbUpdateError } = await supabase
@@ -540,11 +533,9 @@ export async function updateUserProfileAction(
     
     return { success: true, data: updatedProfile, error: undefined };
   } else if (errorMessages.length > 0) {
-     // Only avatar upload failed, but no other profile details changed
      return { success: false, data: currentProfileData, error: errorMessages.join('; ') };
   }
   
-  // Should not be reached if logic is correct, but as a fallback
   return { success: true, data: currentProfileData, error: "Tidak ada operasi pembaruan yang dilakukan." };
 }
 

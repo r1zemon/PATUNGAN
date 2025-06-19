@@ -7,14 +7,14 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import type { User as SupabaseUser } from "@supabase/supabase-js";
 
-import { getCurrentUserAction, logoutUserAction, updateUserProfileAction } from "@/lib/actions";
+import { getCurrentUserAction, logoutUserAction, updateUserProfileAction, removeAvatarAction } from "@/lib/actions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useToast } from "@/hooks/use-toast";
-import { Home, LogOut, Settings, UserCircle, Save, Edit3, Shield, BarChart2, Bell, AlertTriangle, FileImage, Loader2, History as HistoryIconLucide, Phone, AtSign, UserSquare2 } from "lucide-react";
+import { Home, LogOut, Settings, UserCircle, Save, Edit3, Shield, BarChart2, Bell, AlertTriangle, FileImage, Loader2, History as HistoryIconLucide, Phone, AtSign, UserSquare2, Trash2 } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import {
   DropdownMenu,
@@ -25,6 +25,17 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 
 interface Profile {
   id: string;
@@ -41,15 +52,17 @@ export default function ProfilePage() {
   
   const [isLoadingUser, setIsLoadingUser] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isRemovingAvatar, setIsRemovingAvatar] = useState(false);
+
 
   const [formData, setFormData] = useState({
     fullName: "",
     username: "",
     phoneNumber: "",
-    avatarUrl: "", // For manual URL input
+    avatarUrl: "", 
   });
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
-  const [avatarPreview, setAvatarPreview] = useState<string | null>(null); // For form preview only
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null); 
 
 
   const { toast } = useToast();
@@ -67,14 +80,15 @@ export default function ProfilePage() {
 
     setAuthUser(user);
     if (profile) {
-      setUserProfile(profile as Profile); 
+      const typedProfile = profile as Profile;
+      setUserProfile(typedProfile); 
       setFormData({
-        fullName: profile.full_name || "",
-        username: profile.username || "",
-        phoneNumber: profile.phone_number || "",
-        avatarUrl: profile.avatar_url || "", 
+        fullName: typedProfile.full_name || "",
+        username: typedProfile.username || "",
+        phoneNumber: typedProfile.phone_number || "",
+        avatarUrl: typedProfile.avatar_url || "", 
       });
-      setAvatarPreview(profile.avatar_url || null); // Set initial form preview from DB
+      setAvatarPreview(typedProfile.avatar_url || null); 
     }
     setIsLoadingUser(false);
   }, [router, toast]);
@@ -109,13 +123,12 @@ export default function ProfilePage() {
       setAvatarFile(file);
       const reader = new FileReader();
       reader.onloadend = () => {
-        setAvatarPreview(reader.result as string); // Update only form preview
+        setAvatarPreview(reader.result as string); 
       };
       reader.readAsDataURL(file);
     } else {
       setAvatarFile(null);
-      // If file selection is cleared, revert form preview to DB avatar_url or initial if no DB URL
-      setAvatarPreview(userProfile?.avatar_url || null);
+      setAvatarPreview(formData.avatarUrl || userProfile?.avatar_url || null);
     }
   };
 
@@ -160,7 +173,6 @@ export default function ProfilePage() {
     if (typeof formData.phoneNumber === 'string' && formData.phoneNumber.trim() !== '') {
         processedPhoneNumber = formData.phoneNumber.trim();
     } else if (typeof formData.phoneNumber === 'string' && formData.phoneNumber.trim() === '' && userProfile.phone_number) {
-        // User cleared the phone number
         processedPhoneNumber = null;
     }
 
@@ -192,19 +204,17 @@ export default function ProfilePage() {
 
     if (success && updatedProfileData) {
       toast({ title: "Profil Diperbarui", description: "Informasi akun Anda berhasil disimpan." });
-      // Update userProfile state with the newly saved data. This will update the header avatar.
-      setUserProfile(prevProfile => ({...(prevProfile || {}), ...updatedProfileData} as Profile) ); 
+      const typedUpdatedProfile = updatedProfileData as Profile;
+      setUserProfile(prevProfile => ({...(prevProfile || {}), ...typedUpdatedProfile} as Profile) ); 
       
-      // Update formData to reflect saved data
       setFormData(prev => ({
           ...prev,
-          fullName: updatedProfileData.full_name || "",
-          username: updatedProfileData.username || "",
-          phoneNumber: updatedProfileData.phone_number || "",
-          avatarUrl: updatedProfileData.avatar_url || "", 
+          fullName: typedUpdatedProfile.full_name || "",
+          username: typedUpdatedProfile.username || "",
+          phoneNumber: typedUpdatedProfile.phone_number || "",
+          avatarUrl: typedUpdatedProfile.avatar_url || "", 
       }));
-      // Reset form's avatar preview to the saved one
-      setAvatarPreview(updatedProfileData.avatar_url || null);
+      setAvatarPreview(typedUpdatedProfile.avatar_url || null);
       setAvatarFile(null); 
       if (document.getElementById('avatarFile')) {
         (document.getElementById('avatarFile') as HTMLInputElement).value = ""; 
@@ -217,6 +227,29 @@ export default function ProfilePage() {
     setIsSaving(false);
   };
   
+  const handleRemoveAvatar = async () => {
+    if (!authUser || !userProfile || !userProfile.avatar_url) {
+        toast({ variant: "destructive", title: "Gagal", description: "Tidak ada foto profil untuk dihapus."});
+        return;
+    }
+    setIsRemovingAvatar(true);
+    const { success, data, error } = await removeAvatarAction(authUser.id);
+    if (success) {
+        toast({ title: "Foto Profil Dihapus", description: "Foto profil Anda berhasil dihapus." });
+        setUserProfile(prev => ({ ...prev, avatar_url: null } as Profile));
+        setFormData(prev => ({ ...prev, avatarUrl: "" }));
+        setAvatarPreview(null);
+        setAvatarFile(null);
+        if (document.getElementById('avatarFile')) {
+            (document.getElementById('avatarFile') as HTMLInputElement).value = "";
+        }
+        router.refresh();
+    } else {
+        toast({ variant: "destructive", title: "Gagal Menghapus Foto", description: error || "Tidak dapat menghapus foto profil." });
+    }
+    setIsRemovingAvatar(false);
+  };
+
   const handleLogout = async () => {
     const { success, error: logoutErr } = await logoutUserAction();
     if (success) {
@@ -227,12 +260,10 @@ export default function ProfilePage() {
     }
   };
   
-  // For header avatar - uses the saved userProfile state
   const headerDisplayName = userProfile?.full_name || userProfile?.username || authUser?.email || "Pengguna";
   const headerAvatarInitial = headerDisplayName ? headerDisplayName.substring(0,1).toUpperCase() : "P";
   const headerAvatarUrl = userProfile?.avatar_url;
 
-  // For form preview avatar - uses avatarPreview state
   const formPreviewDisplayName = formData.fullName || formData.username || authUser?.email || "Pengguna";
   const formPreviewAvatarInitial = formPreviewDisplayName ? formPreviewDisplayName.substring(0,1).toUpperCase() : "P";
 
@@ -276,7 +307,7 @@ export default function ProfilePage() {
             </h1>
           </Link>
           <div className="flex items-center gap-2 sm:gap-4">
-            <Link href="/" passHref> {/* Changed from /app to / */}
+            <Link href="/" passHref>
               <Button variant="ghost" size="icon" aria-label="Kembali ke Beranda">
                 <Home className="h-5 w-5" />
               </Button>
@@ -342,7 +373,6 @@ export default function ProfilePage() {
               <CardContent className="space-y-6">
                 <div className="flex flex-col items-center space-y-3">
                     <Avatar className="h-24 w-24">
-                        {/* Avatar for form preview uses avatarPreview state */}
                         <AvatarImage src={avatarPreview || `https://placehold.co/96x96.png?text=${formPreviewAvatarInitial}`} alt={formData.fullName || formPreviewDisplayName} data-ai-hint="user avatar large"/>
                         <AvatarFallback className="text-3xl">{formPreviewAvatarInitial}</AvatarFallback>
                     </Avatar>
@@ -351,6 +381,36 @@ export default function ProfilePage() {
                         <Input id="avatarFile" type="file" accept="image/jpeg,image/png,image/webp,image/gif" onChange={handleAvatarFileChange} />
                         <p className="text-xs text-muted-foreground">Pilih file untuk diunggah, atau masukkan URL di bawah.</p>
                     </div>
+                     {userProfile.avatar_url && (
+                        <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                                <Button 
+                                    type="button" 
+                                    variant="outline" 
+                                    size="sm" 
+                                    className="text-destructive hover:text-destructive hover:bg-destructive/10 border-destructive/50"
+                                    disabled={isRemovingAvatar || isSaving}
+                                >
+                                    {isRemovingAvatar ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Trash2 className="mr-2 h-4 w-4" />}
+                                    Hapus Foto Profil
+                                </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                                <AlertDialogHeader>
+                                <AlertDialogTitle>Anda yakin ingin menghapus foto profil?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                    Tindakan ini akan menghapus foto profil Anda secara permanen dari server dan database.
+                                </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                <AlertDialogCancel>Batal</AlertDialogCancel>
+                                <AlertDialogAction onClick={handleRemoveAvatar} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">
+                                    Ya, Hapus Foto
+                                </AlertDialogAction>
+                                </AlertDialogFooter>
+                            </AlertDialogContent>
+                        </AlertDialog>
+                    )}
                 </div>
 
                 <div className="space-y-2">
@@ -392,7 +452,7 @@ export default function ProfilePage() {
                 </div>
               </CardContent>
               <CardFooter>
-                <Button type="submit" disabled={isSaving} className="w-full sm:w-auto">
+                <Button type="submit" disabled={isSaving || isRemovingAvatar} className="w-full sm:w-auto">
                   {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Save className="mr-2 h-4 w-4" />}
                   {isSaving ? "Menyimpan..." : "Simpan Perubahan Akun"}
                 </Button>

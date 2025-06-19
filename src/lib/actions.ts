@@ -451,18 +451,17 @@ export async function updateUserProfileAction(
     .eq('id', userId)
     .single();
 
-  if (fetchError && fetchError.code !== 'PGRST116') {
+  if (fetchError && fetchError.code !== 'PGRST116') { // PGRST116 means no rows found, which is fine if creating new
     console.error("Error fetching current profile:", fetchError);
     return { success: false, error: `Gagal mengambil profil saat ini: ${fetchError.message}` };
   }
 
   if (avatarFile) {
     const fileExt = avatarFile.name.split('.').pop();
-    // New file path: public/avatars/[USER_ID]/avatar.[EXTENSION]
     const filePath = `public/avatars/${userId}/avatar.${fileExt}`; 
 
     const { error: uploadError } = await supabase.storage
-      .from('avatars') // Bucket name is 'avatars'
+      .from('avatars') 
       .upload(filePath, avatarFile, {
         cacheControl: '3600',
         upsert: true, 
@@ -473,8 +472,8 @@ export async function updateUserProfileAction(
       errorMessages.push(`Gagal mengunggah avatar: ${uploadError.message}`);
     } else {
       const { data: publicUrlData } = supabase.storage
-        .from('avatars') // Bucket name
-        .getPublicUrl(filePath); // Get public URL for the new path
+        .from('avatars') 
+        .getPublicUrl(filePath); 
 
       if (publicUrlData) {
         updatesForDB.avatar_url = publicUrlData.publicUrl;
@@ -484,9 +483,12 @@ export async function updateUserProfileAction(
       }
     }
   } else if (profileUpdates.avatar_url !== undefined && profileUpdates.avatar_url !== (currentProfileData?.avatar_url || null)) {
+    // This case handles explicitly setting avatar_url to null or a new URL if no file is uploaded.
+    // If profileUpdates.avatar_url is an empty string from the form, it means user wants to remove by URL field.
     updatesForDB.avatar_url = profileUpdates.avatar_url?.trim() || null;
     avatarUrlChangedOrUploaded = true;
   }
+
 
   if (profileUpdates.full_name !== undefined && profileUpdates.full_name !== (currentProfileData?.full_name || "")) {
     updatesForDB.full_name = profileUpdates.full_name;
@@ -536,7 +538,88 @@ export async function updateUserProfileAction(
      return { success: false, data: currentProfileData, error: errorMessages.join('; ') };
   }
   
-  return { success: true, data: currentProfileData, error: "Tidak ada operasi pembaruan yang dilakukan." };
+  return { success: true, data: currentProfileData, error: "Tidak ada operasi pembaruan yang dilakukan atau hanya ada error dari unggah avatar." };
+}
+
+export async function removeAvatarAction(userId: string): Promise<{ success: boolean; data?: { avatar_url: null }; error?: string }> {
+    const supabase = createSupabaseServerClient();
+    if (!userId) {
+        return { success: false, error: "User ID diperlukan." };
+    }
+
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user || user.id !== userId) {
+        return { success: false, error: "Tidak terautentikasi atau tidak diizinkan." };
+    }
+
+    const { data: currentProfile, error: fetchProfileError } = await supabase
+        .from('profiles')
+        .select('avatar_url')
+        .eq('id', userId)
+        .single();
+
+    if (fetchProfileError) {
+        console.error("Error fetching profile for avatar removal:", fetchProfileError);
+        return { success: false, error: `Gagal mengambil profil: ${fetchProfileError.message}` };
+    }
+
+    if (!currentProfile?.avatar_url) {
+        return { success: true, data: { avatar_url: null }, error: "Tidak ada foto profil untuk dihapus." }; // Already no avatar
+    }
+
+    // Extract file path from public URL
+    // Example URL: https://<project_ref>.supabase.co/storage/v1/object/public/avatars/public/avatars/user-id-123/avatar.png
+    // We need to extract: public/avatars/user-id-123/avatar.png
+    const urlParts = currentProfile.avatar_url.split('/avatars/'); // Split by bucket name
+    if (urlParts.length < 2) {
+        console.warn("Could not parse avatar_url to get storage path:", currentProfile.avatar_url);
+        // Fallback: try to remove from DB anyway
+        const { error: dbOnlyError } = await supabase
+            .from('profiles')
+            .update({ avatar_url: null })
+            .eq('id', userId);
+        if (dbOnlyError) {
+            return { success: false, error: `Format URL avatar tidak dikenali dan gagal menghapus dari database: ${dbOnlyError.message}` };
+        }
+        revalidatePath('/app/profile', 'page');
+        revalidatePath('/', 'layout');
+        return { success: true, data: { avatar_url: null } }; // Successfully removed from DB
+    }
+    
+    const filePathInBucket = urlParts.slice(1).join('/avatars/'); // Reconstruct path after bucket name
+    
+    const { error: storageError } = await supabase.storage
+        .from('avatars') // Bucket name
+        .remove([filePathInBucket]);
+
+    if (storageError) {
+        // Log the error but proceed to update DB if it's a "Not found" type error,
+        // as the file might have been deleted manually or path mismatch.
+        if (storageError.message.toLowerCase().includes('not found')) {
+            console.warn(`Avatar file not found in storage at path ${filePathInBucket}, but proceeding to clear DB link.`);
+        } else {
+            console.error("Error deleting avatar from storage:", storageError);
+            return { success: false, error: `Gagal menghapus file avatar dari storage: ${storageError.message}` };
+        }
+    }
+
+    const { error: dbUpdateError } = await supabase
+        .from('profiles')
+        .update({ avatar_url: null })
+        .eq('id', userId);
+
+    if (dbUpdateError) {
+        console.error("Error clearing avatar_url in DB:", dbUpdateError);
+        return { success: false, error: `Gagal mengosongkan URL avatar di database: ${dbUpdateError.message}` };
+    }
+
+    revalidatePath('/app/profile', 'page');
+    revalidatePath('/', 'layout'); // For header updates
+    revalidatePath('/app', 'layout'); 
+    revalidatePath('/app/history', 'page');
+
+
+    return { success: true, data: { avatar_url: null } };
 }
 
 
@@ -603,4 +686,6 @@ export async function getBillsHistoryAction(): Promise<{ success: boolean; data?
   
   return { success: true, data: historyEntries };
 }
+    
+
     

@@ -25,7 +25,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useToast } from "@/hooks/use-toast";
 import { Separator } from "@/components/ui/separator";
-import { Home, LogOut, Settings, UserCircle, Power, Info, Percent, Landmark, UserCheck, Loader2, UserPlus, ArrowRight, Trash2, Users, ScanLine, PlusCircle, Edit2, ListChecks, FilePlus, FileText, CalendarClock } from "lucide-react";
+import { Home, LogOut, Settings, UserCircle, Power, Info, Percent, Landmark, UserCheck, Loader2, UserPlus, ArrowRight, Trash2, Users, ScanLine, PlusCircle, Edit2, ListChecks, FilePlus, FileText, CalendarClock, History as HistoryIconLucide } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -449,8 +449,8 @@ export default function SplitBillAppPage() {
 
   return (
     <div className="relative flex flex-col min-h-screen bg-background bg-money-pattern bg-[length:120px_auto] before:content-[''] before:absolute before:inset-0 before:bg-white/[.90] before:dark:bg-black/[.90] before:z-0">
-       <header className="relative z-30 py-4 px-4 sm:px-6 md:px-8 border-b sticky top-0 bg-background/80 backdrop-blur-md">
-        <div className="container mx-auto flex items-center justify-between h-20"> 
+       <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/80 backdrop-blur-md shadow-sm">
+        <div className="container mx-auto flex h-20 items-center justify-between px-4 sm:px-6"> 
           <Link href="/" className="flex items-center gap-2 text-primary hover:text-primary/80 transition-colors">
             <Image src="/logo.png" alt="Patungan Logo" width={56} height={56} className="rounded-lg shadow-sm" data-ai-hint="logo company"/>
             <h1 className="text-2xl font-bold tracking-tight text-foreground">
@@ -508,7 +508,7 @@ export default function SplitBillAppPage() {
         </div>
       </header>
 
-      <div className="relative z-10 container mx-auto px-4 py-8 md:px-6 md:py-12 flex-grow">
+      <main className="relative z-10 container mx-auto px-4 py-8 md:px-6 md:py-12 flex-grow">
         {!authUser && !isLoadingUser && (
              <Card className="shadow-xl overflow-hidden bg-card/90 backdrop-blur-sm hover:shadow-2xl transition-shadow duration-300 ease-in-out">
                 <CardHeader className="bg-card/60 border-b">
@@ -529,7 +529,7 @@ export default function SplitBillAppPage() {
         )}
 
         {authUser && (
-        <main className="relative z-10 space-y-8">
+        <div className="space-y-8">
           {error && (
             <Alert variant="destructive" className="shadow-md">
               <Power className="h-4 w-4" />
@@ -841,13 +841,13 @@ export default function SplitBillAppPage() {
               </CardContent>
             </Card>
           )}
-        </main>
+        </div>
         )}
-        <footer className="relative z-10 mt-12 pt-8 border-t border-border/40 text-center text-sm text-muted-foreground">
-          <p>&copy; {new Date().getFullYear()} Patungan. Hak cipta dilindungi.</p>
-          <p>Ditenagai oleh Next.js, Shadcn/UI, Genkit, dan Supabase.</p>
-        </footer>
-      </div>
+      </main>
+      <footer className="relative z-10 mt-12 pt-8 border-t border-border/40 text-center text-sm text-muted-foreground">
+        <p>&copy; {new Date().getFullYear()} Patungan. Hak cipta dilindungi.</p>
+        <p>Ditenagai oleh Next.js, Shadcn/UI, Genkit, dan Supabase.</p>
+      </footer>
     </div>
   );
 }

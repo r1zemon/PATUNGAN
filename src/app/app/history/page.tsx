@@ -35,7 +35,7 @@ interface Profile {
   email?: string; 
 }
 
-const MAX_FREE_HISTORY_ITEMS = 3; // Batas item riwayat gratis
+const MAX_FREE_HISTORY_ITEMS = 3; 
 
 export default function HistoryPage() {
   const [billsHistory, setBillsHistory] = useState<BillHistoryEntry[]>([]);
@@ -45,7 +45,7 @@ export default function HistoryPage() {
   const [authUser, setAuthUser] = useState<SupabaseUser | null>(null);
   const [userProfile, setUserProfile] = useState<Profile | null>(null);
   const [isLoadingUser, setIsLoadingUser] = useState(true);
-  const [isPremiumUser, setIsPremiumUser] = useState(false); // Nanti ini akan dari data pengguna
+  const [isPremiumUser, setIsPremiumUser] = useState(false); 
 
   const { toast } = useToast();
   const router = useRouter();
@@ -65,9 +65,7 @@ export default function HistoryPage() {
     setAuthUser(user);
     setUserProfile(profile);
     setIsLoadingUser(false);
-    // TODO: Cek status premium pengguna di sini dan set setIsPremiumUser
-    // Untuk sekarang, kita asumsikan bukan premium:
-    // setIsPremiumUser(profile?.is_premium || false); 
+    // setIsPremiumUser(profile?.is_premium || false); // Implement this later
 
 
     const historyResult = await getBillsHistoryAction();
@@ -104,8 +102,8 @@ export default function HistoryPage() {
   if (isLoadingUser || isLoadingHistory) {
     return (
       <div className="relative flex flex-col min-h-screen bg-background bg-money-pattern bg-[length:120px_auto] before:content-[''] before:absolute before:inset-0 before:bg-white/[.90] before:dark:bg-black/[.90] before:z-0">
-        <header className="relative z-30 py-4 px-4 sm:px-6 md:px-8 border-b sticky top-0 bg-background/80 backdrop-blur-md">
-          <div className="container mx-auto flex items-center justify-between h-20"> 
+        <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/80 backdrop-blur-md shadow-sm">
+          <div className="container mx-auto flex h-20 items-center justify-between px-4 sm:px-6"> 
             <Link href="/" className="flex items-center gap-2 text-primary hover:text-primary/80 transition-colors">
               <Image src="/logo.png" alt="Patungan Logo" width={56} height={56} className="rounded-lg shadow-sm" data-ai-hint="logo company"/>
               <h1 className="text-2xl font-bold tracking-tight text-foreground">Patungan</h1>
@@ -134,8 +132,8 @@ export default function HistoryPage() {
 
   return (
     <div className="relative flex flex-col min-h-screen bg-background bg-money-pattern bg-[length:120px_auto] before:content-[''] before:absolute before:inset-0 before:bg-white/[.90] before:dark:bg-black/[.90] before:z-0">
-      <header className="relative z-30 py-4 px-4 sm:px-6 md:px-8 border-b sticky top-0 bg-background/80 backdrop-blur-md">
-        <div className="container mx-auto flex items-center justify-between h-20"> 
+      <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/80 backdrop-blur-md shadow-sm">
+        <div className="container mx-auto flex h-20 items-center justify-between px-4 sm:px-6"> 
           <Link href="/" className="flex items-center gap-2 text-primary hover:text-primary/80 transition-colors">
             <Image src="/logo.png" alt="Patungan Logo" width={56} height={56} className="rounded-lg shadow-sm" data-ai-hint="logo company"/>
             <h1 className="text-2xl font-bold tracking-tight text-foreground">
@@ -297,7 +295,7 @@ export default function HistoryPage() {
           </Card>
         )}
 
-        <Card className="shadow-lg mt-10 mb-8"> {/* Ringkasan Finansial dipindah ke sini */}
+        <Card className="shadow-lg mt-10 mb-8">
             <CardHeader>
               <CardTitle className="flex items-center"><BarChart2 className="mr-2 h-5 w-5 text-primary"/> Ringkasan Finansial</CardTitle>
               <CardDescription>Statistik penggunaan aplikasi Patungan Anda.</CardDescription>

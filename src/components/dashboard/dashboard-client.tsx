@@ -32,6 +32,15 @@ const PREDEFINED_CATEGORY_COLORS: { [key: string]: string } = {
   "Lainnya": "hsl(var(--chart-5))",
 };
 
+const CATEGORY_ICONS: { [key: string]: React.ElementType } = {
+  "Makanan": Utensils,
+  "Transportasi": Car,
+  "Hiburan": Gamepad2,
+  "Penginapan": BedDouble,
+  "Belanja Online": Shapes, // Example from dummy data
+  "Lainnya": Shapes, // Default for "Lainnya" and other unmapped categories
+};
+
 const getDummyDashboardData = (): DashboardData => {
   const now = new Date();
   return {
@@ -80,18 +89,18 @@ export function DashboardClient({ authUser }: DashboardClientProps) {
 
   const chartConfig = useMemo(() => {
     const config: ChartConfig = {};
-    // Ensure "Lainnya" category gets a default icon if not explicitly set by dummy data.
     const defaultOtherIcon = Shapes;
 
     dashboardData?.monthlyExpenses.forEach(expense => {
       config[expense.categoryName] = {
         label: expense.categoryName,
         color: expense.color || PREDEFINED_CATEGORY_COLORS[expense.categoryName] || PREDEFINED_CATEGORY_COLORS["Lainnya"],
-        icon: expense.icon || (expense.categoryName === "Lainnya" ? defaultOtherIcon : Shapes),
+        icon: expense.icon || CATEGORY_ICONS[expense.categoryName] || defaultOtherIcon,
       };
     });
-     // Ensure all predefined categories and "Lainnya" have a config entry for the legend, even if no expense
+    
     const allCategoriesForLegend = ["Makanan", "Transportasi", "Hiburan", "Penginapan", "Lainnya"];
+    // Add any category from actual expenses that might not be in the predefined list (e.g., "Belanja Online")
     dashboardData?.monthlyExpenses.map(e => e.categoryName).forEach(cn => {
         if (!allCategoriesForLegend.includes(cn)) allCategoriesForLegend.push(cn);
     });
@@ -101,7 +110,7 @@ export function DashboardClient({ authUser }: DashboardClientProps) {
             config[catName] = {
                 label: catName,
                 color: PREDEFINED_CATEGORY_COLORS[catName] || PREDEFINED_CATEGORY_COLORS["Lainnya"],
-                icon: CATEGORY_ICONS[catName] || (catName === "Lainnya" ? defaultOtherIcon : Shapes),
+                icon: CATEGORY_ICONS[catName] || defaultOtherIcon,
             };
         }
     });
@@ -168,7 +177,7 @@ export function DashboardClient({ authUser }: DashboardClientProps) {
                 <p className="text-3xl font-bold text-primary">{formatCurrency(totalMonthlySpending)}</p>
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mt-4">
                     {monthlyExpenses.filter(e => e.totalAmount > 0).map((expense) => {
-                       const Icon = expense.icon || Shapes;
+                       const Icon = expense.icon || CATEGORY_ICONS[expense.categoryName] || Shapes;
                        return (
                         <div key={expense.categoryName} className="flex flex-col items-center p-3 bg-muted/50 rounded-lg shadow-sm">
                             <Icon className="h-6 w-6 mb-1.5" style={{ color: expense.color }} />
@@ -320,3 +329,4 @@ export function DashboardClient({ authUser }: DashboardClientProps) {
     </div>
   );
 }
+

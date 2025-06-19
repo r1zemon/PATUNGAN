@@ -33,7 +33,7 @@ interface Profile {
 const navLinks = [
   { href: '/', label: 'Beranda', icon: Home },
   { href: '/app/history', label: 'Riwayat', icon: ListChecks },
-  { href: '/app/social', label: 'Teman', icon: Users }, // Replaced Kontak with Teman
+  { href: '/app/social', label: 'Teman', icon: Users }, 
 ];
 
 export function LandingHeader() {
@@ -126,11 +126,8 @@ export function LandingHeader() {
     } else if (href === '/app/social') { // Handling "Teman" link
       handleFriendsNavigation();
     }
-    // Removed #contact handling
     else {
-      // For any other unhandled links (if any were added to navLinks)
       if (href.startsWith('#')) {
-        // Handle hash links if needed, or let default behavior by not preventing default
       } else {
         router.push(href);
       }
@@ -194,10 +191,6 @@ export function LandingHeader() {
                   <DropdownMenuItem onClick={handleProfileClick}>
                     <UserCircle className="mr-2 h-4 w-4" />
                     <span>Profil</span>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={handleFriendsNavigation}> 
-                    <Users className="mr-2 h-4 w-4" />
-                    <span>Teman</span>
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => toast({title: "Info", description: "Pengaturan belum diimplementasikan."})}>
                     <Settings className="mr-2 h-4 w-4" />
@@ -277,7 +270,6 @@ export function LandingHeader() {
                       <Button variant="outline" className="w-full justify-start py-6 text-base" onClick={handleProfileClick}>
                         <UserCircle className="mr-3 h-5 w-5 opacity-80" /> Profil Akun
                       </Button>
-                      {/* "Teman" is already in main navLinks, so no need to repeat here unless desired for logged-in specific access in mobile */}
                        <Button variant="outline" className="w-full justify-start py-6 text-base" onClick={handleLogout}>
                          <LogOut className="mr-3 h-5 w-5 opacity-80" /> Keluar
                       </Button>

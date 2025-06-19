@@ -173,10 +173,6 @@ export default function HistoryPage() {
                     <UserCircle className="mr-2 h-4 w-4" />
                     <span>Profil</span>
                   </DropdownMenuItem>
-                   <DropdownMenuItem onClick={() => toast({title: "Segera Hadir", description: "Fitur Teman belum diimplementasikan."})}>
-                    <Users className="mr-2 h-4 w-4" />
-                    <span>Teman</span>
-                  </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => toast({title: "Info", description: "Pengaturan belum diimplementasikan."})}>
                     <Settings className="mr-2 h-4 w-4" />
                     <span>Pengaturan</span>

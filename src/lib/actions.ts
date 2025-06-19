@@ -24,13 +24,39 @@ export async function signupUserAction(formData: FormData) {
     return { success: false, error: "Email, password, nama lengkap, dan username wajib diisi." };
   }
 
+  const trimmedUsername = username.trim();
+  if (!trimmedUsername) {
+    return { success: false, error: "Username tidak boleh kosong." };
+  }
+  const trimmedFullName = fullName.trim();
+   if (!trimmedFullName) {
+    return { success: false, error: "Nama lengkap tidak boleh kosong." };
+  }
+
+
+  // Check for username uniqueness
+  const { data: existingUserWithUsername, error: usernameCheckError } = await supabase
+    .from('profiles')
+    .select('username')
+    .eq('username', trimmedUsername)
+    .single();
+
+  if (usernameCheckError && usernameCheckError.code !== 'PGRST116') { // PGRST116 means no rows found, which is good
+    console.error("Error checking username uniqueness:", usernameCheckError);
+    return { success: false, error: "Gagal memverifikasi username. Silakan coba lagi." };
+  }
+
+  if (existingUserWithUsername) {
+    return { success: false, error: "Username sudah digunakan. Silakan pilih username lain." };
+  }
+
   const { data: authData, error: authError } = await supabase.auth.signUp({
     email,
     password,
     options: {
       data: { 
-        full_name: fullName,
-        username: username,
+        full_name: trimmedFullName, // Use trimmed
+        username: trimmedUsername,  // Use trimmed
       }
     }
   });
@@ -49,10 +75,10 @@ export async function signupUserAction(formData: FormData) {
     .from('profiles')
     .insert({ 
       id: authData.user.id, 
-      full_name: fullName,
-      username: username,
+      full_name: trimmedFullName, // Use trimmed
+      username: trimmedUsername, // Use trimmed
       email: email, 
-      phone_number: phoneNumber || null
+      phone_number: phoneNumber ? phoneNumber.trim() : null
     });
 
   if (profileError) {
@@ -91,7 +117,7 @@ export async function loginUserAction(formData: FormData) {
   revalidatePath('/', 'layout');
   revalidatePath('/app', 'page'); 
   revalidatePath('/app', 'layout'); 
-  revalidatePath('/login', 'page');
+  revalidatePath('/', 'page'); // Changed from /login
   return { success: true, user: data.user };
 }
 
@@ -132,7 +158,7 @@ export async function logoutUserAction() {
   revalidatePath('/', 'layout');
   revalidatePath('/app', 'page'); 
   revalidatePath('/app', 'layout'); 
-  revalidatePath('/login', 'page');
+  revalidatePath('/', 'page'); // Changed from /login
   return { success: true };
 }
 
@@ -432,7 +458,7 @@ export async function updateUserProfileAction(
   profileUpdates: { 
     full_name?: string | null; 
     username?: string | null; 
-    avatar_url?: string | null;
+    avatar_url?: string | null; // Can be null to signify removal
     phone_number?: string | null;
   },
   avatarFile?: File | null
@@ -441,9 +467,6 @@ export async function updateUserProfileAction(
   if (!userId) return { success: false, error: "User ID is required." };
 
   try {
-    const updatesForDB: Partial<Database['public']['Tables']['profiles']['Update']> = {};
-    let hasProfileDetailChanges = false;
-    let avatarUrlChangedOrUploaded = false;
     const errorMessages: string[] = [];
 
     const { data: currentProfileData, error: fetchError } = await supabase
@@ -452,65 +475,114 @@ export async function updateUserProfileAction(
       .eq('id', userId)
       .single();
 
-    if (fetchError && fetchError.code !== 'PGRST116') { 
+    if (fetchError && fetchError.code !== 'PGRST116') { // PGRST116 means no rows found
       console.error("Error fetching current profile:", fetchError);
       return { success: false, error: `Gagal mengambil profil saat ini: ${fetchError.message}` };
     }
+    if (!currentProfileData && fetchError?.code === 'PGRST116') {
+        console.error("Profile not found for user ID:", userId);
+        return { success: false, error: "Profil pengguna tidak ditemukan." };
+    }
+    // If currentProfileData is null here, it means the profile doesn't exist, which is an issue.
+    if (!currentProfileData) {
+        console.error("Profile data is unexpectedly null for user ID:", userId);
+        return { success: false, error: "Data profil pengguna tidak valid." };
+    }
+
+
+    const updatesForDB: Partial<Database['public']['Tables']['profiles']['Update']> = {};
+    let hasProfileDetailChanges = false;
+
+    // Username uniqueness and change check
+    if (profileUpdates.username !== undefined) {
+        const newUsernameTrimmed = profileUpdates.username === null ? "" : profileUpdates.username.trim();
+        const currentUsername = currentProfileData.username || "";
+
+        if (newUsernameTrimmed !== currentUsername) {
+            if (!newUsernameTrimmed) {
+                return { success: false, error: "Username tidak boleh kosong." };
+            }
+            const { data: existingUser, error: usernameCheckErr } = await supabase
+                .from('profiles')
+                .select('id')
+                .eq('username', newUsernameTrimmed)
+                .single();
+
+            if (usernameCheckErr && usernameCheckErr.code !== 'PGRST116') {
+                console.error("Error checking new username uniqueness:", usernameCheckErr);
+                return { success: false, error: "Gagal memverifikasi username baru. Silakan coba lagi." };
+            }
+            if (existingUser && existingUser.id !== userId) {
+                return { success: false, error: "Username tersebut sudah digunakan oleh pengguna lain." };
+            }
+            updatesForDB.username = newUsernameTrimmed;
+            hasProfileDetailChanges = true;
+        }
+    }
+
+    // Full Name change check
+    if (profileUpdates.full_name !== undefined) {
+        const newFullNameTrimmed = profileUpdates.full_name === null ? "" : profileUpdates.full_name.trim();
+        const currentFullName = currentProfileData.full_name || "";
+        if (newFullNameTrimmed !== currentFullName) {
+            if (!newFullNameTrimmed) {
+                return { success: false, error: "Nama lengkap tidak boleh kosong." };
+            }
+            updatesForDB.full_name = newFullNameTrimmed;
+            hasProfileDetailChanges = true;
+        }
+    }
+    
+    // Phone Number change check
+    if (profileUpdates.phone_number !== undefined) {
+        const newPhoneNumber = profileUpdates.phone_number === null ? null : profileUpdates.phone_number.trim();
+        const currentPhoneNumber = currentProfileData.phone_number || null;
+        if (newPhoneNumber !== currentPhoneNumber) {
+             // Allow empty string to become null for phone_number
+            updatesForDB.phone_number = newPhoneNumber === "" ? null : newPhoneNumber;
+            hasProfileDetailChanges = true;
+        }
+    }
+
+    // Avatar handling
+    let avatarUrlToUpdate: string | null | undefined = undefined; // undefined means no change to avatar_url from this logic path
 
     if (avatarFile) {
-      const fileExt = avatarFile.name.split('.').pop();
-      // Path construction consistent with RLS policy: public/avatars/<user_id>/filename.ext
-      const filePath = `public/avatars/${userId}/avatar.${fileExt}`; 
+        const fileExt = avatarFile.name.split('.').pop();
+        const filePath = `public/avatars/${userId}/avatar.${fileExt}`;
+        const { error: uploadError } = await supabase.storage
+            .from('avatars')
+            .upload(filePath, avatarFile, { cacheControl: '3600', upsert: true });
 
-      const { error: uploadError } = await supabase.storage
-        .from('avatars') 
-        .upload(filePath, avatarFile, {
-          cacheControl: '3600',
-          upsert: true, 
-        });
-
-      if (uploadError) {
-        console.error("Error uploading avatar:", uploadError);
-        errorMessages.push(`Gagal mengunggah avatar: ${uploadError.message}`);
-      } else {
-        const { data: publicUrlData } = supabase.storage
-          .from('avatars') 
-          .getPublicUrl(filePath); 
-
-        if (publicUrlData) {
-          updatesForDB.avatar_url = publicUrlData.publicUrl;
-          avatarUrlChangedOrUploaded = true;
+        if (uploadError) {
+            console.error("Error uploading avatar:", uploadError);
+            errorMessages.push(`Gagal mengunggah avatar: ${uploadError.message}`);
         } else {
-          // This case should ideally not happen if upload was successful and path is correct.
-          // If getPublicUrl itself returns an error object, it's usually indicative of a problem.
-          console.warn("getPublicUrl did not return data for a supposedly successful upload:", filePath);
-          errorMessages.push('Gagal mendapatkan URL publik avatar setelah unggah. File mungkin terunggah tapi URL tidak bisa diambil.');
+            const { data: publicUrlData } = supabase.storage.from('avatars').getPublicUrl(filePath);
+            if (publicUrlData && publicUrlData.publicUrl) {
+                avatarUrlToUpdate = publicUrlData.publicUrl;
+            } else {
+                errorMessages.push('Gagal mendapatkan URL publik avatar setelah unggah.');
+            }
         }
-      }
-    } else if (profileUpdates.avatar_url !== undefined && profileUpdates.avatar_url !== (currentProfileData?.avatar_url || null)) {
-      updatesForDB.avatar_url = profileUpdates.avatar_url; 
-      avatarUrlChangedOrUploaded = true;
+    } else if (profileUpdates.avatar_url === null && currentProfileData.avatar_url !== null) {
+        // This case is for explicit removal of avatar (setting avatar_url to null)
+        avatarUrlToUpdate = null;
     }
+    
+    if (avatarUrlToUpdate !== undefined) {
+        updatesForDB.avatar_url = avatarUrlToUpdate;
+    }
+    
+    const hasAvatarDBChange = updatesForDB.avatar_url !== undefined;
 
-    if (profileUpdates.full_name !== undefined && profileUpdates.full_name !== (currentProfileData?.full_name || "")) {
-      updatesForDB.full_name = profileUpdates.full_name;
-      hasProfileDetailChanges = true;
-    }
-    if (profileUpdates.username !== undefined && profileUpdates.username !== (currentProfileData?.username || "")) {
-      updatesForDB.username = profileUpdates.username;
-      hasProfileDetailChanges = true;
-    }
-    if (profileUpdates.phone_number !== undefined && profileUpdates.phone_number !== (currentProfileData?.phone_number || null)) {
-      updatesForDB.phone_number = profileUpdates.phone_number;
-      hasProfileDetailChanges = true;
-    }
-
-    if (!hasProfileDetailChanges && !avatarUrlChangedOrUploaded && errorMessages.length === 0) {
+    if (!hasProfileDetailChanges && !hasAvatarDBChange && errorMessages.length === 0) {
       return { success: true, data: currentProfileData, error: "Tidak ada perubahan untuk disimpan." };
     }
-    if (!hasProfileDetailChanges && !avatarUrlChangedOrUploaded && errorMessages.length > 0) {
-       return { success: false, data: currentProfileData, error: errorMessages.join('; ') };
+    if (errorMessages.length > 0 && !hasProfileDetailChanges && !hasAvatarDBChange) { // Only avatar processing errors
+        return { success: false, data: currentProfileData, error: errorMessages.join('; ') };
     }
+
 
     if (Object.keys(updatesForDB).length > 0) {
       const { data: updatedProfile, error: dbUpdateError } = await supabase
@@ -526,7 +598,7 @@ export async function updateUserProfileAction(
         return { success: false, data: currentProfileData, error: errorMessages.join('; ') };
       }
       
-      if (errorMessages.length > 0) { // Errors from avatar upload, but DB update was successful
+      if (errorMessages.length > 0) { // DB update succeeded, but there were prior avatar errors
           return { success: false, data: updatedProfile || currentProfileData, error: errorMessages.join('; ') };
       }
 
@@ -535,13 +607,13 @@ export async function updateUserProfileAction(
       revalidatePath('/app/history', 'page');
       revalidatePath('/', 'layout'); 
       
-      return { success: true, data: updatedProfile, error: undefined };
-    } else if (errorMessages.length > 0) { // Only avatar upload errors, no other profile changes to make
+      return { success: true, data: updatedProfile };
+    } else if (errorMessages.length > 0) { // No DB updates were staged, but there were avatar errors
        return { success: false, data: currentProfileData, error: errorMessages.join('; ') };
     }
     
-    // Should not be reached if logic is correct, but as a fallback.
-    return { success: true, data: currentProfileData, error: "Tidak ada operasi pembaruan yang dilakukan atau hanya ada error dari unggah avatar." };
+    // Fallback, should ideally be covered by "Tidak ada perubahan"
+    return { success: true, data: currentProfileData, error: "Operasi selesai, kemungkinan tidak ada perubahan data." };
 
   } catch (e: any) {
     console.error("Unhandled exception in updateUserProfileAction:", e);
@@ -575,9 +647,6 @@ export async function removeAvatarAction(userId: string): Promise<{ success: boo
             return { success: true, data: { avatar_url: null }, error: "Tidak ada foto profil untuk dihapus." }; 
         }
 
-        // Path should be like: public/avatars/<user_id>/avatar.ext
-        // Example URL: https://<ref>.supabase.co/storage/v1/object/public/avatars/public/avatars/<user_id>/avatar.ext
-        // We need to extract "public/avatars/<user_id>/avatar.ext" for the remove operation.
         const storagePathPrefix = `/storage/v1/object/public/avatars/`;
         let filePathInBucket = "";
 
@@ -585,7 +654,6 @@ export async function removeAvatarAction(userId: string): Promise<{ success: boo
             filePathInBucket = currentProfile.avatar_url.split(storagePathPrefix)[1];
         } else {
             console.warn("Could not parse avatar_url to get storage path with standard prefix:", currentProfile.avatar_url);
-            // Fallback: try to clear DB link only if parsing fails badly
             const { error: dbOnlyError } = await supabase
                 .from('profiles')
                 .update({ avatar_url: null })
@@ -600,7 +668,6 @@ export async function removeAvatarAction(userId: string): Promise<{ success: boo
         
         if (!filePathInBucket) {
              console.warn("filePathInBucket is empty after parsing, attempting to clear DB link only for URL:", currentProfile.avatar_url);
-             // Similar to above, just clear DB
             const { error: dbOnlyError } = await supabase
                 .from('profiles')
                 .update({ avatar_url: null })
@@ -626,13 +693,17 @@ export async function removeAvatarAction(userId: string): Promise<{ success: boo
                 return { success: false, error: `Gagal menghapus file avatar dari storage: ${storageError.message}` };
             }
         }
+        
+        // Call updateUserProfileAction to set avatar_url to null in DB
+        const { success: updateSuccess, error: dbUpdateError, data: updatedData } = await updateUserProfileAction(
+            userId, 
+            { avatar_url: null }, // Explicitly set avatar_url to null
+            null // No new file to upload
+        );
 
-        const { success: updateSuccess, error: dbUpdateError } = await updateUserProfileAction(userId, { avatar_url: null }, null);
 
         if (!updateSuccess) {
             console.error("Error clearing avatar_url in DB via updateUserProfileAction:", dbUpdateError);
-            // Even if DB update fails, the storage file might be gone. This is a bit tricky.
-            // For now, report the DB update error as primary.
             return { success: false, error: `Gagal mengosongkan URL avatar di database: ${dbUpdateError}` };
         }
 
@@ -641,7 +712,7 @@ export async function removeAvatarAction(userId: string): Promise<{ success: boo
         revalidatePath('/app', 'layout'); 
         revalidatePath('/app/history', 'page');
 
-        return { success: true, data: { avatar_url: null } };
+        return { success: true, data: { avatar_url: null } }; // Ensure returned data reflects the change
     } catch (e: any) {
         console.error("Unhandled exception in removeAvatarAction:", e);
         return { success: false, error: `Kesalahan server tidak terduga saat menghapus avatar: ${e.message || "Unknown error"}` };

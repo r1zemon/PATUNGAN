@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
-import type { SplitItem, Person, BillDetails, TaxTipSplitStrategy, DetailedBillSummaryData } from "@/lib/types";
+import type { SplitItem, Person, BillDetails, TaxTipSplitStrategy, DetailedBillSummaryData, BillCategory } from "@/lib/types";
 import type { User as SupabaseUser } from "@supabase/supabase-js";
 import { 
   handleScanReceiptAction, 
@@ -11,7 +11,9 @@ import {
   addParticipantAction,
   removeParticipantAction,
   getCurrentUserAction,
-  logoutUserAction
+  logoutUserAction,
+  getUserCategoriesAction, // New
+  createBillCategoryAction // New
 } from "@/lib/actions";
 import { ReceiptUploader } from "@/components/receipt-uploader";
 import { ItemEditor } from "@/components/item-editor";
@@ -25,7 +27,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useToast } from "@/hooks/use-toast";
 import { Separator } from "@/components/ui/separator";
-import { Home, LogOut, Settings, UserCircle, Power, Info, Percent, Landmark, UserCheck, Loader2, UserPlus, ArrowRight, Trash2, Users, ScanLine, PlusCircle, Edit2, ListChecks, FilePlus, FileText, CalendarClock } from "lucide-react";
+import { Home, LogOut, Settings, UserCircle, Power, Info, Percent, Landmark, UserCheck, Loader2, UserPlus, ArrowRight, Trash2, Users, ScanLine, PlusCircle, Edit2, ListChecks, FilePlus, FileText, CalendarClock, FolderPlus, Tag } from "lucide-react"; // Added FolderPlus, Tag
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -41,7 +43,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { NotificationBell } from "@/components/notification-bell"; // Added
+import { NotificationBell } from "@/components/notification-bell";
 
 interface Profile {
   username?: string;
@@ -56,7 +58,7 @@ export default function SplitBillAppPage() {
   const [currentBillName, setCurrentBillName] = useState<string>("");
 
   const [billTimingOption, setBillTimingOption] = useState<'now' | 'schedule'>('now');
-  const [scheduledAt, setScheduledAt] = useState<string>(""); // Store as ISO string from datetime-local
+  const [scheduledAt, setScheduledAt] = useState<string>("");
 
   const [people, setPeople] = useState<Person[]>([]);
   const [personNameInput, setPersonNameInput] = useState<string>("");
@@ -73,12 +75,19 @@ export default function SplitBillAppPage() {
   const [isScanning, setIsScanning] = useState(false);
   const [isCalculating, setIsCalculating] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [currentStep, setCurrentStep] = useState(0); // 0: Enter Bill Name, 1: Bill Active (all inputs visible), 2: Summary Shown
+  const [currentStep, setCurrentStep] = useState(0); 
 
   const [authUser, setAuthUser] = useState<SupabaseUser | null>(null);
   const [userProfile, setUserProfile] = useState<Profile | null>(null);
   const [isLoadingUser, setIsLoadingUser] = useState(true);
   const [isInitializingBill, setIsInitializingBill] = useState(false);
+
+  // Category State
+  const [categories, setCategories] = useState<BillCategory[]>([]);
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
+  const [newCategoryInput, setNewCategoryInput] = useState<string>("");
+  const [isLoadingCategories, setIsLoadingCategories] = useState(true);
+  const [showNewCategoryInput, setShowNewCategoryInput] = useState(false);
 
 
   const { toast } = useToast();
@@ -87,8 +96,9 @@ export default function SplitBillAppPage() {
   const [taxInputDisplayValue, setTaxInputDisplayValue] = useState<string>(billDetails.taxAmount.toString());
   const [tipInputDisplayValue, setTipInputDisplayValue] = useState<string>(billDetails.tipAmount.toString());
 
-  const fetchUser = useCallback(async () => {
+  const fetchUserAndCategories = useCallback(async () => {
     setIsLoadingUser(true);
+    setIsLoadingCategories(true);
     const { user, profile, error: userError } = await getCurrentUserAction();
     if (userError) {
       console.error("Error fetching user data:", userError);
@@ -99,12 +109,22 @@ export default function SplitBillAppPage() {
     if (!user) {
         toast({variant: "destructive", title: "Akses Ditolak", description: "Anda harus login untuk menggunakan aplikasi."});
         router.push("/login");
+        setIsLoadingCategories(false);
+        return;
     }
+
+    const categoriesResult = await getUserCategoriesAction();
+    if (categoriesResult.success && categoriesResult.categories) {
+      setCategories(categoriesResult.categories);
+    } else {
+      toast({ variant: "destructive", title: "Gagal Memuat Kategori", description: categoriesResult.error });
+    }
+    setIsLoadingCategories(false);
   }, [router, toast]);
 
   useEffect(() => {
-    fetchUser();
-  }, [fetchUser]);
+    fetchUserAndCategories();
+  }, [fetchUserAndCategories]);
 
   const startNewBillSession = useCallback(async () => {
     if (!authUser) { 
@@ -117,6 +137,38 @@ export default function SplitBillAppPage() {
       toast({ variant: "destructive", title: "Nama Tagihan Kosong", description: "Mohon masukkan nama untuk tagihan Anda."});
       return;
     }
+    
+    let finalCategoryId = selectedCategoryId;
+
+    if (showNewCategoryInput) {
+        if (!newCategoryInput.trim()) {
+            toast({ variant: "destructive", title: "Nama Kategori Baru Kosong", description: "Mohon masukkan nama untuk kategori baru atau pilih yang sudah ada."});
+            return;
+        }
+        if (newCategoryInput.trim().length > 20) {
+             toast({ variant: "destructive", title: "Nama Kategori Terlalu Panjang", description: "Nama kategori maksimal 20 karakter."});
+            return;
+        }
+        // Attempt to create new category
+        const categoryResult = await createBillCategoryAction(newCategoryInput.trim());
+        if (categoryResult.success && categoryResult.category) {
+            finalCategoryId = categoryResult.category.id;
+            setCategories(prev => [...prev, categoryResult.category!]);
+            setSelectedCategoryId(finalCategoryId); // Auto-select new category
+            setShowNewCategoryInput(false);
+            setNewCategoryInput("");
+            toast({ title: "Kategori Baru Ditambahkan", description: `Kategori "${categoryResult.category.name}" berhasil dibuat.`});
+        } else {
+            toast({ variant: "destructive", title: "Gagal Membuat Kategori", description: categoryResult.error || "Tidak dapat menyimpan kategori baru." });
+            return; // Stop if category creation fails
+        }
+    }
+
+    if (!finalCategoryId && billTimingOption === 'now') { // Only enforce category for 'now' option, not for scheduling only.
+        toast({ variant: "destructive", title: "Kategori Belum Dipilih", description: "Mohon pilih atau buat kategori untuk tagihan ini."});
+        return;
+    }
+
 
     setIsInitializingBill(true);
     setError(null);
@@ -138,13 +190,13 @@ export default function SplitBillAppPage() {
           return;
         }
 
-        const result = await createBillAction(billNameInput.trim(), scheduledDate.toISOString());
+        const result = await createBillAction(billNameInput.trim(), finalCategoryId, scheduledDate.toISOString());
         if (result.success && result.billId) {
           toast({ 
             title: "Tagihan Dijadwalkan", 
             description: `Tagihan "${billNameInput.trim()}" berhasil dijadwalkan untuk ${format(scheduledDate, "dd MMMM yyyy 'pukul' HH:mm", { locale: IndonesianLocale })}.`
           });
-          resetAppToStart(); // Reset to step 0
+          resetAppToStart(); 
         } else {
           setError(result.error || "Gagal menjadwalkan tagihan.");
           toast({ variant: "destructive", title: "Penjadwalan Gagal", description: result.error || "Tidak dapat membuat tagihan terjadwal di database." });
@@ -153,8 +205,8 @@ export default function SplitBillAppPage() {
          setError(e.message || "Kesalahan saat memproses jadwal.");
          toast({ variant: "destructive", title: "Kesalahan Jadwal", description: e.message || "Tidak dapat memproses waktu yang dijadwalkan." });
       }
-    } else { // billTimingOption === 'now'
-      const result = await createBillAction(billNameInput.trim(), null); // Pass null for scheduledAt
+    } else { 
+      const result = await createBillAction(billNameInput.trim(), finalCategoryId, null);
       if (result.success && result.billId) {
         setCurrentBillId(result.billId);
         setCurrentBillName(billNameInput.trim());
@@ -176,12 +228,15 @@ export default function SplitBillAppPage() {
       }
     }
     setIsInitializingBill(false);
-  }, [authUser, billNameInput, billTimingOption, scheduledAt, router, toast]); 
+  }, [authUser, billNameInput, billTimingOption, scheduledAt, router, toast, selectedCategoryId, newCategoryInput, showNewCategoryInput]); 
   
   const resetAppToStart = () => {
      setCurrentBillId(null);
      setCurrentBillName("");
      setBillNameInput("");
+     setSelectedCategoryId(null);
+     setNewCategoryInput("");
+     setShowNewCategoryInput(false);
      setBillTimingOption("now");
      setScheduledAt("");
      setPeople([]);
@@ -194,6 +249,12 @@ export default function SplitBillAppPage() {
      if (!authUser) {
         toast({variant: "destructive", title: "Pengguna Tidak Login", description: "Silakan login untuk menggunakan aplikasi."})
         router.push("/login");
+     }
+     // Re-fetch categories in case new ones were added
+     if (authUser) {
+        getUserCategoriesAction().then(res => {
+            if (res.success && res.categories) setCategories(res.categories);
+        });
      }
   }
 
@@ -349,7 +410,7 @@ export default function SplitBillAppPage() {
             personalTotalShares: people.reduce((acc, p) => ({...acc, [p.name]: 0}), {}),
             settlements: []
         });
-        await handleSummarizeBillAction( // Still call action to "complete" the bill in DB for history
+        await handleSummarizeBillAction( 
           [], people, currentBillId, billDetails.payerId, 0, 0, billDetails.taxTipSplitStrategy
         );
         setCurrentStep(2); 
@@ -432,13 +493,29 @@ export default function SplitBillAppPage() {
     }
   };
   
-  if (isLoadingUser) {
+  if (isLoadingUser || isLoadingCategories) {
     return (
       <div className="relative flex flex-col min-h-screen bg-background bg-money-pattern bg-[length:120px_auto] before:content-[''] before:absolute before:inset-0 before:bg-white/[.90] before:dark:bg-black/[.90] before:z-0">
-        <div className="relative z-10 flex flex-col items-center justify-center text-center flex-grow p-4">
+        <header className="sticky top-0 z-50 w-full bg-background/80 backdrop-blur-md shadow-sm">
+          <div className="container mx-auto flex h-20 items-center justify-between px-4 sm:px-6"> 
+            <Link href="/" className="flex items-center gap-2 text-primary hover:text-primary/80 transition-colors">
+              <Image src="/logo.png" alt="Patungan Logo" width={56} height={56} className="rounded-lg shadow-sm" data-ai-hint="logo company"/>
+              <h1 className="text-2xl font-bold tracking-tight text-foreground">Patungan</h1>
+            </Link>
+            <div className="flex items-center gap-2 sm:gap-4">
+               <Button variant="ghost" className="rounded-md p-1 sm:p-1.5 h-auto" disabled>
+                  <Home className="h-10 w-10" />
+              </Button>
+               {/* Skeleton for NotificationBell and Avatar can be added if needed */}
+            </div>
+          </div>
+        </header>
+        <main className="relative z-10 flex flex-col items-center justify-center text-center flex-grow p-4">
             <Loader2 className="h-12 w-12 animate-spin text-primary" />
-            <p className="mt-4 text-lg text-foreground">Memuat data pengguna...</p>
-        </div>
+            <p className="mt-4 text-lg text-foreground">
+                {isLoadingUser ? "Memuat data pengguna..." : "Memuat kategori..."}
+            </p>
+        </main>
       </div>
     );
   }
@@ -544,20 +621,73 @@ export default function SplitBillAppPage() {
             <Card className="shadow-xl overflow-hidden bg-card/90 backdrop-blur-sm hover:shadow-2xl transition-shadow duration-300 ease-in-out">
               <CardHeader className="bg-card/60 border-b p-6">
                 <CardTitle className="text-xl sm:text-2xl font-semibold flex items-center"><FileText className="mr-3 h-6 w-6"/>Mulai Tagihan Baru</CardTitle>
-                <CardDescription>Beri nama tagihan Anda dan pilih waktu pembuatan.</CardDescription>
+                <CardDescription>Pilih kategori, beri nama tagihan Anda, dan pilih waktu pembuatan.</CardDescription>
               </CardHeader>
               <CardContent className="p-6 space-y-6">
+                <div className="space-y-3">
+                  <Label htmlFor="billCategory">Kategori Tagihan</Label>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <Select
+                        value={selectedCategoryId || ""}
+                        onValueChange={(value) => {
+                            if (value === "create_new") {
+                                setShowNewCategoryInput(true);
+                                setSelectedCategoryId(null);
+                            } else {
+                                setSelectedCategoryId(value);
+                                setShowNewCategoryInput(false);
+                                setNewCategoryInput("");
+                            }
+                        }}
+                        disabled={isLoadingCategories || showNewCategoryInput}
+                    >
+                        <SelectTrigger id="billCategory" className="flex-grow">
+                            <SelectValue placeholder={isLoadingCategories ? "Memuat kategori..." : "Pilih kategori"} />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {categories.map(cat => (
+                                <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
+                            ))}
+                            <SelectItem value="create_new">
+                                <span className="flex items-center"><FolderPlus className="mr-2 h-4 w-4"/>Buat Kategori Baru...</span>
+                            </SelectItem>
+                        </SelectContent>
+                    </Select>
+                  </div>
+                  {showNewCategoryInput && (
+                    <div className="mt-2 space-y-2">
+                         <Label htmlFor="newCategoryName" className="text-sm">Nama Kategori Baru (maks 20 karakter)</Label>
+                        <div className="flex gap-2">
+                            <Input
+                                id="newCategoryName"
+                                type="text"
+                                placeholder="Contoh: Makanan, Transportasi"
+                                value={newCategoryInput}
+                                onChange={(e) => setNewCategoryInput(e.target.value)}
+                                maxLength={20}
+                                className="flex-grow"
+                            />
+                            <Button variant="ghost" onClick={() => {setShowNewCategoryInput(false); setNewCategoryInput(""); if(categories.length > 0) setSelectedCategoryId(categories[0].id)}}>Batal</Button>
+                        </div>
+                    </div>
+                  )}
+                </div>
+
                 <div className="space-y-2">
                   <Label htmlFor="billName">Nama Tagihan</Label>
-                  <Input
-                    id="billName"
-                    type="text"
-                    placeholder="Contoh: Makan Malam Tim, Trip ke Bali"
-                    value={billNameInput}
-                    onChange={(e) => setBillNameInput(e.target.value)}
-                    className="flex-grow"
-                  />
+                   <div className="relative">
+                     <Tag className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                    <Input
+                        id="billName"
+                        type="text"
+                        placeholder="Contoh: Makan Malam Tim, Trip ke Bali"
+                        value={billNameInput}
+                        onChange={(e) => setBillNameInput(e.target.value)}
+                        className="flex-grow pl-10"
+                    />
+                  </div>
                 </div>
+
                 <div className="space-y-3">
                     <Label>Kapan tagihan ini akan dibuat?</Label>
                     <RadioGroup value={billTimingOption} onValueChange={(value) => setBillTimingOption(value as 'now' | 'schedule')} className="flex flex-col sm:flex-row gap-4">
@@ -589,7 +719,7 @@ export default function SplitBillAppPage() {
                                 value={scheduledAt}
                                 onChange={(e) => setScheduledAt(e.target.value)}
                                 className="pl-10"
-                                min={new Date().toISOString().slice(0, 16)} // Prevent past dates
+                                min={new Date().toISOString().slice(0, 16)} 
                             />
                         </div>
                         <p className="text-xs text-muted-foreground">Pilih tanggal dan waktu di masa mendatang untuk tagihan ini.</p>
@@ -600,6 +730,8 @@ export default function SplitBillAppPage() {
                 <Button 
                     onClick={startNewBillSession} 
                     disabled={
+                        (!selectedCategoryId && !showNewCategoryInput) ||
+                        (showNewCategoryInput && !newCategoryInput.trim()) ||
                         !billNameInput.trim() || 
                         isInitializingBill || 
                         (billTimingOption === 'schedule' && !scheduledAt)

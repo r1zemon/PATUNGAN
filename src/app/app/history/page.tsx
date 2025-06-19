@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
-import { Home, LogOut, Settings, UserCircle, Power, Info, FilePlus, Loader2, History as HistoryIconLucide, Users, Coins, CalendarDays, BarChart2, Star, Zap, ShoppingBag } from "lucide-react"; 
+import { Home, LogOut, Settings, UserCircle, Power, Info, FilePlus, Loader2, History as HistoryIconLucide, Users, Coins, CalendarDays, BarChart2, Star, Zap, ShoppingBag, Tag } from "lucide-react"; 
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -27,7 +27,8 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { formatCurrency } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
-import { NotificationBell } from "@/components/notification-bell"; // Added
+import { NotificationBell } from "@/components/notification-bell";
+import { Badge } from "@/components/ui/badge"; // Added
 
 interface Profile {
   username?: string;
@@ -46,7 +47,7 @@ export default function HistoryPage() {
   const [authUser, setAuthUser] = useState<SupabaseUser | null>(null);
   const [userProfile, setUserProfile] = useState<Profile | null>(null);
   const [isLoadingUser, setIsLoadingUser] = useState(true);
-  const [isPremiumUser, setIsPremiumUser] = useState(false); 
+  const [isPremiumUser, setIsPremiumUser] = useState(false); // TODO: Fetch actual premium status
 
   const { toast } = useToast();
   const router = useRouter();
@@ -110,9 +111,10 @@ export default function HistoryPage() {
               <h1 className="text-2xl font-bold tracking-tight text-foreground">Patungan</h1>
             </Link>
             <div className="flex items-center gap-2 sm:gap-4">
-              <Skeleton className="h-9 w-28 hidden sm:block" /> {/* Placeholder for Home Button */}
-              <Skeleton className="h-10 w-10 rounded-full" /> {/* Placeholder for Notification Bell */}
-              <Skeleton className="h-10 w-10 rounded-full" /> {/* Placeholder for Avatar */}
+               <Button variant="ghost" className="rounded-md p-1 sm:p-1.5 h-auto" disabled>
+                  <Home className="h-10 w-10" />
+              </Button>
+               {/* Skeleton for NotificationBell and Avatar can be added if needed */}
             </div>
           </div>
         </header>
@@ -124,7 +126,6 @@ export default function HistoryPage() {
         </main>
          <footer className="relative z-10 mt-auto pt-8 border-t text-center text-sm text-muted-foreground">
             <p>&copy; {new Date().getFullYear()} Patungan. Hak cipta dilindungi.</p>
-            <p>Ditenagai oleh Next.js, Shadcn/UI, Genkit, dan Supabase.</p>
         </footer>
       </div>
     );
@@ -236,6 +237,12 @@ export default function HistoryPage() {
                         format(new Date(bill.createdAt), "dd MMMM yyyy, HH:mm", { locale: IndonesianLocale })
                     }
                   </CardDescription>
+                  {bill.categoryName && (
+                     <Badge variant="outline" className="mt-1 w-fit text-xs">
+                        <Tag className="mr-1.5 h-3 w-3"/>
+                        {bill.categoryName}
+                    </Badge>
+                  )}
                 </CardHeader>
                 <CardContent className="space-y-3 flex-grow">
                    {bill.grandTotal !== null ? (

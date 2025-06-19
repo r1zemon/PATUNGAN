@@ -3,7 +3,7 @@
 
 import { scanReceipt, ScanReceiptOutput, ReceiptItem as AiReceiptItem } from "@/ai/flows/scan-receipt";
 import { summarizeBill, SummarizeBillInput } from "@/ai/flows/summarize-bill";
-import type { SplitItem, Person, RawBillSummary, TaxTipSplitStrategy, ScannedItem, BillHistoryEntry } from "./types";
+import type { SplitItem, Person, RawBillSummary, TaxTipSplitStrategy, ScannedItem, BillHistoryEntry, BillCategory } from "./types";
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
 import type { PostgrestSingleResponse, User as SupabaseUser } from "@supabase/supabase-js";
@@ -55,8 +55,8 @@ export async function signupUserAction(formData: FormData) {
     password,
     options: {
       data: { 
-        full_name: trimmedFullName, // Use trimmed
-        username: trimmedUsername,  // Use trimmed
+        full_name: trimmedFullName,
+        username: trimmedUsername,
       }
     }
   });
@@ -75,8 +75,8 @@ export async function signupUserAction(formData: FormData) {
     .from('profiles')
     .insert({ 
       id: authData.user.id, 
-      full_name: trimmedFullName, // Use trimmed
-      username: trimmedUsername, // Use trimmed
+      full_name: trimmedFullName,
+      username: trimmedUsername,
       email: email, 
       phone_number: phoneNumber ? phoneNumber.trim() : null
     });
@@ -115,9 +115,7 @@ export async function loginUserAction(formData: FormData) {
   }
   
   revalidatePath('/', 'layout');
-  revalidatePath('/app', 'page'); 
-  revalidatePath('/app', 'layout'); 
-  revalidatePath('/', 'page'); // Changed from /login
+  revalidatePath('/', 'page');
   return { success: true, user: data.user };
 }
 
@@ -156,15 +154,79 @@ export async function logoutUserAction() {
     return { success: false, error: error.message };
   }
   revalidatePath('/', 'layout');
-  revalidatePath('/app', 'page'); 
-  revalidatePath('/app', 'layout'); 
-  revalidatePath('/', 'page'); // Changed from /login
+  revalidatePath('/', 'page');
   return { success: true };
+}
+
+export async function createBillCategoryAction(name: string): Promise<{ success: boolean; category?: BillCategory; error?: string }> {
+  const supabase = createSupabaseServerClient();
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+  if (authError || !user) {
+    return { success: false, error: "Pengguna tidak terautentikasi." };
+  }
+  const trimmedName = name.trim();
+  if (!trimmedName) {
+    return { success: false, error: "Nama kategori tidak boleh kosong." };
+  }
+  if (trimmedName.length > 20) {
+    return { success: false, error: "Nama kategori maksimal 20 karakter." };
+  }
+
+  // Check if category with the same name already exists for this user
+  const { data: existingCategory, error: fetchError } = await supabase
+    .from('bill_categories')
+    .select('id')
+    .eq('user_id', user.id)
+    .eq('name', trimmedName)
+    .single();
+
+  if (fetchError && fetchError.code !== 'PGRST116') { // PGRST116 means no rows found
+    console.error("Error checking existing category:", fetchError);
+    return { success: false, error: "Gagal memeriksa kategori yang ada." };
+  }
+  if (existingCategory) {
+    return { success: false, error: "Kategori dengan nama tersebut sudah ada." };
+  }
+
+  const { data: newCategory, error: insertError } = await supabase
+    .from('bill_categories')
+    .insert({ user_id: user.id, name: trimmedName })
+    .select()
+    .single();
+
+  if (insertError) {
+    console.error("Error creating bill category:", insertError);
+    return { success: false, error: `Gagal membuat kategori: ${insertError.message}` };
+  }
+  return { success: true, category: newCategory as BillCategory };
+}
+
+export async function getUserCategoriesAction(): Promise<{ success: boolean; categories?: BillCategory[]; error?: string }> {
+  const supabase = createSupabaseServerClient();
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+  if (authError || !user) {
+    return { success: false, error: "Pengguna tidak terautentikasi." };
+  }
+
+  const { data: categories, error } = await supabase
+    .from('bill_categories')
+    .select('*')
+    .eq('user_id', user.id)
+    .order('name', { ascending: true });
+
+  if (error) {
+    console.error("Error fetching user categories:", error);
+    return { success: false, error: `Gagal mengambil daftar kategori: ${error.message}` };
+  }
+  return { success: true, categories: categories as BillCategory[] };
 }
 
 
 export async function createBillAction(
   billName: string, 
+  categoryId: string | null,
   scheduledAt?: string | null
 ): Promise<{ success: boolean; billId?: string; error?: string }> {
   const supabase = createSupabaseServerClient();
@@ -183,6 +245,7 @@ export async function createBillAction(
   const billInsertData: Database['public']['Tables']['bills']['Insert'] = {
     name: billName || "Tagihan Baru",
     user_id: user.id,
+    category_id: categoryId,
     scheduled_at: scheduledAt || null,
   };
 
@@ -458,7 +521,7 @@ export async function updateUserProfileAction(
   profileUpdates: { 
     full_name?: string | null; 
     username?: string | null; 
-    avatar_url?: string | null; // Can be null to signify removal
+    avatar_url?: string | null;
     phone_number?: string | null;
   },
   avatarFile?: File | null
@@ -475,7 +538,7 @@ export async function updateUserProfileAction(
       .eq('id', userId)
       .single();
 
-    if (fetchError && fetchError.code !== 'PGRST116') { // PGRST116 means no rows found
+    if (fetchError && fetchError.code !== 'PGRST116') {
       console.error("Error fetching current profile:", fetchError);
       return { success: false, error: `Gagal mengambil profil saat ini: ${fetchError.message}` };
     }
@@ -483,69 +546,64 @@ export async function updateUserProfileAction(
         console.error("Profile not found for user ID:", userId);
         return { success: false, error: "Profil pengguna tidak ditemukan." };
     }
-    // If currentProfileData is null here, it means the profile doesn't exist, which is an issue.
     if (!currentProfileData) {
         console.error("Profile data is unexpectedly null for user ID:", userId);
         return { success: false, error: "Data profil pengguna tidak valid." };
     }
 
-
     const updatesForDB: Partial<Database['public']['Tables']['profiles']['Update']> = {};
     let hasProfileDetailChanges = false;
 
-    // Username uniqueness and change check
     if (profileUpdates.username !== undefined) {
         const newUsernameTrimmed = profileUpdates.username === null ? "" : profileUpdates.username.trim();
         const currentUsername = currentProfileData.username || "";
-
         if (newUsernameTrimmed !== currentUsername) {
             if (!newUsernameTrimmed) {
-                return { success: false, error: "Username tidak boleh kosong." };
-            }
-            const { data: existingUser, error: usernameCheckErr } = await supabase
-                .from('profiles')
-                .select('id')
-                .eq('username', newUsernameTrimmed)
-                .single();
+                 errorMessages.push("Username tidak boleh kosong.");
+            } else {
+                const { data: existingUser, error: usernameCheckErr } = await supabase
+                    .from('profiles')
+                    .select('id')
+                    .eq('username', newUsernameTrimmed)
+                    .neq('id', userId) // Ensure it's not the current user's own username
+                    .single();
 
-            if (usernameCheckErr && usernameCheckErr.code !== 'PGRST116') {
-                console.error("Error checking new username uniqueness:", usernameCheckErr);
-                return { success: false, error: "Gagal memverifikasi username baru. Silakan coba lagi." };
+                if (usernameCheckErr && usernameCheckErr.code !== 'PGRST116') {
+                    console.error("Error checking new username uniqueness:", usernameCheckErr);
+                    errorMessages.push("Gagal memverifikasi username baru. Silakan coba lagi.");
+                } else if (existingUser) {
+                    errorMessages.push("Username tersebut sudah digunakan oleh pengguna lain.");
+                } else {
+                    updatesForDB.username = newUsernameTrimmed;
+                    hasProfileDetailChanges = true;
+                }
             }
-            if (existingUser && existingUser.id !== userId) {
-                return { success: false, error: "Username tersebut sudah digunakan oleh pengguna lain." };
-            }
-            updatesForDB.username = newUsernameTrimmed;
-            hasProfileDetailChanges = true;
         }
     }
 
-    // Full Name change check
     if (profileUpdates.full_name !== undefined) {
         const newFullNameTrimmed = profileUpdates.full_name === null ? "" : profileUpdates.full_name.trim();
         const currentFullName = currentProfileData.full_name || "";
         if (newFullNameTrimmed !== currentFullName) {
-            if (!newFullNameTrimmed) {
-                return { success: false, error: "Nama lengkap tidak boleh kosong." };
+             if (!newFullNameTrimmed) {
+                errorMessages.push("Nama lengkap tidak boleh kosong.");
+            } else {
+                updatesForDB.full_name = newFullNameTrimmed;
+                hasProfileDetailChanges = true;
             }
-            updatesForDB.full_name = newFullNameTrimmed;
-            hasProfileDetailChanges = true;
         }
     }
     
-    // Phone Number change check
     if (profileUpdates.phone_number !== undefined) {
         const newPhoneNumber = profileUpdates.phone_number === null ? null : profileUpdates.phone_number.trim();
         const currentPhoneNumber = currentProfileData.phone_number || null;
         if (newPhoneNumber !== currentPhoneNumber) {
-             // Allow empty string to become null for phone_number
             updatesForDB.phone_number = newPhoneNumber === "" ? null : newPhoneNumber;
             hasProfileDetailChanges = true;
         }
     }
 
-    // Avatar handling
-    let avatarUrlToUpdate: string | null | undefined = undefined; // undefined means no change to avatar_url from this logic path
+    let avatarUrlToUpdate: string | null | undefined = undefined; 
 
     if (avatarFile) {
         const fileExt = avatarFile.name.split('.').pop();
@@ -566,7 +624,6 @@ export async function updateUserProfileAction(
             }
         }
     } else if (profileUpdates.avatar_url === null && currentProfileData.avatar_url !== null) {
-        // This case is for explicit removal of avatar (setting avatar_url to null)
         avatarUrlToUpdate = null;
     }
     
@@ -576,13 +633,13 @@ export async function updateUserProfileAction(
     
     const hasAvatarDBChange = updatesForDB.avatar_url !== undefined;
 
-    if (!hasProfileDetailChanges && !hasAvatarDBChange && errorMessages.length === 0) {
-      return { success: true, data: currentProfileData, error: "Tidak ada perubahan untuk disimpan." };
-    }
-    if (errorMessages.length > 0 && !hasProfileDetailChanges && !hasAvatarDBChange) { // Only avatar processing errors
-        return { success: false, data: currentProfileData, error: errorMessages.join('; ') };
+    if (errorMessages.length > 0) { // If there were validation errors for username/fullname or avatar upload
+        return { success: false, data: currentProfileData, error: errorMessages };
     }
 
+    if (!hasProfileDetailChanges && !hasAvatarDBChange) {
+      return { success: true, data: currentProfileData, error: "Tidak ada perubahan untuk disimpan." };
+    }
 
     if (Object.keys(updatesForDB).length > 0) {
       const { data: updatedProfile, error: dbUpdateError } = await supabase
@@ -594,25 +651,17 @@ export async function updateUserProfileAction(
 
       if (dbUpdateError) {
         console.error("Error updating profile in DB:", dbUpdateError);
-        errorMessages.push(`Gagal memperbarui profil di database: ${dbUpdateError.message}`);
-        return { success: false, data: currentProfileData, error: errorMessages.join('; ') };
+        return { success: false, data: currentProfileData, error: [`Gagal memperbarui profil di database: ${dbUpdateError.message}`] };
       }
       
-      if (errorMessages.length > 0) { // DB update succeeded, but there were prior avatar errors
-          return { success: false, data: updatedProfile || currentProfileData, error: errorMessages.join('; ') };
-      }
-
       revalidatePath('/app', 'layout'); 
       revalidatePath('/app/profile', 'page');
       revalidatePath('/app/history', 'page');
       revalidatePath('/', 'layout'); 
       
       return { success: true, data: updatedProfile };
-    } else if (errorMessages.length > 0) { // No DB updates were staged, but there were avatar errors
-       return { success: false, data: currentProfileData, error: errorMessages.join('; ') };
     }
     
-    // Fallback, should ideally be covered by "Tidak ada perubahan"
     return { success: true, data: currentProfileData, error: "Operasi selesai, kemungkinan tidak ada perubahan data." };
 
   } catch (e: any) {
@@ -694,11 +743,10 @@ export async function removeAvatarAction(userId: string): Promise<{ success: boo
             }
         }
         
-        // Call updateUserProfileAction to set avatar_url to null in DB
         const { success: updateSuccess, error: dbUpdateError, data: updatedData } = await updateUserProfileAction(
             userId, 
-            { avatar_url: null }, // Explicitly set avatar_url to null
-            null // No new file to upload
+            { avatar_url: null }, 
+            null 
         );
 
 
@@ -712,7 +760,7 @@ export async function removeAvatarAction(userId: string): Promise<{ success: boo
         revalidatePath('/app', 'layout'); 
         revalidatePath('/app/history', 'page');
 
-        return { success: true, data: { avatar_url: null } }; // Ensure returned data reflects the change
+        return { success: true, data: { avatar_url: null } };
     } catch (e: any) {
         console.error("Unhandled exception in removeAvatarAction:", e);
         return { success: false, error: `Kesalahan server tidak terduga saat menghapus avatar: ${e.message || "Unknown error"}` };
@@ -728,9 +776,10 @@ export async function getBillsHistoryAction(): Promise<{ success: boolean; data?
     return { success: false, error: "Pengguna tidak terautentikasi atau sesi tidak valid." };
   }
 
+  // Fetch bills and join with bill_categories to get category_name
   const { data: bills, error: billsError } = await supabase
     .from('bills')
-    .select('id, name, created_at, grand_total, payer_participant_id, scheduled_at') 
+    .select('id, name, created_at, grand_total, payer_participant_id, scheduled_at, bill_categories(name)')
     .eq('user_id', user.id)
     .or('grand_total.not.is.null,scheduled_at.not.is.null') 
     .order('created_at', { ascending: false });
@@ -770,6 +819,12 @@ export async function getBillsHistoryAction(): Promise<{ success: boolean; data?
       console.warn(`Could not fetch participant count for bill ${bill.id}: ${countError.message}`);
     }
     
+    // Extract category name
+    // The type of bill.bill_categories will be { name: string } | null if it's a single object,
+    // or an array of { name: string } | null if it's a to-many relationship (though it should be to-one here).
+    // Adjust based on how Supabase returns the joined data. For a direct FK, it's usually an object.
+    const categoryInfo = bill.bill_categories as { name: string } | null;
+
     historyEntries.push({
       id: bill.id,
       name: bill.name,
@@ -778,6 +833,7 @@ export async function getBillsHistoryAction(): Promise<{ success: boolean; data?
       payerName: payerName,
       participantCount: participantCount || 0,
       scheduled_at: bill.scheduled_at, 
+      categoryName: categoryInfo?.name || null,
     });
   }
   

@@ -15,6 +15,34 @@ export type Json =
 export interface Database {
   public: {
     Tables: {
+      bill_categories: { // New table
+        Row: {
+          id: string
+          user_id: string
+          name: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          name: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          name?: string
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bill_categories_user_id_fkey"
+            columns: ["user_id"]
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
       bill_items: {
         Row: {
           bill_id: string
@@ -91,12 +119,13 @@ export interface Database {
       }
       bills: {
         Row: {
+          category_id: string | null // New column
           created_at: string | null
           grand_total: number | null
           id: string
           name: string | null
           payer_participant_id: string | null
-          scheduled_at: string | null // New column
+          scheduled_at: string | null
           tax_amount: number | null
           tax_tip_split_strategy: string | null 
           tip_amount: number | null
@@ -104,12 +133,13 @@ export interface Database {
           user_id: string | null 
         }
         Insert: {
+          category_id?: string | null // New column
           created_at?: string | null
           grand_total?: number | null
           id?: string
           name?: string | null
           payer_participant_id?: string | null
-          scheduled_at?: string | null // New column
+          scheduled_at?: string | null
           tax_amount?: number | null
           tax_tip_split_strategy?: string | null
           tip_amount?: number | null
@@ -117,12 +147,13 @@ export interface Database {
           user_id?: string | null
         }
         Update: {
+          category_id?: string | null // New column
           created_at?: string | null
           grand_total?: number | null
           id?: string
           name?: string | null
           payer_participant_id?: string | null
-          scheduled_at?: string | null // New column
+          scheduled_at?: string | null
           tax_amount?: number | null
           tax_tip_split_strategy?: string | null
           tip_amount?: number | null
@@ -130,6 +161,12 @@ export interface Database {
           user_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "bills_category_id_fkey" // New relationship
+            columns: ["category_id"]
+            referencedRelation: "bill_categories"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "bills_payer_participant_id_fkey"
             columns: ["payer_participant_id"]
@@ -189,7 +226,6 @@ export interface Database {
           updated_at: string | null
           username: string | null
           email: string | null 
-          // date_of_birth: string | null // Dihapus
           phone_number: string | null
         }
         Insert: {
@@ -199,7 +235,6 @@ export interface Database {
           updated_at?: string | null
           username?: string | null
           email?: string | null
-          // date_of_birth?: string | null // Dihapus
           phone_number?: string | null
         }
         Update: {
@@ -209,7 +244,6 @@ export interface Database {
           updated_at?: string | null
           username?: string | null
           email?: string | null
-          // date_of_birth?: string | null // Dihapus
           phone_number?: string | null
         }
         Relationships: [

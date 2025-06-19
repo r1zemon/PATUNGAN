@@ -43,6 +43,13 @@ export interface DetailedBillSummaryData {
   grandTotal: number;
 }
 
+export interface BillCategory { // New type
+  id: string;
+  name: string;
+  user_id: string;
+  created_at: string;
+}
+
 export interface BillHistoryEntry {
   id: string;
   name: string | null;
@@ -50,7 +57,8 @@ export interface BillHistoryEntry {
   grandTotal: number | null;
   payerName: string | null;
   participantCount: number;
-  scheduled_at?: string | null; // New optional field
+  scheduled_at?: string | null;
+  categoryName?: string | null; // New optional field
 }
 
 export interface Notification {

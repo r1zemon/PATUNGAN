@@ -483,7 +483,7 @@ export default function ProfilePage() {
 
       <main className="relative z-[1] container mx-auto px-4 py-8 md:px-6 md:py-12 flex-grow">
         <div className="max-w-3xl mx-auto space-y-8">
-          <div className="text-center">
+          <div className="text-center relative z-[1]">
             <h2 className="text-3xl font-semibold tracking-tight text-foreground flex items-center justify-center">
               <UserSquare2 className="mr-3 h-8 w-8 text-primary" />
               Profil Pengguna

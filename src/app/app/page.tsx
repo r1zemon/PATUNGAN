@@ -25,7 +25,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useToast } from "@/hooks/use-toast";
 import { Separator } from "@/components/ui/separator";
-import { Home, LogOut, Settings, UserCircle, Power, Info, Percent, Landmark, UserCheck, Loader2, UserPlus, ArrowRight, Trash2, Users, ScanLine, PlusCircle, Edit2, ListChecks, FilePlus, History as HistoryIconLucide, FileText, CalendarClock } from "lucide-react";
+import { Home, LogOut, Settings, UserCircle, Power, Info, Percent, Landmark, UserCheck, Loader2, UserPlus, ArrowRight, Trash2, Users, ScanLine, PlusCircle, Edit2, ListChecks, FilePlus, FileText, CalendarClock } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -484,10 +484,6 @@ export default function SplitBillAppPage() {
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                   <DropdownMenuItem onClick={() => router.push('/app/history')}>
-                    <HistoryIconLucide className="mr-2 h-4 w-4" />
-                    <span>Riwayat Tagihan</span>
-                  </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => router.push('/app/profile')}>
                     <UserCircle className="mr-2 h-4 w-4" />
                     <span>Profil</span>
@@ -860,3 +856,6 @@ export default function SplitBillAppPage() {
     
 
 
+
+
+    

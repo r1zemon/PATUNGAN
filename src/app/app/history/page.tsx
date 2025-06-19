@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
-import { Home, LogOut, Settings, UserCircle, Power, Info, FilePlus, Loader2, History as HistoryIconLucide, Users, Coins, CalendarDays } from "lucide-react"; 
+import { Home, LogOut, Settings, UserCircle, Power, Info, FilePlus, Loader2, History as HistoryIconLucide, Users, Coins, CalendarDays, BarChart2 } from "lucide-react"; 
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -162,10 +162,6 @@ export default function HistoryPage() {
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => router.push('/app/history')}>
-                    <HistoryIconLucide className="mr-2 h-4 w-4" />
-                    <span>Riwayat Tagihan</span>
-                  </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => router.push('/app/profile')}>
                     <UserCircle className="mr-2 h-4 w-4" />
                     <span>Profil</span>
@@ -191,6 +187,23 @@ export default function HistoryPage() {
       </header>
 
       <main className="relative z-10 container mx-auto px-4 py-8 md:px-6 md:py-12 flex-grow">
+        <Card className="shadow-lg mb-8">
+            <CardHeader>
+              <CardTitle className="flex items-center"><BarChart2 className="mr-2 h-5 w-5 text-primary"/> Ringkasan Finansial</CardTitle>
+              <CardDescription>Statistik penggunaan aplikasi Patungan Anda.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <h4 className="font-medium">Total Pengeluaran Bulan Ini:</h4>
+                <p className="text-muted-foreground">Segera hadir! (Fitur grafik pengeluaran bulanan sedang dikembangkan).</p>
+              </div>
+              <div>
+                <h4 className="font-medium">Total Tagihan Dibuat:</h4>
+                <p className="text-muted-foreground">Segera hadir! (Jumlah tagihan yang pernah Anda inisiasi).</p>
+              </div>
+            </CardContent>
+        </Card>
+
         <div className="flex flex-col sm:flex-row justify-between items-center mb-8 gap-4">
             <h2 className="text-3xl font-semibold tracking-tight text-foreground flex items-center">
                 <HistoryIconLucide className="mr-3 h-8 w-8 text-primary" />
@@ -268,3 +281,6 @@ export default function HistoryPage() {
 
 
 
+
+
+    

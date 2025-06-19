@@ -5,7 +5,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
-import { Menu, LogOut, UserCircle, LayoutDashboard, History as HistoryIconLucide, Settings, FilePlus } from 'lucide-react'; 
+import { Menu, LogOut, UserCircle, Settings, FilePlus, History as HistoryIconLucide } from 'lucide-react'; 
 import { useEffect, useState, useCallback } from 'react';
 import { getCurrentUserAction, logoutUserAction } from '@/lib/actions';
 import type { User as SupabaseUser } from "@supabase/supabase-js";
@@ -175,10 +175,6 @@ export function LandingHeader() {
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={handleHistoryClick}>
-                    <HistoryIconLucide className="mr-2 h-4 w-4" />
-                    <span>Riwayat Tagihan</span>
-                  </DropdownMenuItem>
                   <DropdownMenuItem onClick={handleProfileClick}>
                     <UserCircle className="mr-2 h-4 w-4" />
                     <span>Profil</span>
@@ -276,6 +272,8 @@ export function LandingHeader() {
     </header>
   );
 }
+    
+
     
 
     

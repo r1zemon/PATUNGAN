@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useToast } from "@/hooks/use-toast";
-import { Home, LogOut, Settings, UserCircle, Save, Edit3, Shield, BarChart2, Bell, AlertTriangle, FileImage, Loader2, History as HistoryIconLucide, Phone, AtSign, UserSquare2, Trash2, Crop, Check, X, Undo2 } from "lucide-react";
+import { Home, LogOut, Settings, UserCircle, Save, Edit3, Shield, AlertTriangle, FileImage, Loader2, Phone, AtSign, UserSquare2, Trash2, Crop, Check, X, Undo2 } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import {
   DropdownMenu,
@@ -273,85 +273,91 @@ export default function ProfilePage() {
     if (!authUser || !userProfile) return;
     setIsSaving(true);
 
-    const profileUpdates: Partial<Omit<Profile, 'id' | 'email'>> = {};
-    let hasChanges = false;
+    try {
+      const profileUpdates: Partial<Omit<Profile, 'id' | 'email'>> = {};
+      let hasChanges = false;
+      const errorMessages: string[] = [];
 
-    const trimmedFullName = formData.fullName.trim();
-    if (!trimmedFullName) {
-       toast({ variant: "destructive", title: "Validasi Gagal", description: "Nama lengkap tidak boleh kosong."});
-       setIsSaving(false);
-       return;
-    }
-    if (trimmedFullName !== (userProfile.full_name || "")) {
-      profileUpdates.full_name = trimmedFullName;
-      hasChanges = true;
-    }
-
-    const trimmedUsername = formData.username.trim();
-    if (!trimmedUsername) {
-        toast({ variant: "destructive", title: "Validasi Gagal", description: "Username tidak boleh kosong."});
+      const trimmedFullName = formData.fullName.trim();
+      if (!trimmedFullName) {
+        toast({ variant: "destructive", title: "Validasi Gagal", description: "Nama lengkap tidak boleh kosong."});
         setIsSaving(false);
         return;
-    }
-    if (trimmedUsername !== (userProfile.username || "")) {
-      profileUpdates.username = trimmedUsername;
-      hasChanges = true;
-    }
-    
-    let processedPhoneNumber: string | null = null;
-    if (typeof formData.phoneNumber === 'string' && formData.phoneNumber.trim() !== '') {
-        processedPhoneNumber = formData.phoneNumber.trim();
-    } else if (typeof formData.phoneNumber === 'string' && formData.phoneNumber.trim() === '' && userProfile.phone_number) {
-        processedPhoneNumber = null; 
-    }
+      }
+      if (trimmedFullName !== (userProfile.full_name || "")) {
+        profileUpdates.full_name = trimmedFullName;
+        hasChanges = true;
+      }
 
+      const trimmedUsername = formData.username.trim();
+      if (!trimmedUsername) {
+          toast({ variant: "destructive", title: "Validasi Gagal", description: "Username tidak boleh kosong."});
+          setIsSaving(false);
+          return;
+      }
+      if (trimmedUsername !== (userProfile.username || "")) {
+        profileUpdates.username = trimmedUsername;
+        hasChanges = true;
+      }
+      
+      let processedPhoneNumber: string | null = null;
+      if (typeof formData.phoneNumber === 'string' && formData.phoneNumber.trim() !== '') {
+          processedPhoneNumber = formData.phoneNumber.trim();
+      } else if (typeof formData.phoneNumber === 'string' && formData.phoneNumber.trim() === '' && userProfile.phone_number) {
+          processedPhoneNumber = null; 
+      }
 
-    if (processedPhoneNumber !== (userProfile.phone_number || null)) {
-      profileUpdates.phone_number = processedPhoneNumber;
-      hasChanges = true;
-    }
+      if (processedPhoneNumber !== (userProfile.phone_number || null)) {
+        profileUpdates.phone_number = processedPhoneNumber;
+        hasChanges = true;
+      }
 
-    if (avatarFile) {
-        hasChanges = true; 
-    }
+      if (avatarFile) {
+          hasChanges = true; 
+      }
 
-    if (!hasChanges) {
-        toast({ title: "Tidak Ada Perubahan", description: "Tidak ada informasi yang diubah untuk disimpan." });
+      if (!hasChanges) {
+          toast({ title: "Tidak Ada Perubahan", description: "Tidak ada informasi yang diubah untuk disimpan." });
+          setIsSaving(false);
+          return;
+      }
+      
+      const { success, data: updatedProfileData, error: updateError } = await updateUserProfileAction(
+          authUser.id, 
+          profileUpdates,
+          avatarFile 
+      );
+
+      if (success && updatedProfileData) {
+        toast({ title: "Profil Diperbarui", description: "Informasi akun Anda berhasil disimpan." });
+        const typedUpdatedProfile = updatedProfileData as Profile;
+        setUserProfile(prevProfile => ({...(prevProfile || {} as Profile), ...typedUpdatedProfile})); 
+        
+        setFormData(prev => ({
+            ...prev,
+            fullName: typedUpdatedProfile.full_name || "",
+            username: typedUpdatedProfile.username || "",
+            phoneNumber: typedUpdatedProfile.phone_number || "",
+        }));
+        setCroppedAvatarPreview(null); 
+        setAvatarFile(null); 
+        if (avatarFileInputRef.current) avatarFileInputRef.current.value = "";
+        
+        setHeaderAvatarUrl(typedUpdatedProfile.avatar_url || null);
+        const newHeaderDisplayName = typedUpdatedProfile.username || typedUpdatedProfile.full_name || authUser.email || "Pengguna";
+        setHeaderDisplayName(newHeaderDisplayName);
+        setHeaderAvatarInitial(newHeaderDisplayName ? newHeaderDisplayName.substring(0,1).toUpperCase() : "P");
+        
+      } else {
+        const errorMessagesToShow = Array.isArray(updateError) ? updateError.join('; ') : updateError;
+        toast({ variant: "destructive", title: "Gagal Menyimpan", description: errorMessagesToShow || "Tidak dapat memperbarui profil." });
+      }
+    } catch (e: any) {
+        console.error("Client-side unhandled exception in handleSaveChanges:", e);
+        toast({ variant: "destructive", title: "Kesalahan Tak Terduga", description: e.message || "Terjadi kesalahan yang tidak terduga pada klien." });
+    } finally {
         setIsSaving(false);
-        return;
     }
-    
-    const { success, data: updatedProfileData, error: updateError } = await updateUserProfileAction(
-        authUser.id, 
-        profileUpdates,
-        avatarFile 
-    );
-
-    if (success && updatedProfileData) {
-      toast({ title: "Profil Diperbarui", description: "Informasi akun Anda berhasil disimpan." });
-      const typedUpdatedProfile = updatedProfileData as Profile;
-      setUserProfile(prevProfile => ({...(prevProfile || {} as Profile), ...typedUpdatedProfile})); 
-      
-      setFormData(prev => ({
-          ...prev,
-          fullName: typedUpdatedProfile.full_name || "",
-          username: typedUpdatedProfile.username || "",
-          phoneNumber: typedUpdatedProfile.phone_number || "",
-      }));
-      setCroppedAvatarPreview(null); 
-      setAvatarFile(null); 
-      if (avatarFileInputRef.current) avatarFileInputRef.current.value = "";
-      
-      setHeaderAvatarUrl(typedUpdatedProfile.avatar_url || null);
-      const newHeaderDisplayName = typedUpdatedProfile.username || typedUpdatedProfile.full_name || authUser.email || "Pengguna";
-      setHeaderDisplayName(newHeaderDisplayName);
-      setHeaderAvatarInitial(newHeaderDisplayName ? newHeaderDisplayName.substring(0,1).toUpperCase() : "P");
-      
-    } else {
-      const errorMessages = Array.isArray(updateError) ? updateError.join('; ') : updateError;
-      toast({ variant: "destructive", title: "Gagal Menyimpan", description: errorMessages || "Tidak dapat memperbarui profil." });
-    }
-    setIsSaving(false);
   };
   
   const handleRemoveAvatar = async () => {
@@ -360,24 +366,30 @@ export default function ProfilePage() {
         return;
     }
     setIsRemovingAvatar(true);
-    const { success, data, error } = await removeAvatarAction(authUser.id);
-    if (success) {
-        toast({ title: "Foto Profil Dihapus", description: "Foto profil Anda berhasil dihapus." });
-        
-        const updatedProfile = { ...userProfile, avatar_url: null };
-        setUserProfile(updatedProfile);
-        setCroppedAvatarPreview(null);
-        setAvatarFile(null);
-        if (avatarFileInputRef.current) avatarFileInputRef.current.value = "";
+    try {
+        const { success, data, error } = await removeAvatarAction(authUser.id);
+        if (success) {
+            toast({ title: "Foto Profil Dihapus", description: "Foto profil Anda berhasil dihapus." });
+            
+            const updatedProfile = { ...userProfile, avatar_url: null };
+            setUserProfile(updatedProfile);
+            setCroppedAvatarPreview(null);
+            setAvatarFile(null);
+            if (avatarFileInputRef.current) avatarFileInputRef.current.value = "";
 
-        setHeaderAvatarUrl(null);
-        const newHeaderDisplayName = formData.fullName || formData.username || authUser.email || "Pengguna";
-        setHeaderDisplayName(newHeaderDisplayName);
-        setHeaderAvatarInitial(newHeaderDisplayName ? newHeaderDisplayName.substring(0,1).toUpperCase() : "P");
-    } else {
-        toast({ variant: "destructive", title: "Gagal Menghapus Foto", description: error || "Tidak dapat menghapus foto profil." });
+            setHeaderAvatarUrl(null);
+            const newHeaderDisplayName = formData.fullName || formData.username || authUser.email || "Pengguna";
+            setHeaderDisplayName(newHeaderDisplayName);
+            setHeaderAvatarInitial(newHeaderDisplayName ? newHeaderDisplayName.substring(0,1).toUpperCase() : "P");
+        } else {
+            toast({ variant: "destructive", title: "Gagal Menghapus Foto", description: error || "Tidak dapat menghapus foto profil." });
+        }
+    } catch (e:any) {
+        console.error("Client-side unhandled exception in handleRemoveAvatar:", e);
+        toast({ variant: "destructive", title: "Kesalahan Tak Terduga", description: e.message || "Terjadi kesalahan yang tidak terduga pada klien saat menghapus avatar." });
+    } finally {
+        setIsRemovingAvatar(false);
     }
-    setIsRemovingAvatar(false);
   };
 
   const handleLogout = async () => {
@@ -396,7 +408,6 @@ export default function ProfilePage() {
 
   const hasAvatarChangesPending = croppedAvatarPreview !== null;
   const shortDisplayNameForHeader = userProfile?.username || (userProfile?.full_name ? userProfile.full_name.split(' ')[0] : (authUser?.email ? authUser.email.split('@')[0] : "Pengguna"));
-
 
 
   if (isLoadingUser || !authUser || !userProfile) {
@@ -463,10 +474,6 @@ export default function ProfilePage() {
                   </div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => router.push('/app/history')}>
-                  <HistoryIconLucide className="mr-2 h-4 w-4" />
-                  <span>Riwayat Tagihan</span>
-                </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => router.push('/app/profile')}>
                   <UserCircle className="mr-2 h-4 w-4" />
                   <span>Profil</span>
@@ -663,24 +670,6 @@ export default function ProfilePage() {
             </DialogContent>
           </Dialog>
 
-
-          <Card className="shadow-lg">
-            <CardHeader>
-              <CardTitle className="flex items-center"><BarChart2 className="mr-2 h-5 w-5 text-primary"/> Ringkasan Finansial</CardTitle>
-              <CardDescription>Statistik penggunaan aplikasi Patungan Anda.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <h4 className="font-medium">Total Pengeluaran Bulan Ini:</h4>
-                <p className="text-muted-foreground">Segera hadir! (Fitur grafik pengeluaran bulanan sedang dikembangkan).</p>
-              </div>
-              <div>
-                <h4 className="font-medium">Total Tagihan Dibuat:</h4>
-                <p className="text-muted-foreground">Segera hadir! (Jumlah tagihan yang pernah Anda inisiasi).</p>
-              </div>
-            </CardContent>
-          </Card>
-
           <Card className="shadow-lg">
             <CardHeader>
               <CardTitle className="flex items-center"><Shield className="mr-2 h-5 w-5 text-primary"/> Keamanan Akun</CardTitle>
@@ -722,3 +711,6 @@ export default function ProfilePage() {
     
 
 
+
+
+    

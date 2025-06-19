@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect, useCallback, ChangeEvent, FormEvent } from "react";
+import React, { useState, useEffect, useCallback, ChangeEvent, FormEvent, useRef } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useToast } from "@/hooks/use-toast";
-import { Home, LogOut, Settings, UserCircle, Save, Edit3, Shield, BarChart2, Bell, AlertTriangle, FileImage, Loader2, History as HistoryIconLucide, Phone, AtSign, UserSquare2, Trash2 } from "lucide-react";
+import { Home, LogOut, Settings, UserCircle, Save, Edit3, Shield, BarChart2, Bell, AlertTriangle, FileImage, Loader2, History as HistoryIconLucide, Phone, AtSign, UserSquare2, Trash2, Crop, Check, X } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import {
   DropdownMenu,
@@ -35,7 +35,19 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
   AlertDialogTrigger,
-} from "@/components/ui/alert-dialog"
+} from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+  DialogClose,
+} from "@/components/ui/dialog";
+
+import ReactCrop, { type Crop, centerCrop, makeAspectCrop, PixelCrop } from 'react-image-crop';
+
 
 interface Profile {
   id: string;
@@ -46,23 +58,58 @@ interface Profile {
   phone_number?: string | null;
 }
 
+// Helper function to convert data URL to File object
+function dataURLtoFile(dataurl: string, filename: string): File | null {
+  const arr = dataurl.split(',');
+  if (arr.length < 2) {
+    return null;
+  }
+  const mimeMatch = arr[0].match(/:(.*?);/);
+  if (!mimeMatch || mimeMatch.length < 2) {
+    return null;
+  }
+  const mime = mimeMatch[1];
+  const bstr = atob(arr[arr.length - 1]);
+  let n = bstr.length;
+  const u8arr = new Uint8Array(n);
+  while (n--) {
+    u8arr[n] = bstr.charCodeAt(n);
+  }
+  return new File([u8arr], filename, { type: mime });
+}
+
+
 export default function ProfilePage() {
   const [authUser, setAuthUser] = useState<SupabaseUser | null>(null);
   const [userProfile, setUserProfile] = useState<Profile | null>(null);
   
+  const [headerAvatarUrl, setHeaderAvatarUrl] = useState<string | null>(null);
+  const [headerDisplayName, setHeaderDisplayName] = useState<string>("Pengguna");
+  const [headerAvatarInitial, setHeaderAvatarInitial] = useState<string>("P");
+
   const [isLoadingUser, setIsLoadingUser] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isRemovingAvatar, setIsRemovingAvatar] = useState(false);
-
 
   const [formData, setFormData] = useState({
     fullName: "",
     username: "",
     phoneNumber: "",
-    avatarUrl: "", 
+    avatarUrlInput: "", // For manual URL input
   });
-  const [avatarFile, setAvatarFile] = useState<File | null>(null);
-  const [avatarPreview, setAvatarPreview] = useState<string | null>(null); 
+
+  const [avatarFile, setAvatarFile] = useState<File | null>(null); // This will hold the CROPPED image file
+  
+  // Cropper state
+  const [imgSrcForCropper, setImgSrcForCropper] = useState<string>('');
+  const [crop, setCrop] = useState<Crop | undefined>();
+  const [completedCrop, setCompletedCrop] = useState<PixelCrop | null>(null);
+  const [showCropperDialog, setShowCropperDialog] = useState(false);
+  const [croppedAvatarPreview, setCroppedAvatarPreview] = useState<string | null>(null); // Preview of cropped image on the form
+
+  const imgRef = useRef<HTMLImageElement>(null);
+  const previewCanvasRef = useRef<HTMLCanvasElement>(null);
+  const avatarFileInputRef = useRef<HTMLInputElement>(null);
 
 
   const { toast } = useToast();
@@ -86,9 +133,19 @@ export default function ProfilePage() {
         fullName: typedProfile.full_name || "",
         username: typedProfile.username || "",
         phoneNumber: typedProfile.phone_number || "",
-        avatarUrl: typedProfile.avatar_url || "", 
+        avatarUrlInput: typedProfile.avatar_url || "", 
       });
-      setAvatarPreview(typedProfile.avatar_url || null); 
+      // Set initial header state from profile
+      setHeaderAvatarUrl(typedProfile.avatar_url || null);
+      const initialDisplayName = typedProfile.full_name || typedProfile.username || user.email || "Pengguna";
+      setHeaderDisplayName(initialDisplayName);
+      setHeaderAvatarInitial(initialDisplayName ? initialDisplayName.substring(0,1).toUpperCase() : "P");
+
+    } else {
+       // Set initial header state from authUser if profile is null
+      const initialDisplayName = user.email || "Pengguna";
+      setHeaderDisplayName(initialDisplayName);
+      setHeaderAvatarInitial(initialDisplayName ? initialDisplayName.substring(0,1).toUpperCase() : "P");
     }
     setIsLoadingUser(false);
   }, [router, toast]);
@@ -102,35 +159,110 @@ export default function ProfilePage() {
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
   
-  const handleAvatarFileChange = (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
+  const handleAvatarFileSelect = (e: ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      const file = e.target.files[0];
       const allowedTypes = ["image/jpeg", "image/png", "image/webp", "image/gif"];
       const maxSize = 5 * 1024 * 1024; // 5MB
 
       if (!allowedTypes.includes(file.type)) {
         toast({ variant: "destructive", title: "Jenis File Tidak Valid", description: "Hanya file JPG, PNG, WEBP, GIF yang diizinkan."});
-        setAvatarFile(null); 
-        if (e.target) e.target.value = ""; 
+        if (avatarFileInputRef.current) avatarFileInputRef.current.value = "";
         return;
       }
       if (file.size > maxSize) {
         toast({ variant: "destructive", title: "Ukuran File Terlalu Besar", description: "Ukuran file maksimal 5MB."});
-        setAvatarFile(null); 
-        if (e.target) e.target.value = ""; 
+        if (avatarFileInputRef.current) avatarFileInputRef.current.value = "";
         return;
       }
-      setAvatarFile(file);
+      
+      setCrop(undefined); // Reset crop when new image is selected
       const reader = new FileReader();
-      reader.onloadend = () => {
-        setAvatarPreview(reader.result as string); 
-      };
+      reader.addEventListener('load', () => {
+        setImgSrcForCropper(reader.result?.toString() || '');
+        setShowCropperDialog(true);
+        // Clear the file input so the same file can be re-selected if needed after cancelling crop
+        if (avatarFileInputRef.current) avatarFileInputRef.current.value = "";
+      });
       reader.readAsDataURL(file);
-    } else {
-      setAvatarFile(null);
-      setAvatarPreview(formData.avatarUrl || userProfile?.avatar_url || null);
+      setAvatarFile(null); // Clear any previously set (cropped) avatar file
+      setCroppedAvatarPreview(null); // Clear previous cropped preview
+      setFormData(prev => ({ ...prev, avatarUrlInput: "" })); // Clear manual URL input if file is chosen
     }
   };
+
+  function onImageLoad(e: React.SyntheticEvent<HTMLImageElement>) {
+    const { width, height } = e.currentTarget;
+    const initialCrop = centerCrop(
+      makeAspectCrop(
+        {
+          unit: '%',
+          width: 90,
+        },
+        1, // Aspect ratio 1:1 for circle
+        width,
+        height
+      ),
+      width,
+      height
+    );
+    setCrop(initialCrop);
+  }
+
+  async function handleConfirmCrop() {
+    const image = imgRef.current;
+    const canvas = previewCanvasRef.current;
+    if (!image || !canvas || !completedCrop) {
+      toast({ variant: "destructive", title: "Gagal Memotong", description: "Data gambar atau area potong tidak lengkap."});
+      return;
+    }
+
+    const scaleX = image.naturalWidth / image.width;
+    const scaleY = image.naturalHeight / image.height;
+    const pixelRatio = window.devicePixelRatio || 1;
+
+    canvas.width = Math.floor(completedCrop.width * scaleX * pixelRatio);
+    canvas.height = Math.floor(completedCrop.height * scaleY * pixelRatio);
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      toast({ variant: "destructive", title: "Gagal Memotong", description: "Tidak dapat mengakses konteks canvas."});
+      return;
+    }
+
+    ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+    ctx.imageSmoothingQuality = 'high';
+
+    const cropX = completedCrop.x * scaleX;
+    const cropY = completedCrop.y * scaleY;
+    const cropWidth = completedCrop.width * scaleX;
+    const cropHeight = completedCrop.height * scaleY;
+
+    // Draw the cropped image
+    ctx.drawImage(
+      image,
+      cropX,
+      cropY,
+      cropWidth,
+      cropHeight,
+      0,
+      0,
+      completedCrop.width * pixelRatio, // Draw on canvas respecting pixel ratio for sharpness
+      completedCrop.height * pixelRatio
+    );
+    
+    // Get data URL (e.g., image/png or image/jpeg)
+    const base64Image = canvas.toDataURL('image/png'); // Or 'image/jpeg'
+    setCroppedAvatarPreview(base64Image); // Update the preview on the form
+
+    const croppedFile = dataURLtoFile(base64Image, 'avatar.png');
+    if (croppedFile) {
+      setAvatarFile(croppedFile); // This file will be uploaded
+    } else {
+      toast({ variant: "destructive", title: "Gagal Membuat File", description: "Tidak dapat mengonversi gambar yang dipotong."});
+    }
+    setShowCropperDialog(false);
+  }
 
 
   const handleSaveChanges = async (e: FormEvent<HTMLFormElement>) => {
@@ -138,42 +270,36 @@ export default function ProfilePage() {
     if (!authUser || !userProfile) return;
     setIsSaving(true);
 
-    const profileUpdates: Partial<Profile> = {};
+    const profileUpdates: Partial<Omit<Profile, 'id' | 'email'>> = {};
     let hasChanges = false;
 
     const trimmedFullName = formData.fullName.trim();
-    if (trimmedFullName && trimmedFullName !== (userProfile.full_name || "")) {
-      profileUpdates.full_name = trimmedFullName;
-      hasChanges = true;
-    } else if (!trimmedFullName && userProfile.full_name) { 
-      profileUpdates.full_name = null; 
-      hasChanges = true;
-    }
     if (!trimmedFullName) {
        toast({ variant: "destructive", title: "Validasi Gagal", description: "Nama lengkap tidak boleh kosong."});
        setIsSaving(false);
        return;
     }
+    if (trimmedFullName !== (userProfile.full_name || "")) {
+      profileUpdates.full_name = trimmedFullName;
+      hasChanges = true;
+    }
 
     const trimmedUsername = formData.username.trim();
-     if (trimmedUsername && trimmedUsername !== (userProfile.username || "")) {
-      profileUpdates.username = trimmedUsername;
-      hasChanges = true;
-    } else if (!trimmedUsername && userProfile.username) {
-       profileUpdates.username = null;
-       hasChanges = true;
-    }
-     if (!trimmedUsername) {
+    if (!trimmedUsername) {
         toast({ variant: "destructive", title: "Validasi Gagal", description: "Username tidak boleh kosong."});
         setIsSaving(false);
         return;
+    }
+    if (trimmedUsername !== (userProfile.username || "")) {
+      profileUpdates.username = trimmedUsername;
+      hasChanges = true;
     }
     
     let processedPhoneNumber: string | null = null;
     if (typeof formData.phoneNumber === 'string' && formData.phoneNumber.trim() !== '') {
         processedPhoneNumber = formData.phoneNumber.trim();
     } else if (typeof formData.phoneNumber === 'string' && formData.phoneNumber.trim() === '' && userProfile.phone_number) {
-        processedPhoneNumber = null;
+        processedPhoneNumber = null; // User cleared the phone number
     }
 
 
@@ -182,44 +308,51 @@ export default function ProfilePage() {
       hasChanges = true;
     }
 
-    if (!avatarFile && formData.avatarUrl.trim() !== (userProfile.avatar_url || "")) {
-        profileUpdates.avatar_url = formData.avatarUrl.trim() || null; 
+    // Handle avatar_url from manual input if no file is uploaded
+    if (!avatarFile && formData.avatarUrlInput.trim() !== (userProfile.avatar_url || "")) {
+        profileUpdates.avatar_url = formData.avatarUrlInput.trim() || null; 
         hasChanges = true;
-    } else if (avatarFile) {
+    } else if (avatarFile) { // If a new (cropped) file is ready for upload
         hasChanges = true; 
     }
 
 
-    if (!hasChanges && !avatarFile) {
+    if (!hasChanges) {
         toast({ title: "Tidak Ada Perubahan", description: "Tidak ada informasi yang diubah untuk disimpan." });
         setIsSaving(false);
         return;
     }
     
+    // `avatarFile` here is the cropped image file if a new avatar was selected and cropped
     const { success, data: updatedProfileData, error: updateError } = await updateUserProfileAction(
         authUser.id, 
         profileUpdates,
-        avatarFile 
+        avatarFile // Pass the (potentially cropped) file
     );
 
     if (success && updatedProfileData) {
       toast({ title: "Profil Diperbarui", description: "Informasi akun Anda berhasil disimpan." });
       const typedUpdatedProfile = updatedProfileData as Profile;
-      setUserProfile(prevProfile => ({...(prevProfile || {}), ...typedUpdatedProfile} as Profile) ); 
+      setUserProfile(prevProfile => ({...(prevProfile || {} as Profile), ...typedUpdatedProfile})); 
       
       setFormData(prev => ({
           ...prev,
           fullName: typedUpdatedProfile.full_name || "",
           username: typedUpdatedProfile.username || "",
           phoneNumber: typedUpdatedProfile.phone_number || "",
-          avatarUrl: typedUpdatedProfile.avatar_url || "", 
+          avatarUrlInput: typedUpdatedProfile.avatar_url || "", 
       }));
-      setAvatarPreview(typedUpdatedProfile.avatar_url || null);
+      setCroppedAvatarPreview(null); // Clear form's cropped preview, rely on updatedProfileData
       setAvatarFile(null); 
-      if (document.getElementById('avatarFile')) {
-        (document.getElementById('avatarFile') as HTMLInputElement).value = ""; 
-      }
-      router.refresh(); 
+      if (avatarFileInputRef.current) avatarFileInputRef.current.value = "";
+      
+      // Update header avatar state
+      setHeaderAvatarUrl(typedUpdatedProfile.avatar_url || null);
+      const newHeaderDisplayName = typedUpdatedProfile.full_name || typedUpdatedProfile.username || authUser.email || "Pengguna";
+      setHeaderDisplayName(newHeaderDisplayName);
+      setHeaderAvatarInitial(newHeaderDisplayName ? newHeaderDisplayName.substring(0,1).toUpperCase() : "P");
+      
+      // router.refresh(); // Not always needed if state updates cover UI
     } else {
       const errorMessages = Array.isArray(updateError) ? updateError.join('; ') : updateError;
       toast({ variant: "destructive", title: "Gagal Menyimpan", description: errorMessages || "Tidak dapat memperbarui profil." });
@@ -236,14 +369,17 @@ export default function ProfilePage() {
     const { success, data, error } = await removeAvatarAction(authUser.id);
     if (success) {
         toast({ title: "Foto Profil Dihapus", description: "Foto profil Anda berhasil dihapus." });
-        setUserProfile(prev => ({ ...prev, avatar_url: null } as Profile));
-        setFormData(prev => ({ ...prev, avatarUrl: "" }));
-        setAvatarPreview(null);
+        
+        const updatedProfile = { ...userProfile, avatar_url: null };
+        setUserProfile(updatedProfile);
+        setFormData(prev => ({ ...prev, avatarUrlInput: "" }));
+        setCroppedAvatarPreview(null);
         setAvatarFile(null);
-        if (document.getElementById('avatarFile')) {
-            (document.getElementById('avatarFile') as HTMLInputElement).value = "";
-        }
-        router.refresh();
+        if (avatarFileInputRef.current) avatarFileInputRef.current.value = "";
+
+        // Update header avatar state
+        setHeaderAvatarUrl(null);
+        // Display name in header doesn't change on avatar removal, so no need to update it here
     } else {
         toast({ variant: "destructive", title: "Gagal Menghapus Foto", description: error || "Tidak dapat menghapus foto profil." });
     }
@@ -260,12 +396,10 @@ export default function ProfilePage() {
     }
   };
   
-  const headerDisplayName = userProfile?.full_name || userProfile?.username || authUser?.email || "Pengguna";
-  const headerAvatarInitial = headerDisplayName ? headerDisplayName.substring(0,1).toUpperCase() : "P";
-  const headerAvatarUrl = userProfile?.avatar_url;
-
-  const formPreviewDisplayName = formData.fullName || formData.username || authUser?.email || "Pengguna";
-  const formPreviewAvatarInitial = formPreviewDisplayName ? formPreviewDisplayName.substring(0,1).toUpperCase() : "P";
+  // For form's avatar display (shows cropped preview, then manual URL, then existing profile URL)
+  const formAvatarDisplayUrl = croppedAvatarPreview || formData.avatarUrlInput || userProfile?.avatar_url;
+  const formDisplayFullName = formData.fullName || formData.username || authUser?.email || "Pengguna";
+  const formAvatarDisplayInitial = formDisplayFullName ? formDisplayFullName.substring(0,1).toUpperCase() : "P";
 
 
   if (isLoadingUser || !authUser || !userProfile) {
@@ -372,16 +506,22 @@ export default function ProfilePage() {
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="flex flex-col items-center space-y-3">
-                    <Avatar className="h-24 w-24">
-                        <AvatarImage src={avatarPreview || `https://placehold.co/96x96.png?text=${formPreviewAvatarInitial}`} alt={formData.fullName || formPreviewDisplayName} data-ai-hint="user avatar large"/>
-                        <AvatarFallback className="text-3xl">{formPreviewAvatarInitial}</AvatarFallback>
+                    <Avatar className="h-24 w-24 rounded-full">
+                        <AvatarImage src={formAvatarDisplayUrl || `https://placehold.co/96x96.png?text=${formAvatarDisplayInitial}`} alt={formDisplayFullName} className="rounded-full" data-ai-hint="user avatar large"/>
+                        <AvatarFallback className="text-3xl rounded-full">{formAvatarDisplayInitial}</AvatarFallback>
                     </Avatar>
                     <div className="grid w-full max-w-sm items-center gap-1.5">
                         <Label htmlFor="avatarFile">Ubah Foto Profil (Opsional)</Label>
-                        <Input id="avatarFile" type="file" accept="image/jpeg,image/png,image/webp,image/gif" onChange={handleAvatarFileChange} />
-                        <p className="text-xs text-muted-foreground">Pilih file untuk diunggah, atau masukkan URL di bawah.</p>
+                        <Input 
+                            id="avatarFile" 
+                            type="file" 
+                            accept="image/jpeg,image/png,image/webp,image/gif" 
+                            onChange={handleAvatarFileSelect} 
+                            ref={avatarFileInputRef}
+                        />
+                        <p className="text-xs text-muted-foreground">Pilih file untuk dipotong dan diunggah, atau masukkan URL di bawah.</p>
                     </div>
-                     {userProfile.avatar_url && (
+                     {userProfile.avatar_url && !croppedAvatarPreview && !avatarFile && ( // Show remove only if there's a saved avatar and no new one being staged
                         <AlertDialog>
                             <AlertDialogTrigger asChild>
                                 <Button 
@@ -414,10 +554,10 @@ export default function ProfilePage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="avatarUrl">URL Foto Profil (Alternatif)</Label>
+                  <Label htmlFor="avatarUrlInput">URL Foto Profil (Alternatif)</Label>
                   <div className="relative">
                     <FileImage className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                    <Input id="avatarUrl" name="avatarUrl" type="url" placeholder="https://example.com/avatar.png" value={formData.avatarUrl} onChange={handleInputChange} className="pl-10"/>
+                    <Input id="avatarUrlInput" name="avatarUrlInput" type="url" placeholder="https://example.com/avatar.png" value={formData.avatarUrlInput} onChange={handleInputChange} className="pl-10"/>
                   </div>
                    <p className="text-xs text-muted-foreground">Jika Anda tidak mengunggah file, URL ini akan digunakan.</p>
                 </div>
@@ -452,13 +592,68 @@ export default function ProfilePage() {
                 </div>
               </CardContent>
               <CardFooter>
-                <Button type="submit" disabled={isSaving || isRemovingAvatar} className="w-full sm:w-auto">
+                <Button type="submit" disabled={isSaving || isRemovingAvatar || showCropperDialog} className="w-full sm:w-auto">
                   {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Save className="mr-2 h-4 w-4" />}
                   {isSaving ? "Menyimpan..." : "Simpan Perubahan Akun"}
                 </Button>
               </CardFooter>
             </Card>
           </form>
+
+          {/* Hidden Canvas for Cropping */}
+          <canvas ref={previewCanvasRef} style={{ display: 'none', border: '1px solid black', objectFit: 'contain', width: 150, height: 150 }}/>
+
+          {/* Cropper Dialog */}
+          <Dialog open={showCropperDialog} onOpenChange={(open) => {
+            if (!open) { // If dialog is closed (e.g. by Escape key or clicking outside)
+                setImgSrcForCropper(''); // Clear image source to prevent re-opening with old image
+                if (avatarFileInputRef.current) avatarFileInputRef.current.value = ""; // Reset file input
+            }
+            setShowCropperDialog(open);
+           }}>
+            <DialogContent className="sm:max-w-[500px]">
+              <DialogHeader>
+                <DialogTitle className="flex items-center"><Crop className="mr-2"/> Potong Foto Profil</DialogTitle>
+                <DialogDescription>
+                  Pilih area foto yang ingin Anda jadikan foto profil. Hasilnya akan berbentuk lingkaran.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="py-4 max-h-[60vh] overflow-y-auto flex justify-center items-center">
+                {imgSrcForCropper && (
+                  <ReactCrop
+                    crop={crop}
+                    onChange={(_, percentCrop) => setCrop(percentCrop)}
+                    onComplete={(c) => setCompletedCrop(c)}
+                    aspect={1}
+                    circularCrop
+                    minWidth={50}
+                    minHeight={50}
+                  >
+                    <img
+                      ref={imgRef}
+                      alt="Crop me"
+                      src={imgSrcForCropper}
+                      onLoad={onImageLoad}
+                      style={{ maxHeight: '50vh', objectFit: 'contain' }}
+                    />
+                  </ReactCrop>
+                )}
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => {
+                  setShowCropperDialog(false);
+                  setImgSrcForCropper('');
+                  if (avatarFileInputRef.current) avatarFileInputRef.current.value = "";
+                }}>
+                  <X className="mr-2 h-4 w-4"/> Batal
+                </Button>
+                <Button onClick={handleConfirmCrop} disabled={!completedCrop || !imgRef.current}>
+                  <Check className="mr-2 h-4 w-4"/> Set Foto Profil
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
 
           <Card className="shadow-lg">
             <CardHeader>

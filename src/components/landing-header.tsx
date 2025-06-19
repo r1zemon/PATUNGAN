@@ -20,6 +20,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { NotificationBell } from './notification-bell'; // Added
 
 const navLinks = [
   { href: '/', label: 'Beranda' },
@@ -142,11 +143,12 @@ export function LandingHeader() {
           ))}
         </nav>
 
-        <div className="hidden md:flex items-center space-x-3">
+        <div className="hidden md:flex items-center space-x-2">
           {isLoadingUser ? (
              <Button variant="ghost" disabled size="sm">Memuat...</Button>
           ) : authUser ? (
             <>
+              <NotificationBell authUser={authUser} />
               <Button variant="default" asChild size="sm">
                 <Link href="/app">
                   <FilePlus className="mr-2 h-4 w-4" /> Tagihan Baru
@@ -202,7 +204,8 @@ export function LandingHeader() {
           )}
         </div>
 
-        <div className="md:hidden">
+        <div className="md:hidden flex items-center gap-2"> {/* Added flex and gap for mobile */}
+          {authUser && <NotificationBell authUser={authUser} />}
           <Sheet open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
             <SheetTrigger asChild>
               <Button variant="ghost" size="icon">
@@ -212,7 +215,7 @@ export function LandingHeader() {
             </SheetTrigger>
             <SheetContent side="right" className="w-[300px] sm:w-[400px] bg-background p-0">
               <SheetHeader className="p-4 pb-2 text-left border-b">
-                <SheetTitle className="flex items-center gap-2">
+                 <SheetTitle className="flex items-center gap-2"> {/* Added SheetTitle */}
                    <Image src="/logo.png" alt="Patungan Logo" width={32} height={32} className="rounded-lg" data-ai-hint="logo company"/>
                    <span className="text-lg font-bold text-foreground">Patungan Menu</span>
                 </SheetTitle>
@@ -276,5 +279,3 @@ export function LandingHeader() {
     </header>
   );
 }
-
-    

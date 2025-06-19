@@ -27,6 +27,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { formatCurrency } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
+import { NotificationBell } from "@/components/notification-bell"; // Added
 
 interface Profile {
   username?: string;
@@ -109,8 +110,9 @@ export default function HistoryPage() {
               <h1 className="text-2xl font-bold tracking-tight text-foreground">Patungan</h1>
             </Link>
             <div className="flex items-center gap-2 sm:gap-4">
-              <Skeleton className="h-9 w-28 hidden sm:block" />
-              <Skeleton className="h-10 w-10 rounded-full" />
+              <Skeleton className="h-9 w-28 hidden sm:block" /> {/* Placeholder for Home Button */}
+              <Skeleton className="h-10 w-10 rounded-full" /> {/* Placeholder for Notification Bell */}
+              <Skeleton className="h-10 w-10 rounded-full" /> {/* Placeholder for Avatar */}
             </div>
           </div>
         </header>
@@ -144,6 +146,7 @@ export default function HistoryPage() {
             <Button variant="ghost" className="rounded-md p-1 sm:p-1.5 h-auto" onClick={() => router.push('/')} aria-label="Kembali ke Beranda">
                 <Home className="h-10 w-10" />
             </Button>
+            {authUser && <NotificationBell authUser={authUser} />}
             {authUser ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -318,8 +321,3 @@ export default function HistoryPage() {
     </div>
   );
 }
-
-    
-
-
-

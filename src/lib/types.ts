@@ -53,3 +53,17 @@ export interface BillHistoryEntry {
   scheduled_at?: string | null; // New optional field
 }
 
+export interface Notification {
+  id: string;
+  type: 'friend_request' | 'bill_invite' | 'generic' | 'info';
+  title: string;
+  description?: string;
+  createdAt: string; // ISO string date
+  read: boolean;
+  icon?: React.ElementType; // Lucide icon component
+  link?: string;
+  sender?: {
+    name: string;
+    avatarUrl?: string;
+  };
+}

@@ -41,6 +41,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { NotificationBell } from "@/components/notification-bell"; // Added
 
 interface Profile {
   username?: string;
@@ -461,6 +462,7 @@ export default function SplitBillAppPage() {
             <Button variant="ghost" className="rounded-md p-1 sm:p-1.5 h-auto" onClick={() => router.push('/')} disabled={!authUser} aria-label="Kembali ke Beranda">
                 <Home className="h-10 w-10" />
             </Button>
+            {authUser && <NotificationBell authUser={authUser} />}
             {authUser ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -851,14 +853,3 @@ export default function SplitBillAppPage() {
     </div>
   );
 }
-    
-
-    
-
-
-
-
-    
-
-
-

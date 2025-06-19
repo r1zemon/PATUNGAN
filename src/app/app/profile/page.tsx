@@ -400,7 +400,7 @@ export default function ProfilePage() {
   if (isLoadingUser || !authUser || !userProfile) {
     return (
       <div className="relative flex flex-col min-h-screen bg-background bg-money-pattern bg-[length:120px_auto] before:content-[''] before:absolute before:inset-0 before:bg-white/[.90] before:dark:bg-black/[.90] before:z-0">
-        <header className="relative z-[1] py-4 px-4 sm:px-6 md:px-8 border-b sticky top-0 bg-background/80 backdrop-blur-md">
+        <header className="relative z-30 py-4 px-4 sm:px-6 md:px-8 border-b sticky top-0 bg-background/80 backdrop-blur-md">
           <div className="container mx-auto flex items-center justify-between h-20"> 
             <Link href="/" className="flex items-center gap-2 text-primary hover:text-primary/80 transition-colors">
               <Image src="/logo.png" alt="Patungan Logo" width={56} height={56} className="rounded-lg shadow-sm" data-ai-hint="logo company"/>
@@ -412,13 +412,13 @@ export default function ProfilePage() {
             </div>
           </div>
         </header>
-        <main className="relative z-[1] container mx-auto px-4 py-8 md:px-6 md:py-12 flex-grow">
+        <main className="relative z-10 container mx-auto px-4 py-8 md:px-6 md:py-12 flex-grow">
           <div className="flex items-center justify-center h-full">
             <Loader2 className="h-12 w-12 animate-spin text-primary" />
             <p className="ml-4 text-lg text-foreground">Memuat profil pengguna...</p>
           </div>
         </main>
-         <footer className="relative z-[1] mt-auto pt-8 border-t border-border/40 text-center text-sm text-muted-foreground">
+         <footer className="relative z-10 mt-auto pt-8 border-t border-border/40 text-center text-sm text-muted-foreground">
             <p>&copy; {new Date().getFullYear()} Patungan. Hak cipta dilindungi.</p>
         </footer>
       </div>
@@ -427,7 +427,7 @@ export default function ProfilePage() {
 
   return (
     <div className="relative flex flex-col min-h-screen bg-background bg-money-pattern bg-[length:120px_auto] before:content-[''] before:absolute before:inset-0 before:bg-white/[.90] before:dark:bg-black/[.90] before:z-0">
-      <header className="relative z-[1] py-4 px-4 sm:px-6 md:px-8 border-b sticky top-0 bg-background/80 backdrop-blur-md">
+      <header className="relative z-30 py-4 px-4 sm:px-6 md:px-8 border-b sticky top-0 bg-background/80 backdrop-blur-md">
         <div className="container mx-auto flex items-center justify-between h-20"> 
           <Link href="/" className="flex items-center gap-2 text-primary hover:text-primary/80 transition-colors">
             <Image src="/logo.png" alt="Patungan Logo" width={56} height={56} className="rounded-lg shadow-sm" data-ai-hint="logo company"/>
@@ -481,7 +481,7 @@ export default function ProfilePage() {
         </div>
       </header>
 
-      <main className="relative z-[1] container mx-auto px-4 py-8 md:px-6 md:py-12 flex-grow">
+      <main className="relative z-10 container mx-auto px-4 py-8 md:px-6 md:py-12 flex-grow">
         <div className="max-w-3xl mx-auto space-y-8">
           <div className="text-center relative z-[1]">
             <h2 className="text-3xl font-semibold tracking-tight text-foreground flex items-center justify-center">
@@ -705,7 +705,7 @@ export default function ProfilePage() {
         </div>
       </main>
 
-      <footer className="relative z-[1] mt-auto pt-8 border-t border-border/40 text-center text-sm text-muted-foreground">
+      <footer className="relative z-10 mt-auto pt-8 border-t border-border/40 text-center text-sm text-muted-foreground">
         <p>&copy; {new Date().getFullYear()} Patungan. Hak cipta dilindungi.</p>
         <p>Ditenagai oleh Next.js, Shadcn/UI, Genkit, dan Supabase.</p>
       </footer>
@@ -715,3 +715,4 @@ export default function ProfilePage() {
     
 
     
+

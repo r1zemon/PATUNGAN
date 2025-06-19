@@ -133,14 +133,14 @@ export default function ProfilePage() {
         phoneNumber: typedProfile.phone_number || "",
       });
       setHeaderAvatarUrl(typedProfile.avatar_url || null);
-      const initialDisplayName = typedProfile.full_name || typedProfile.username || user.email || "Pengguna";
-      setHeaderDisplayName(initialDisplayName);
-      setHeaderAvatarInitial(initialDisplayName ? initialDisplayName.substring(0,1).toUpperCase() : "P");
+      const initialDisplayNameForHeader = typedProfile.username || typedProfile.full_name || user.email || "Pengguna"; // More specific for header
+      setHeaderDisplayName(initialDisplayNameForHeader);
+      setHeaderAvatarInitial(initialDisplayNameForHeader ? initialDisplayNameForHeader.substring(0,1).toUpperCase() : "P");
 
     } else {
-      const initialDisplayName = user.email || "Pengguna";
-      setHeaderDisplayName(initialDisplayName);
-      setHeaderAvatarInitial(initialDisplayName ? initialDisplayName.substring(0,1).toUpperCase() : "P");
+      const initialDisplayNameForHeader = user.email || "Pengguna";
+      setHeaderDisplayName(initialDisplayNameForHeader);
+      setHeaderAvatarInitial(initialDisplayNameForHeader ? initialDisplayNameForHeader.substring(0,1).toUpperCase() : "P");
     }
     setIsLoadingUser(false);
   }, [router, toast]);
@@ -343,7 +343,7 @@ export default function ProfilePage() {
       if (avatarFileInputRef.current) avatarFileInputRef.current.value = "";
       
       setHeaderAvatarUrl(typedUpdatedProfile.avatar_url || null);
-      const newHeaderDisplayName = typedUpdatedProfile.full_name || typedUpdatedProfile.username || authUser.email || "Pengguna";
+      const newHeaderDisplayName = typedUpdatedProfile.username || typedUpdatedProfile.full_name || authUser.email || "Pengguna";
       setHeaderDisplayName(newHeaderDisplayName);
       setHeaderAvatarInitial(newHeaderDisplayName ? newHeaderDisplayName.substring(0,1).toUpperCase() : "P");
       
@@ -395,6 +395,8 @@ export default function ProfilePage() {
   const formAvatarDisplayInitial = formDisplayFullName ? formDisplayFullName.substring(0,1).toUpperCase() : "P";
 
   const hasAvatarChangesPending = croppedAvatarPreview !== null;
+  const shortDisplayNameForHeader = userProfile?.username || (userProfile?.full_name ? userProfile.full_name.split(' ')[0] : (authUser?.email ? authUser.email.split('@')[0] : "Pengguna"));
+
 
 
   if (isLoadingUser || !authUser || !userProfile) {
@@ -441,12 +443,15 @@ export default function ProfilePage() {
             </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="relative h-10 w-10 rounded-full">
-                  <Avatar className="h-9 w-9">
-                    <AvatarImage src={headerAvatarUrl || undefined} alt={headerDisplayName} data-ai-hint="profile avatar"/>
-                    <AvatarFallback>{headerAvatarInitial}</AvatarFallback>
-                  </Avatar>
-                </Button>
+                 <Button variant="ghost" className="flex items-center gap-1.5 sm:gap-2 rounded-md p-1 sm:p-1.5 h-auto">
+                    <Avatar className="h-8 w-8 sm:h-9 sm:w-9">
+                      <AvatarImage src={headerAvatarUrl || undefined} alt={headerDisplayName} data-ai-hint="profile avatar"/>
+                      <AvatarFallback>{headerAvatarInitial}</AvatarFallback>
+                    </Avatar>
+                     <span className="hidden sm:inline text-xs sm:text-sm font-medium text-foreground truncate max-w-[70px] xs:max-w-[100px] md:max-w-[120px] group-hover:text-foreground/80 transition-colors">
+                      {shortDisplayNameForHeader}
+                    </span>
+                  </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent className="w-56" align="end" forceMount>
                 <DropdownMenuLabel className="font-normal">
@@ -574,7 +579,7 @@ export default function ProfilePage() {
                   <Label htmlFor="username">Username</Label>
                   <div className="relative">
                     <UserCircle className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                    <Input id="username" name="username" placeholder="Username Anda" value={formData.username} onChange={handleInputChange} required className="pl-10"/>
+                    <Input id="username" name="username" placeholder="Username unik Anda" value={formData.username} onChange={handleInputChange} required className="pl-10"/>
                   </div>
                 </div>
                 <div className="space-y-2">
@@ -715,4 +720,5 @@ export default function ProfilePage() {
     
 
     
+
 

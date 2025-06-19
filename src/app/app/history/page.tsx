@@ -91,6 +91,7 @@ export default function HistoryPage() {
   
   const displayName = userProfile?.username || userProfile?.full_name || authUser?.email || "Pengguna";
   const avatarInitial = displayName ? displayName.substring(0,1).toUpperCase() : "P";
+  const shortDisplayName = userProfile?.username || (userProfile?.full_name ? userProfile.full_name.split(' ')[0] : (authUser?.email ? authUser.email.split('@')[0] : "Pengguna"));
 
 
   if (isLoadingUser || isLoadingHistory) {
@@ -141,11 +142,14 @@ export default function HistoryPage() {
             {authUser ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" className="relative h-10 w-10 rounded-full">
-                    <Avatar className="h-9 w-9">
-                      <AvatarImage src={userProfile?.avatar_url || `https://placehold.co/40x40.png?text=${avatarInitial}`} alt={displayName} data-ai-hint="profile avatar"/>
+                   <Button variant="ghost" className="flex items-center gap-1.5 sm:gap-2 rounded-md p-1 sm:p-1.5 h-auto">
+                    <Avatar className="h-8 w-8 sm:h-9 sm:w-9">
+                      <AvatarImage src={userProfile?.avatar_url || undefined} alt={displayName} data-ai-hint="profile avatar"/>
                       <AvatarFallback>{avatarInitial}</AvatarFallback>
                     </Avatar>
+                     <span className="hidden sm:inline text-xs sm:text-sm font-medium text-foreground truncate max-w-[70px] xs:max-w-[100px] md:max-w-[120px] group-hover:text-foreground/80 transition-colors">
+                      {shortDisplayName}
+                    </span>
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent className="w-56" align="end" forceMount>
@@ -264,4 +268,5 @@ export default function HistoryPage() {
 
 
     
+
 

@@ -5,7 +5,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
-import { Menu, LogOut, UserCircle, Settings, FilePlus, Home } from 'lucide-react';
+import { Menu, LogOut, UserCircle, Settings, FilePlus, Home, Users } from 'lucide-react';
 import { useEffect, useState, useCallback } from 'react';
 import { getCurrentUserAction, logoutUserAction } from '@/lib/actions';
 import type { User as SupabaseUser } from "@supabase/supabase-js";
@@ -20,7 +20,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { NotificationBell } from './notification-bell'; // Added
+import { NotificationBell } from './notification-bell'; 
 
 const navLinks = [
   { href: '/', label: 'Beranda' },
@@ -94,6 +94,18 @@ export function LandingHeader() {
       router.push('/login');
     }
   };
+
+  const handleFriendsClick = () => {
+    setIsMobileMenuOpen(false);
+    if (authUser) {
+      // router.push('/app/social'); // Future navigation
+      toast({title: "Segera Hadir", description: "Fitur Teman & Sosial belum diimplementasikan."});
+    } else {
+      toast({title: "Akses Ditolak", description: "Anda harus login untuk mengakses fitur sosial.", duration: 3000});
+      router.push('/login');
+    }
+  };
+
 
   const handleNavLinkClick = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
     if (href === '/') {
@@ -180,6 +192,10 @@ export function LandingHeader() {
                     <UserCircle className="mr-2 h-4 w-4" />
                     <span>Profil</span>
                   </DropdownMenuItem>
+                  <DropdownMenuItem onClick={handleFriendsClick}>
+                    <Users className="mr-2 h-4 w-4" />
+                    <span>Teman</span>
+                  </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => toast({title: "Info", description: "Pengaturan belum diimplementasikan."})}>
                     <Settings className="mr-2 h-4 w-4" />
                     <span>Pengaturan</span>
@@ -204,7 +220,7 @@ export function LandingHeader() {
           )}
         </div>
 
-        <div className="md:hidden flex items-center gap-2"> {/* Added flex and gap for mobile */}
+        <div className="md:hidden flex items-center gap-2"> 
           {authUser && <NotificationBell authUser={authUser} />}
           <Sheet open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
             <SheetTrigger asChild>
@@ -215,7 +231,7 @@ export function LandingHeader() {
             </SheetTrigger>
             <SheetContent side="right" className="w-[300px] sm:w-[400px] bg-background p-0">
               <SheetHeader className="p-4 pb-2 text-left border-b">
-                 <SheetTitle className="flex items-center gap-2"> {/* Added SheetTitle */}
+                 <SheetTitle className="flex items-center gap-2"> 
                    <Image src="/logo.png" alt="Patungan Logo" width={32} height={32} className="rounded-lg" data-ai-hint="logo company"/>
                    <span className="text-lg font-bold text-foreground">Patungan Menu</span>
                 </SheetTitle>
@@ -255,6 +271,9 @@ export function LandingHeader() {
                       </Button>
                       <Button variant="outline" className="w-full justify-start py-6 text-base" onClick={handleProfileClick}>
                         <UserCircle className="mr-3 h-5 w-5 opacity-80" /> Profil Akun
+                      </Button>
+                      <Button variant="outline" className="w-full justify-start py-6 text-base" onClick={handleFriendsClick}>
+                        <Users className="mr-3 h-5 w-5 opacity-80" /> Teman
                       </Button>
                        <Button variant="outline" className="w-full justify-start py-6 text-base" onClick={handleLogout}>
                          <LogOut className="mr-3 h-5 w-5 opacity-80" /> Keluar

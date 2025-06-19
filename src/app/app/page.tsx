@@ -12,8 +12,8 @@ import {
   removeParticipantAction,
   getCurrentUserAction,
   logoutUserAction,
-  getUserCategoriesAction, // New
-  createBillCategoryAction // New
+  getUserCategoriesAction, 
+  createBillCategoryAction 
 } from "@/lib/actions";
 import { ReceiptUploader } from "@/components/receipt-uploader";
 import { ItemEditor } from "@/components/item-editor";
@@ -27,7 +27,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useToast } from "@/hooks/use-toast";
 import { Separator } from "@/components/ui/separator";
-import { Home, LogOut, Settings, UserCircle, Power, Info, Percent, Landmark, UserCheck, Loader2, UserPlus, ArrowRight, Trash2, Users, ScanLine, PlusCircle, Edit2, ListChecks, FilePlus, FileText, CalendarClock, FolderPlus, Tag } from "lucide-react"; // Added FolderPlus, Tag
+import { Home, LogOut, Settings, UserCircle, Power, Info, Percent, Landmark, UserCheck, Loader2, UserPlus, ArrowRight, Trash2, Users, ScanLine, PlusCircle, Edit2, ListChecks, FilePlus, FileText, CalendarClock, FolderPlus, Tag } from "lucide-react"; 
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -82,7 +82,6 @@ export default function SplitBillAppPage() {
   const [isLoadingUser, setIsLoadingUser] = useState(true);
   const [isInitializingBill, setIsInitializingBill] = useState(false);
 
-  // Category State
   const [categories, setCategories] = useState<BillCategory[]>([]);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
   const [newCategoryInput, setNewCategoryInput] = useState<string>("");
@@ -149,22 +148,21 @@ export default function SplitBillAppPage() {
              toast({ variant: "destructive", title: "Nama Kategori Terlalu Panjang", description: "Nama kategori maksimal 20 karakter."});
             return;
         }
-        // Attempt to create new category
         const categoryResult = await createBillCategoryAction(newCategoryInput.trim());
         if (categoryResult.success && categoryResult.category) {
             finalCategoryId = categoryResult.category.id;
             setCategories(prev => [...prev, categoryResult.category!]);
-            setSelectedCategoryId(finalCategoryId); // Auto-select new category
+            setSelectedCategoryId(finalCategoryId); 
             setShowNewCategoryInput(false);
             setNewCategoryInput("");
             toast({ title: "Kategori Baru Ditambahkan", description: `Kategori "${categoryResult.category.name}" berhasil dibuat.`});
         } else {
             toast({ variant: "destructive", title: "Gagal Membuat Kategori", description: categoryResult.error || "Tidak dapat menyimpan kategori baru." });
-            return; // Stop if category creation fails
+            return; 
         }
     }
 
-    if (!finalCategoryId && billTimingOption === 'now') { // Only enforce category for 'now' option, not for scheduling only.
+    if (!finalCategoryId && billTimingOption === 'now') { 
         toast({ variant: "destructive", title: "Kategori Belum Dipilih", description: "Mohon pilih atau buat kategori untuk tagihan ini."});
         return;
     }
@@ -250,7 +248,6 @@ export default function SplitBillAppPage() {
         toast({variant: "destructive", title: "Pengguna Tidak Login", description: "Silakan login untuk menggunakan aplikasi."})
         router.push("/login");
      }
-     // Re-fetch categories in case new ones were added
      if (authUser) {
         getUserCategoriesAction().then(res => {
             if (res.success && res.categories) setCategories(res.categories);
@@ -506,7 +503,6 @@ export default function SplitBillAppPage() {
                <Button variant="ghost" className="rounded-md p-1 sm:p-1.5 h-auto" disabled>
                   <Home className="h-10 w-10" />
               </Button>
-               {/* Skeleton for NotificationBell and Avatar can be added if needed */}
             </div>
           </div>
         </header>
@@ -566,6 +562,10 @@ export default function SplitBillAppPage() {
                   <DropdownMenuItem onClick={() => router.push('/app/profile')}>
                     <UserCircle className="mr-2 h-4 w-4" />
                     <span>Profil</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => toast({title: "Segera Hadir", description: "Fitur Teman belum diimplementasikan."})}>
+                    <Users className="mr-2 h-4 w-4" />
+                    <span>Teman</span>
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => toast({title: "Info", description: "Pengaturan belum diimplementasikan."})}>
                     <Settings className="mr-2 h-4 w-4" />

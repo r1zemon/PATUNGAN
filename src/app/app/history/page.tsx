@@ -28,7 +28,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { formatCurrency } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import { NotificationBell } from "@/components/notification-bell";
-import { Badge } from "@/components/ui/badge"; // Added
+import { Badge } from "@/components/ui/badge"; 
 
 interface Profile {
   username?: string;
@@ -47,7 +47,7 @@ export default function HistoryPage() {
   const [authUser, setAuthUser] = useState<SupabaseUser | null>(null);
   const [userProfile, setUserProfile] = useState<Profile | null>(null);
   const [isLoadingUser, setIsLoadingUser] = useState(true);
-  const [isPremiumUser, setIsPremiumUser] = useState(false); // TODO: Fetch actual premium status
+  const [isPremiumUser, setIsPremiumUser] = useState(false); 
 
   const { toast } = useToast();
   const router = useRouter();
@@ -67,7 +67,6 @@ export default function HistoryPage() {
     setAuthUser(user);
     setUserProfile(profile);
     setIsLoadingUser(false);
-    // setIsPremiumUser(profile?.is_premium || false); // Implement this later
 
 
     const historyResult = await getBillsHistoryAction();
@@ -114,7 +113,6 @@ export default function HistoryPage() {
                <Button variant="ghost" className="rounded-md p-1 sm:p-1.5 h-auto" disabled>
                   <Home className="h-10 w-10" />
               </Button>
-               {/* Skeleton for NotificationBell and Avatar can be added if needed */}
             </div>
           </div>
         </header>
@@ -124,7 +122,7 @@ export default function HistoryPage() {
             <p className="ml-4 text-lg text-foreground">Memuat riwayat tagihan...</p>
           </div>
         </main>
-         <footer className="relative z-10 mt-auto pt-8 border-t text-center text-sm text-muted-foreground">
+         <footer className="relative z-10 mt-auto pt-8 text-center text-sm text-muted-foreground">
             <p>&copy; {new Date().getFullYear()} Patungan. Hak cipta dilindungi.</p>
         </footer>
       </div>
@@ -174,6 +172,10 @@ export default function HistoryPage() {
                   <DropdownMenuItem onClick={() => router.push('/app/profile')}>
                     <UserCircle className="mr-2 h-4 w-4" />
                     <span>Profil</span>
+                  </DropdownMenuItem>
+                   <DropdownMenuItem onClick={() => toast({title: "Segera Hadir", description: "Fitur Teman belum diimplementasikan."})}>
+                    <Users className="mr-2 h-4 w-4" />
+                    <span>Teman</span>
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => toast({title: "Info", description: "Pengaturan belum diimplementasikan."})}>
                     <Settings className="mr-2 h-4 w-4" />
@@ -321,7 +323,7 @@ export default function HistoryPage() {
         </Card>
       </main>
 
-      <footer className="relative z-10 mt-auto pt-8 border-t text-center text-sm text-muted-foreground">
+      <footer className="relative z-10 mt-auto pt-8 text-center text-sm text-muted-foreground">
         <p>&copy; {new Date().getFullYear()} Patungan. Hak cipta dilindungi.</p>
         <p>Ditenagai oleh Next.js, Shadcn/UI, Genkit, dan Supabase.</p>
       </footer>

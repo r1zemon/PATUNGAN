@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useToast } from "@/hooks/use-toast";
-import { Home, LogOut, Settings, UserCircle, Save, Edit3, Shield, AlertTriangle, FileImage, Loader2, Phone, AtSign, UserSquare2, Trash2, Crop, Check, X, Undo2 } from "lucide-react";
+import { Home, LogOut, Settings, UserCircle, Save, Edit3, Shield, AlertTriangle, FileImage, Loader2, Phone, AtSign, UserSquare2, Trash2, Crop, Check, X, Undo2, Users } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import {
   DropdownMenu,
@@ -47,7 +47,7 @@ import {
 
 import ReactCrop, { type Crop, centerCrop, makeAspectCrop, PixelCrop } from 'react-image-crop';
 import { cn } from "@/lib/utils";
-import { NotificationBell } from "@/components/notification-bell"; // Added
+import { NotificationBell } from "@/components/notification-bell"; 
 
 
 interface Profile {
@@ -59,7 +59,6 @@ interface Profile {
   phone_number?: string | null;
 }
 
-// Helper function to convert data URL to File object
 function dataURLtoFile(dataurl: string, filename: string): File | null {
   const arr = dataurl.split(',');
   if (arr.length < 2) {
@@ -134,7 +133,7 @@ export default function ProfilePage() {
         phoneNumber: typedProfile.phone_number || "",
       });
       setHeaderAvatarUrl(typedProfile.avatar_url || null);
-      const initialDisplayNameForHeader = typedProfile.username || typedProfile.full_name || user.email || "Pengguna"; // More specific for header
+      const initialDisplayNameForHeader = typedProfile.username || typedProfile.full_name || user.email || "Pengguna"; 
       setHeaderDisplayName(initialDisplayNameForHeader);
       setHeaderAvatarInitial(initialDisplayNameForHeader ? initialDisplayNameForHeader.substring(0,1).toUpperCase() : "P");
 
@@ -421,9 +420,9 @@ export default function ProfilePage() {
               <h1 className="text-2xl font-bold tracking-tight text-foreground">Patungan</h1>
             </Link>
             <div className="flex items-center gap-2 sm:gap-4">
-               <Skeleton className="h-9 w-28 hidden sm:block" /> {/* Placeholder for Home Button */}
-               <Skeleton className="h-10 w-10 rounded-full" /> {/* Placeholder for Notification Bell */}
-               <Skeleton className="h-10 w-10 rounded-full" /> {/* Placeholder for Avatar */}
+               <Skeleton className="h-9 w-28 hidden sm:block" /> 
+               <Skeleton className="h-10 w-10 rounded-full" /> 
+               <Skeleton className="h-10 w-10 rounded-full" /> 
             </div>
           </div>
         </header>
@@ -433,7 +432,7 @@ export default function ProfilePage() {
             <p className="ml-4 text-lg text-foreground">Memuat profil pengguna...</p>
           </div>
         </main>
-         <footer className="relative z-10 mt-auto pt-8 border-t text-center text-sm text-muted-foreground">
+         <footer className="relative z-10 mt-auto pt-8 text-center text-sm text-muted-foreground">
             <p>&copy; {new Date().getFullYear()} Patungan. Hak cipta dilindungi.</p>
         </footer>
       </div>
@@ -477,6 +476,10 @@ export default function ProfilePage() {
                   </div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => toast({title: "Segera Hadir", description: "Fitur Teman belum diimplementasikan."})}>
+                    <Users className="mr-2 h-4 w-4" />
+                    <span>Teman</span>
+                </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => toast({title: "Info", description: "Pengaturan belum diimplementasikan."})}>
                   <Settings className="mr-2 h-4 w-4" />
                   <span>Pengaturan</span>
@@ -698,7 +701,7 @@ export default function ProfilePage() {
         </div>
       </main>
 
-      <footer className="relative z-10 mt-auto pt-8 border-t text-center text-sm text-muted-foreground">
+      <footer className="relative z-10 mt-auto pt-8 text-center text-sm text-muted-foreground">
         <p>&copy; {new Date().getFullYear()} Patungan. Hak cipta dilindungi.</p>
         <p>Ditenagai oleh Next.js, Shadcn/UI, Genkit, dan Supabase.</p>
       </footer>

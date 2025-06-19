@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
-import { Home, LogOut, Settings, UserCircle, Power, Info, FilePlus, Loader2, History as HistoryIconLucide, ArrowLeft, Users, Coins, CalendarDays } from "lucide-react"; 
+import { Home, LogOut, Settings, UserCircle, Power, Info, FilePlus, Loader2, History as HistoryIconLucide, Users, Coins, CalendarDays } from "lucide-react"; 
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -196,9 +196,6 @@ export default function HistoryPage() {
                 <HistoryIconLucide className="mr-3 h-8 w-8 text-primary" />
                 Riwayat Tagihan Anda
             </h2>
-             <Button onClick={() => router.push('/app')} variant="default">
-                <ArrowLeft className="mr-2 h-4 w-4" /> Kembali ke Aplikasi
-            </Button>
         </div>
         
         {error && (
@@ -268,5 +265,6 @@ export default function HistoryPage() {
 
 
     
+
 
 

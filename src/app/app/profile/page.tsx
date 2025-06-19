@@ -187,21 +187,24 @@ export default function ProfilePage() {
   };
 
   function onImageLoad(e: React.SyntheticEvent<HTMLImageElement>) {
-    const { width, height } = e.currentTarget;
-    const initialCrop = centerCrop(
-      makeAspectCrop(
-        {
-          unit: '%',
-          width: 90,
-        },
-        1, 
-        width,
-        height
-      ),
-      width,
-      height
-    );
-    setCrop(initialCrop);
+    const { naturalWidth: imgWidth, naturalHeight: imgHeight } = e.currentTarget; // Use natural dimensions
+
+    if (imgRef.current && imgWidth > 0 && imgHeight > 0) {
+        const initialCrop = centerCrop(
+            makeAspectCrop(
+                {
+                    unit: '%',
+                    width: 90, 
+                },
+                1 / 1, 
+                imgWidth,
+                imgHeight
+            ),
+            imgWidth,
+            imgHeight
+        );
+        setCrop(initialCrop);
+    }
   }
 
   async function handleConfirmCrop() {
@@ -648,6 +651,12 @@ export default function ProfilePage() {
                       alt="Crop me"
                       src={imgSrcForCropper}
                       onLoad={onImageLoad}
+                      style={{
+                        display: 'block',
+                        maxWidth: '100%',
+                        maxHeight: 'calc(60vh - 80px)', // Adjust 80px based on DialogHeader/Footer/Padding
+                        objectFit: 'contain',
+                      }}
                     />
                   </ReactCrop>
                 )}

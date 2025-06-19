@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useToast } from "@/hooks/use-toast";
-import { Home, LogOut, Settings, UserCircle, Users, UserPlus, Search, Check, X, MailWarning, MessageSquarePlus, UserSearch, ListFilter } from "lucide-react";
+import { Home, LogOut, Settings, UserCircle, Users, UserPlus, Search, Check, X, MailWarning, MessageSquarePlus, UserSearch, ListFilter, Loader2 } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import {
   DropdownMenu,
@@ -148,9 +148,9 @@ export default function SocialPage() {
               <h1 className="text-2xl font-bold tracking-tight text-foreground">Patungan</h1>
             </Link>
             <div className="flex items-center gap-2 sm:gap-4">
-               <Skeleton className="h-10 w-10 rounded-md" /> 
-               <Skeleton className="h-10 w-10 rounded-full" /> 
-               <Skeleton className="h-10 w-10 rounded-full" /> 
+               <Button variant="ghost" className="rounded-md p-1 sm:p-1.5 h-auto" disabled>
+                  <Home className="h-10 w-10" />
+              </Button>
             </div>
           </div>
         </header>

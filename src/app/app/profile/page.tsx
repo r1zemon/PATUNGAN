@@ -49,7 +49,7 @@ export default function ProfilePage() {
     avatarUrl: "", // For manual URL input
   });
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
-  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null); // For form preview only
 
 
   const { toast } = useToast();
@@ -72,9 +72,9 @@ export default function ProfilePage() {
         fullName: profile.full_name || "",
         username: profile.username || "",
         phoneNumber: profile.phone_number || "",
-        avatarUrl: profile.avatar_url || "", // Initialize with current DB avatar_url
+        avatarUrl: profile.avatar_url || "", 
       });
-      setAvatarPreview(profile.avatar_url || null); // Set initial preview from DB
+      setAvatarPreview(profile.avatar_url || null); // Set initial form preview from DB
     }
     setIsLoadingUser(false);
   }, [router, toast]);
@@ -96,27 +96,25 @@ export default function ProfilePage() {
 
       if (!allowedTypes.includes(file.type)) {
         toast({ variant: "destructive", title: "Jenis File Tidak Valid", description: "Hanya file JPG, PNG, WEBP, GIF yang diizinkan."});
-        setAvatarFile(null); // Clear invalid file
-        if (e.target) e.target.value = ""; // Reset file input
+        setAvatarFile(null); 
+        if (e.target) e.target.value = ""; 
         return;
       }
       if (file.size > maxSize) {
         toast({ variant: "destructive", title: "Ukuran File Terlalu Besar", description: "Ukuran file maksimal 5MB."});
-        setAvatarFile(null); // Clear oversized file
-        if (e.target) e.target.value = ""; // Reset file input
+        setAvatarFile(null); 
+        if (e.target) e.target.value = ""; 
         return;
       }
       setAvatarFile(file);
       const reader = new FileReader();
       reader.onloadend = () => {
-        setAvatarPreview(reader.result as string);
+        setAvatarPreview(reader.result as string); // Update only form preview
       };
       reader.readAsDataURL(file);
-      // When a file is selected, clear the manual avatarUrl field to avoid confusion
-      // setFormData(prev => ({ ...prev, avatarUrl: "" })); 
     } else {
       setAvatarFile(null);
-      // If file selection is cleared, revert preview to DB avatar_url or initial if no DB URL
+      // If file selection is cleared, revert form preview to DB avatar_url or initial if no DB URL
       setAvatarPreview(userProfile?.avatar_url || null);
     }
   };
@@ -134,7 +132,7 @@ export default function ProfilePage() {
     if (trimmedFullName && trimmedFullName !== (userProfile.full_name || "")) {
       profileUpdates.full_name = trimmedFullName;
       hasChanges = true;
-    } else if (!trimmedFullName && userProfile.full_name) { // Clearing a name
+    } else if (!trimmedFullName && userProfile.full_name) { 
       profileUpdates.full_name = null; 
       hasChanges = true;
     }
@@ -143,7 +141,6 @@ export default function ProfilePage() {
        setIsSaving(false);
        return;
     }
-
 
     const trimmedUsername = formData.username.trim();
      if (trimmedUsername && trimmedUsername !== (userProfile.username || "")) {
@@ -159,23 +156,25 @@ export default function ProfilePage() {
         return;
     }
     
-
-    let trimmedPhoneNumber: string | null = null;
+    let processedPhoneNumber: string | null = null;
     if (typeof formData.phoneNumber === 'string' && formData.phoneNumber.trim() !== '') {
-      trimmedPhoneNumber = formData.phoneNumber.trim();
+        processedPhoneNumber = formData.phoneNumber.trim();
+    } else if (typeof formData.phoneNumber === 'string' && formData.phoneNumber.trim() === '' && userProfile.phone_number) {
+        // User cleared the phone number
+        processedPhoneNumber = null;
     }
-    if (trimmedPhoneNumber !== (userProfile.phone_number || null)) {
-      profileUpdates.phone_number = trimmedPhoneNumber;
+
+
+    if (processedPhoneNumber !== (userProfile.phone_number || null)) {
+      profileUpdates.phone_number = processedPhoneNumber;
       hasChanges = true;
     }
 
-    // Pass manual avatar URL for logic in action if no file is selected.
-    // If a file is selected, avatarFile will be passed, and manual URL is ignored by action.
     if (!avatarFile && formData.avatarUrl.trim() !== (userProfile.avatar_url || "")) {
-        profileUpdates.avatar_url = formData.avatarUrl.trim() || null; // Send null if cleared
+        profileUpdates.avatar_url = formData.avatarUrl.trim() || null; 
         hasChanges = true;
     } else if (avatarFile) {
-        hasChanges = true; // File selection itself is a change intent
+        hasChanges = true; 
     }
 
 
@@ -185,30 +184,31 @@ export default function ProfilePage() {
         return;
     }
     
-    // Pass avatarFile to the action.
-    // The action will handle uploading it and getting the new URL.
-    // Or it will use profileUpdates.avatar_url if avatarFile is null.
     const { success, data: updatedProfileData, error: updateError } = await updateUserProfileAction(
         authUser.id, 
         profileUpdates,
-        avatarFile // Pass the file object here
+        avatarFile 
     );
 
     if (success && updatedProfileData) {
       toast({ title: "Profil Diperbarui", description: "Informasi akun Anda berhasil disimpan." });
+      // Update userProfile state with the newly saved data. This will update the header avatar.
       setUserProfile(prevProfile => ({...(prevProfile || {}), ...updatedProfileData} as Profile) ); 
-      setAvatarPreview(updatedProfileData.avatar_url || null); // Update preview with new URL from DB
-      setAvatarFile(null); // Clear selected file after successful upload
-      if (document.getElementById('avatarFile')) {
-        (document.getElementById('avatarFile') as HTMLInputElement).value = ""; // Reset file input
-      }
+      
+      // Update formData to reflect saved data
       setFormData(prev => ({
           ...prev,
           fullName: updatedProfileData.full_name || "",
           username: updatedProfileData.username || "",
           phoneNumber: updatedProfileData.phone_number || "",
-          avatarUrl: updatedProfileData.avatar_url || "", // Reflect the saved URL
+          avatarUrl: updatedProfileData.avatar_url || "", 
       }));
+      // Reset form's avatar preview to the saved one
+      setAvatarPreview(updatedProfileData.avatar_url || null);
+      setAvatarFile(null); 
+      if (document.getElementById('avatarFile')) {
+        (document.getElementById('avatarFile') as HTMLInputElement).value = ""; 
+      }
       router.refresh(); 
     } else {
       const errorMessages = Array.isArray(updateError) ? updateError.join('; ') : updateError;
@@ -227,8 +227,14 @@ export default function ProfilePage() {
     }
   };
   
-  const currentDisplayName = userProfile?.username || userProfile?.full_name || authUser?.email || "Pengguna";
-  const currentAvatarInitial = currentDisplayName ? currentDisplayName.substring(0,1).toUpperCase() : "P";
+  // For header avatar - uses the saved userProfile state
+  const headerDisplayName = userProfile?.full_name || userProfile?.username || authUser?.email || "Pengguna";
+  const headerAvatarInitial = headerDisplayName ? headerDisplayName.substring(0,1).toUpperCase() : "P";
+  const headerAvatarUrl = userProfile?.avatar_url;
+
+  // For form preview avatar - uses avatarPreview state
+  const formPreviewDisplayName = formData.fullName || formData.username || authUser?.email || "Pengguna";
+  const formPreviewAvatarInitial = formPreviewDisplayName ? formPreviewDisplayName.substring(0,1).toUpperCase() : "P";
 
 
   if (isLoadingUser || !authUser || !userProfile) {
@@ -270,8 +276,8 @@ export default function ProfilePage() {
             </h1>
           </Link>
           <div className="flex items-center gap-2 sm:gap-4">
-            <Link href="/app" passHref>
-              <Button variant="ghost" size="icon" aria-label="Kembali ke Aplikasi">
+            <Link href="/" passHref> {/* Changed from /app to / */}
+              <Button variant="ghost" size="icon" aria-label="Kembali ke Beranda">
                 <Home className="h-5 w-5" />
               </Button>
             </Link>
@@ -279,15 +285,15 @@ export default function ProfilePage() {
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="relative h-10 w-10 rounded-full">
                   <Avatar className="h-9 w-9">
-                    <AvatarImage src={avatarPreview || `https://placehold.co/40x40.png?text=${currentAvatarInitial}`} alt={currentDisplayName} data-ai-hint="profile avatar"/>
-                    <AvatarFallback>{currentAvatarInitial}</AvatarFallback>
+                    <AvatarImage src={headerAvatarUrl || `https://placehold.co/40x40.png?text=${headerAvatarInitial}`} alt={headerDisplayName} data-ai-hint="profile avatar"/>
+                    <AvatarFallback>{headerAvatarInitial}</AvatarFallback>
                   </Avatar>
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent className="w-56" align="end" forceMount>
                 <DropdownMenuLabel className="font-normal">
                   <div className="flex flex-col space-y-1">
-                    <p className="text-sm font-medium leading-none">{userProfile.full_name || currentDisplayName}</p>
+                    <p className="text-sm font-medium leading-none">{userProfile.full_name || headerDisplayName}</p>
                     <p className="text-xs leading-none text-muted-foreground">
                       {authUser.email}
                     </p>
@@ -336,8 +342,9 @@ export default function ProfilePage() {
               <CardContent className="space-y-6">
                 <div className="flex flex-col items-center space-y-3">
                     <Avatar className="h-24 w-24">
-                        <AvatarImage src={avatarPreview || `https://placehold.co/96x96.png?text=${currentAvatarInitial}`} alt={formData.fullName || currentDisplayName} data-ai-hint="user avatar large"/>
-                        <AvatarFallback className="text-3xl">{currentAvatarInitial}</AvatarFallback>
+                        {/* Avatar for form preview uses avatarPreview state */}
+                        <AvatarImage src={avatarPreview || `https://placehold.co/96x96.png?text=${formPreviewAvatarInitial}`} alt={formData.fullName || formPreviewDisplayName} data-ai-hint="user avatar large"/>
+                        <AvatarFallback className="text-3xl">{formPreviewAvatarInitial}</AvatarFallback>
                     </Avatar>
                     <div className="grid w-full max-w-sm items-center gap-1.5">
                         <Label htmlFor="avatarFile">Ubah Foto Profil (Opsional)</Label>
@@ -446,4 +453,6 @@ export default function ProfilePage() {
     </div>
   );
 }
+    
+
     

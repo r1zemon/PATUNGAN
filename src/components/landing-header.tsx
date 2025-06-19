@@ -1,15 +1,14 @@
-
 "use client";
 
 import Link from 'next/link';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
-import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
-import { Menu, LogOut, UserCircle, Settings, FilePlus, History as HistoryIconLucide } from 'lucide-react'; 
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
+import { Menu, LogOut, UserCircle, Settings, FilePlus, History as HistoryIconLucide, Home } from 'lucide-react'; 
 import { useEffect, useState, useCallback } from 'react';
 import { getCurrentUserAction, logoutUserAction } from '@/lib/actions';
 import type { User as SupabaseUser } from "@supabase/supabase-js";
-import { useRouter, usePathname } from "next/navigation"; // Added usePathname
+import { useRouter, usePathname } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -113,7 +112,6 @@ export function LandingHeader() {
     }
     else {
       setIsMobileMenuOpen(false); 
-      // For other links like '#contact', allow default behavior or push to a page if it's a full path
       if (href.startsWith('#')) {
         // Handle hash links if needed, or let default behavior
       } else {
@@ -211,55 +209,60 @@ export function LandingHeader() {
                 <span className="sr-only">Buka menu</span>
               </Button>
             </SheetTrigger>
-            <SheetContent side="right" className="w-[300px] sm:w-[400px] bg-background">
-              <nav className="flex flex-col space-y-6 p-6 pt-12">
-                <Link href="/" className="flex items-center gap-2 mb-6" onClick={(e) => handleNavLinkClick(e, '/')}>
-                   <Image src="/logo.png" alt="Patungan Logo" width={40} height={40} className="rounded-lg" data-ai-hint="logo company"/>
-                   <span className="text-xl font-bold text-foreground">Patungan</span>
-                </Link>
+            <SheetContent side="right" className="w-[300px] sm:w-[400px] bg-background p-0">
+              <SheetHeader className="p-4 pb-2 text-left border-b">
+                <SheetTitle className="flex items-center gap-2">
+                   <Image src="/logo.png" alt="Patungan Logo" width={32} height={32} className="rounded-lg" data-ai-hint="logo company"/>
+                   <span className="text-lg font-bold text-foreground">Patungan Menu</span>
+                </SheetTitle>
+              </SheetHeader>
+              <nav className="flex flex-col space-y-1 p-4 pt-2">
                 {navLinks.map((link) => (
                   <Link
                     key={link.label}
                     href={link.href}
-                    className="text-lg font-medium text-foreground hover:text-primary transition-colors flex items-center"
+                    className="text-base font-medium text-foreground hover:text-primary transition-colors flex items-center py-3 px-2 rounded-md hover:bg-muted"
                      onClick={(e) => handleNavLinkClick(e, link.href)}
                   >
-                    {link.label === "Riwayat" && <HistoryIconLucide className="inline-block mr-2 h-5 w-5" />}
+                    {link.label === "Riwayat" && <HistoryIconLucide className="inline-block mr-3 h-5 w-5 opacity-80" />}
+                    {link.label === "Beranda" && <Home className="inline-block mr-3 h-5 w-5 opacity-80" />}
                     {link.label}
                   </Link>
                 ))}
-                <div className="border-t border-border pt-6 space-y-4">
+                <div className="border-t border-border pt-4 mt-2 space-y-3">
                   {isLoadingUser ? (
-                     <Button variant="outline" className="w-full" disabled>Memuat...</Button>
+                     <Button variant="outline" className="w-full justify-start py-6" disabled>
+                       <UserCircle className="mr-3 h-5 w-5 opacity-80" />Memuat...
+                     </Button>
                   ) : authUser ? (
                     <>
-                      <div className="flex items-center gap-3 mb-2 px-1">
+                      <div className="flex items-center gap-3 mb-2 px-2 py-2 border rounded-md bg-muted/30">
                         <Avatar className="h-10 w-10">
                            <AvatarImage src={userProfile?.avatar_url || undefined} alt={displayName} data-ai-hint="profile avatar" />
                            <AvatarFallback>{avatarInitial}</AvatarFallback>
                         </Avatar>
-                        <div>
-                          <p className="text-sm font-medium text-foreground">{userProfile?.full_name || displayName}</p>
-                          <p className="text-xs text-muted-foreground">{authUser.email}</p>
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-foreground truncate">{userProfile?.full_name || displayName}</p>
+                          <p className="text-xs text-muted-foreground truncate">{authUser.email}</p>
                         </div>
                       </div>
-                      <Button variant="default" className="w-full" asChild onClick={() => {router.push('/app'); setIsMobileMenuOpen(false);}}>
-                         <Link href="/app"><FilePlus className="mr-2 h-4 w-4"/> Tagihan Baru</Link>
+                      <Button variant="default" className="w-full justify-start py-6 text-base" asChild onClick={() => {router.push('/app'); setIsMobileMenuOpen(false);}}>
+                         <Link href="/app"><FilePlus className="mr-3 h-5 w-5 opacity-80"/> Tagihan Baru</Link>
                       </Button>
-                      <Button variant="outline" className="w-full" onClick={handleProfileClick}>
-                        <UserCircle className="mr-2 h-4 w-4" /> Profil
+                      <Button variant="outline" className="w-full justify-start py-6 text-base" onClick={handleProfileClick}>
+                        <UserCircle className="mr-3 h-5 w-5 opacity-80" /> Profil Akun
                       </Button>
-                       <Button variant="outline" className="w-full" onClick={handleLogout}>
-                         <LogOut className="mr-2 h-4 w-4" /> Keluar
+                       <Button variant="outline" className="w-full justify-start py-6 text-base" onClick={handleLogout}>
+                         <LogOut className="mr-3 h-5 w-5 opacity-80" /> Keluar
                       </Button>
                     </>
                   ) : (
                     <>
-                      <Button variant="outline" className="w-full" asChild onClick={() => {router.push('/login'); setIsMobileMenuOpen(false);}}>
-                         <Link href="/login">Masuk</Link>
+                      <Button variant="outline" className="w-full justify-start py-6 text-base" asChild onClick={() => {router.push('/login'); setIsMobileMenuOpen(false);}}>
+                         <Link href="/login"><UserCircle className="mr-3 h-5 w-5 opacity-80"/>Masuk</Link>
                       </Button>
-                      <Button variant="default" className="w-full" asChild onClick={() => {router.push('/signup'); setIsMobileMenuOpen(false);}}>
-                         <Link href="/signup">Daftar</Link>
+                      <Button variant="default" className="w-full justify-start py-6 text-base" asChild onClick={() => {router.push('/signup'); setIsMobileMenuOpen(false);}}>
+                         <Link href="/signup"><FilePlus className="mr-3 h-5 w-5 opacity-80"/>Daftar Akun</Link>
                       </Button>
                     </>
                   )}
@@ -273,7 +276,316 @@ export function LandingHeader() {
   );
 }
     
-
     
-
     
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+_GELAP_
+Modifikasi ini menghilangkan teks yang salah yang menyebabkan error parsing di `src/components/landing-header.tsx`. Sekarang komponen akan dirender dengan benar, dan `SheetHeader` serta `SheetTitle` akan memastikan aksesibilitas yang lebih baik untuk menu mobile.

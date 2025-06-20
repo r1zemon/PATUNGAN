@@ -15,7 +15,7 @@ export type Json =
 export interface Database {
   public: {
     Tables: {
-      bill_categories: { // New table
+      bill_categories: { // New table - kept for type definition, but not actively used by bills table
         Row: {
           id: string
           user_id: string
@@ -119,7 +119,7 @@ export interface Database {
       }
       bills: {
         Row: {
-          category_id: string | null // New column
+          // category_id: string | null // Removed as it does not exist in DB
           created_at: string | null
           grand_total: number | null
           id: string
@@ -133,7 +133,7 @@ export interface Database {
           user_id: string | null 
         }
         Insert: {
-          category_id?: string | null // New column
+          // category_id?: string | null // Removed
           created_at?: string | null
           grand_total?: number | null
           id?: string
@@ -147,7 +147,7 @@ export interface Database {
           user_id?: string | null
         }
         Update: {
-          category_id?: string | null // New column
+          // category_id?: string | null // Removed
           created_at?: string | null
           grand_total?: number | null
           id?: string
@@ -161,12 +161,13 @@ export interface Database {
           user_id?: string | null
         }
         Relationships: [
-          {
-            foreignKeyName: "bills_category_id_fkey" // New relationship
-            columns: ["category_id"]
-            referencedRelation: "bill_categories"
-            referencedColumns: ["id"]
-          },
+          // Removed relationship to bill_categories as category_id is removed
+          // {
+          //   foreignKeyName: "bills_category_id_fkey" 
+          //   columns: ["category_id"]
+          //   referencedRelation: "bill_categories"
+          //   referencedColumns: ["id"]
+          // },
           {
             foreignKeyName: "bills_payer_participant_id_fkey"
             columns: ["payer_participant_id"]
@@ -319,3 +320,4 @@ export interface Database {
     }
   }
 }
+

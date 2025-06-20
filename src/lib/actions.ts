@@ -75,25 +75,37 @@ export async function signupUserAction(formData: FormData) {
     return { success: false, error: "Gagal mendapatkan data pengguna setelah pendaftaran (auth)." };
   }
 
-  const { error: profileError } = await supabase
-    .from('profiles')
-    .insert({
-      id: authData.user.id,
-      full_name: trimmedFullName,
-      username: trimmedUsername,
-      email: email,
-      phone_number: phoneNumber ? phoneNumber.trim() : null
-    });
+  try {
+    const { error: profileError } = await supabase
+      .from('profiles')
+      .insert({
+        id: authData.user.id,
+        full_name: trimmedFullName,
+        username: trimmedUsername,
+        email: email,
+        phone_number: phoneNumber ? phoneNumber.trim() : null
+      });
 
-  if (profileError) {
-    console.error("Error creating profile:", profileError);
-    const { error: deleteUserError } = await supabase.auth.admin.deleteUser(authData.user.id);
-    if (deleteUserError) {
-        console.error("Error deleting auth user after profile creation failure:", deleteUserError);
-         return { success: false, error: `Pengguna berhasil dibuat di auth, tetapi gagal membuat profil: ${profileError.message}. Gagal menghapus pengguna auth setelahnya: ${deleteUserError.message}` };
+    if (profileError) {
+      console.error("Error creating profile:", profileError);
+      // Attempt to delete the auth user if profile creation failed to prevent orphaned auth users
+      const { error: deleteUserError } = await supabase.auth.admin.deleteUser(authData.user.id);
+      if (deleteUserError) {
+          console.error("Error deleting auth user after profile creation failure:", deleteUserError);
+           return { success: false, error: `Pengguna berhasil dibuat di auth, tetapi gagal membuat profil: ${profileError.message}. Gagal menghapus pengguna auth setelahnya: ${deleteUserError.message}` };
+      }
+      return { success: false, error: `Pengguna berhasil dibuat di auth, tetapi gagal membuat profil: ${profileError.message}. Pengguna auth telah dihapus.` };
     }
-    return { success: false, error: `Pengguna berhasil dibuat di auth, tetapi gagal membuat profil: ${profileError.message}. Pengguna auth telah dihapus.` };
+  } catch (e: any) {
+      console.error("Exception during profile creation or auth user deletion:", e);
+      // Attempt to delete the auth user if profile creation failed
+      const { error: deleteUserError } = await supabase.auth.admin.deleteUser(authData.user.id);
+      if (deleteUserError) {
+          console.error("Error deleting auth user after profile creation exception:", deleteUserError);
+      }
+      return { success: false, error: `Terjadi kesalahan server saat membuat profil: ${e.message}. Pengguna auth mungkin telah dihapus.` };
   }
+
 
   revalidatePath('/', 'layout');
   revalidatePath('/login', 'page');
@@ -136,18 +148,22 @@ export async function getCurrentUserAction(): Promise<{ user: SupabaseUser | nul
     return { user: null, profile: null };
   }
 
-  const { data: profileData, error: profileError } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('id', user.id)
-    .single();
+  try {
+    const { data: profileData, error: profileError } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', user.id)
+      .single();
 
-  if (profileError && profileError.code !== 'PGRST116') {
-    console.error("Error fetching profile for user:", user.id, profileError.message);
-    return { user: user, profile: null, error: `Gagal mengambil profil: ${profileError.message}` };
+    if (profileError && profileError.code !== 'PGRST116') { // PGRST116: No rows found
+      console.error("Error fetching profile for user:", user.id, profileError.message);
+      return { user: user, profile: null, error: `Gagal mengambil profil: ${profileError.message}` };
+    }
+    return { user: user, profile: profileData };
+  } catch (e: any) {
+    console.error("Exception fetching profile in getCurrentUserAction:", e);
+    return { user: user, profile: null, error: `Terjadi kesalahan server saat mengambil profil: ${e.message}` };
   }
-
-  return { user: user, profile: profileData };
 }
 
 
@@ -237,16 +253,22 @@ export async function createBillAction(
        return { success: false, error: "Pengguna tidak terautentikasi. Tidak dapat membuat tagihan." };
     }
 
-    const billInsertData: Database['public']['Tables']['bills']['Insert'] = {
+    // Remove category_id from insert data if it doesn't exist in the DB schema
+    const billInsertData: Omit<Database['public']['Tables']['bills']['Insert'], 'category_id'> & { category_id?: string | null } = {
       name: billName || "Tagihan Baru",
       user_id: user.id,
-      category_id: categoryId, 
+      // category_id: categoryId, // Commented out or removed if column doesn't exist
       scheduled_at: scheduledAt || null,
     };
+    // If you *are* sure category_id exists and is just nullable, you can conditionally add it:
+    // if (categoryId) {
+    //   billInsertData.category_id = categoryId;
+    // }
+
 
     const { data: billData, error: billInsertError } = await supabase
       .from('bills')
-      .insert([billInsertData])
+      .insert([billInsertData as Database['public']['Tables']['bills']['Insert']]) // Cast if necessary after omitting
       .select('id')
       .single();
 
@@ -272,21 +294,25 @@ export async function addParticipantAction(billId: string, personName: string): 
   if (!billId || !personName.trim()) {
     return { success: false, error: "Bill ID and person name are required." };
   }
+  try {
+    const { data, error } = await supabase
+      .from('bill_participants')
+      .insert([{ bill_id: billId, name: personName.trim() }])
+      .select('id, name')
+      .single();
 
-  const { data, error } = await supabase
-    .from('bill_participants')
-    .insert([{ bill_id: billId, name: personName.trim() }])
-    .select('id, name')
-    .single();
-
-  if (error) {
-    console.error("Error adding participant:", error);
-    return { success: false, error: error.message };
+    if (error) {
+      console.error("Error adding participant:", error);
+      return { success: false, error: error.message };
+    }
+    if (!data) {
+      return { success: false, error: "Failed to add participant or retrieve data." };
+    }
+    return { success: true, person: { id: data.id, name: data.name } };
+  } catch (e: any) {
+    console.error("Exception in addParticipantAction:", e);
+    return { success: false, error: e.message || "Terjadi kesalahan server saat menambahkan partisipan." };
   }
-  if (!data) {
-    return { success: false, error: "Failed to add participant or retrieve data." };
-  }
-  return { success: true, person: { id: data.id, name: data.name } };
 }
 
 export async function removeParticipantAction(participantId: string): Promise<{ success: boolean; error?: string }> {
@@ -294,17 +320,21 @@ export async function removeParticipantAction(participantId: string): Promise<{ 
   if (!participantId) {
     return { success: false, error: "Participant ID is required." };
   }
+  try {
+    const { error } = await supabase
+      .from('bill_participants')
+      .delete()
+      .eq('id', participantId);
 
-  const { error } = await supabase
-    .from('bill_participants')
-    .delete()
-    .eq('id', participantId);
-
-  if (error) {
-    console.error("Error removing participant:", error);
-    return { success: false, error: error.message };
+    if (error) {
+      console.error("Error removing participant:", error);
+      return { success: false, error: error.message };
+    }
+    return { success: true };
+  } catch (e: any) {
+    console.error("Exception in removeParticipantAction:", e);
+    return { success: false, error: e.message || "Terjadi kesalahan server saat menghapus partisipan." };
   }
-  return { success: true };
 }
 
 
@@ -785,67 +815,69 @@ export async function getBillsHistoryAction(): Promise<{ success: boolean; data?
     return { success: false, error: "Pengguna tidak terautentikasi atau sesi tidak valid." };
   }
 
-  // Fetch bills without trying to join bill_categories directly in the select
-  const { data: bills, error: billsError } = await supabase
-    .from('bills')
-    .select('id, name, created_at, grand_total, payer_participant_id, scheduled_at, category_id') // Keep category_id if you plan to fetch category name separately
-    .eq('user_id', user.id)
-    .or('grand_total.not.is.null,scheduled_at.not.is.null')
-    .order('created_at', { ascending: false });
+  try {
+    // Fetch bills without trying to select category_id if it doesn't exist
+    const { data: bills, error: billsError } = await supabase
+      .from('bills')
+      .select('id, name, created_at, grand_total, payer_participant_id, scheduled_at') // Removed category_id
+      .eq('user_id', user.id)
+      .or('grand_total.not.is.null,scheduled_at.not.is.null')
+      .order('created_at', { ascending: false });
 
-  if (billsError) {
-    console.error("Error fetching bills history:", billsError);
-    return { success: false, error: `Gagal mengambil riwayat tagihan: ${billsError.message}` };
-  }
+    if (billsError) {
+      console.error("Error fetching bills history:", billsError);
+      return { success: false, error: `Gagal mengambil riwayat tagihan: ${billsError.message}` };
+    }
 
-  if (!bills) {
-    return { success: true, data: [] };
-  }
+    if (!bills) {
+      return { success: true, data: [] };
+    }
 
-  const historyEntries: BillHistoryEntry[] = [];
+    const historyEntries: BillHistoryEntry[] = [];
 
-  for (const bill of bills) {
-    let payerName: string | null = null;
-    if (bill.payer_participant_id) {
-      const { data: payerData, error: payerError } = await supabase
-        .from('bill_participants')
-        .select('name')
-        .eq('id', bill.payer_participant_id)
-        .single();
-      if (payerError) {
-        console.warn(`Could not fetch payer name for bill ${bill.id}: ${payerError.message}`);
-      } else {
-        payerName = payerData?.name || null;
+    for (const bill of bills) {
+      let payerName: string | null = null;
+      if (bill.payer_participant_id) {
+        const { data: payerData, error: payerError } = await supabase
+          .from('bill_participants')
+          .select('name')
+          .eq('id', bill.payer_participant_id)
+          .single();
+        if (payerError) {
+          console.warn(`Could not fetch payer name for bill ${bill.id}: ${payerError.message}`);
+        } else {
+          payerName = payerData?.name || null;
+        }
       }
+
+      const { count: participantCount, error: countError } = await supabase
+        .from('bill_participants')
+        .select('*', { count: 'exact', head: true })
+        .eq('bill_id', bill.id);
+
+      if (countError) {
+        console.warn(`Could not fetch participant count for bill ${bill.id}: ${countError.message}`);
+      }
+      
+      const categoryName = null; // Category is dummy, so name is null
+
+      historyEntries.push({
+        id: bill.id,
+        name: bill.name,
+        createdAt: bill.created_at || new Date().toISOString(),
+        grandTotal: bill.grand_total,
+        payerName: payerName,
+        participantCount: participantCount || 0,
+        scheduled_at: bill.scheduled_at,
+        categoryName: categoryName,
+      });
     }
 
-    const { count: participantCount, error: countError } = await supabase
-      .from('bill_participants')
-      .select('*', { count: 'exact', head: true })
-      .eq('bill_id', bill.id);
-
-    if (countError) {
-      console.warn(`Could not fetch participant count for bill ${bill.id}: ${countError.message}`);
-    }
-    
-    // Since we are in dummy mode for categories, and the relationship might not exist,
-    // we will set categoryName to null.
-    // If bill.category_id is a dummy ID, trying to fetch its name from a non-existent table would fail.
-    const categoryName = null; 
-
-    historyEntries.push({
-      id: bill.id,
-      name: bill.name,
-      createdAt: bill.created_at || new Date().toISOString(),
-      grandTotal: bill.grand_total,
-      payerName: payerName,
-      participantCount: participantCount || 0,
-      scheduled_at: bill.scheduled_at,
-      categoryName: categoryName, // Will be null as per dummy implementation
-    });
+    return { success: true, data: historyEntries };
+  } catch (e:any) {
+    console.error("Exception in getBillsHistoryAction:", e);
+    return { success: false, error: e.message || "Terjadi kesalahan server saat mengambil riwayat tagihan." };
   }
-
-  return { success: true, data: historyEntries };
 }
 
 // ===== DASHBOARD ACTIONS =====
@@ -864,3 +896,4 @@ export async function getDashboardDataAction(): Promise<{ success: boolean; data
     },
   };
 }
+

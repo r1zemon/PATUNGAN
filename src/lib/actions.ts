@@ -3,7 +3,7 @@
 
 import { scanReceipt, ScanReceiptOutput, ReceiptItem as AiReceiptItem } from "@/ai/flows/scan-receipt";
 import { summarizeBill, SummarizeBillInput } from "@/ai/flows/summarize-bill";
-import type { SplitItem, Person, RawBillSummary, TaxTipSplitStrategy, ScannedItem, BillHistoryEntry, BillCategory, DashboardData, MonthlyExpenseByCategory, ExpenseChartDataPoint, RecentBillDisplayItem, ScheduledBillDisplayItem, DetailedBillSummaryData, Settlement, FetchedBillDetails, PersonalShareDetail, PersonalItemDetail } from "./types";
+import type { SplitItem, Person, RawBillSummary, TaxTipSplitStrategy, ScannedItem, BillHistoryEntry, BillCategory, DashboardData, MonthlyExpenseByCategory, ExpenseChartDataPoint, RecentBillDisplayItem, ScheduledBillDisplayItem, DetailedBillSummaryData, Settlement, FetchedBillDetails, PersonalShareDetail, UserProfileBasic, FriendRequestDisplay, FriendDisplay } from "./types";
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
 import type { PostgrestSingleResponse, User as SupabaseUser } from "@supabase/supabase-js";
@@ -83,7 +83,7 @@ export async function signupUserAction(formData: FormData) {
         full_name: trimmedFullName,
         username: trimmedUsername,
         email: email,
-        phone_number: phoneNumber ? phoneNumber.trim() : null
+        phone_number: phoneNumber ? phoneNumber.trim() : null // Ensure phone_number is string
       });
 
     if (profileError) {
@@ -136,7 +136,7 @@ export async function loginUserAction(formData: FormData) {
 }
 
 
-export async function getCurrentUserAction(): Promise<{ user: SupabaseUser | null; profile: any | null; error?: string }> {
+export async function getCurrentUserAction(): Promise<{ user: SupabaseUser | null; profile: UserProfileBasic | null; error?: string }> {
   const supabase = createSupabaseServerClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
 
@@ -151,7 +151,7 @@ export async function getCurrentUserAction(): Promise<{ user: SupabaseUser | nul
   try {
     const { data: profileData, error: profileError } = await supabase
       .from('profiles')
-      .select('*')
+      .select('id, username, full_name, avatar_url, email') // Removed phone_number for now from UserProfileBasic
       .eq('id', user.id)
       .single();
 
@@ -159,7 +159,7 @@ export async function getCurrentUserAction(): Promise<{ user: SupabaseUser | nul
       console.error("Error fetching profile for user:", user.id, profileError.message);
       return { user: user, profile: null, error: `Gagal mengambil profil: ${profileError.message}` };
     }
-    return { user: user, profile: profileData };
+    return { user: user, profile: profileData as UserProfileBasic | null };
   } catch (e: any) {
     console.error("Exception fetching profile in getCurrentUserAction:", e);
     return { user: user, profile: null, error: `Terjadi kesalahan server saat mengambil profil: ${e.message}` };
@@ -198,16 +198,16 @@ export async function createBillCategoryAction(name: string): Promise<{ success:
       .from('bill_categories')
       .select('id, name, user_id, created_at')
       .eq('user_id', user.id)
-      .ilike('name', trimmedName) 
+      .ilike('name', trimmedName)
       .single();
 
-    if (selectError && selectError.code !== 'PGRST116') { 
+    if (selectError && selectError.code !== 'PGRST116') {
       console.error("Error checking existing category:", selectError);
       return { success: false, error: `Gagal memeriksa kategori yang ada: ${selectError.message}` };
     }
 
     if (existingCategory) {
-      return { success: true, category: existingCategory as BillCategory }; 
+      return { success: true, category: existingCategory as BillCategory };
     }
 
     const { data: newCategoryData, error: insertError } = await supabase
@@ -224,14 +224,14 @@ export async function createBillCategoryAction(name: string): Promise<{ success:
     if (!newCategoryData) {
         return { success: false, error: "Gagal membuat kategori baru atau data tidak kembali." };
     }
-    
+
     const finalCategory: BillCategory = {
         id: newCategoryData.id,
         user_id: newCategoryData.user_id,
         name: newCategoryData.name,
         created_at: newCategoryData.created_at
     };
-    revalidatePath('/app', 'page'); 
+    revalidatePath('/app', 'page');
     revalidatePath('/', 'page'); // For dashboard updates
     return { success: true, category: finalCategory };
 
@@ -249,13 +249,13 @@ export async function getUserCategoriesAction(): Promise<{ success: boolean; cat
     if (authError || !user) {
       return { success: false, error: "Pengguna tidak terautentikasi." };
     }
-    
+
     const { data: categoriesData, error: fetchError } = await supabase
       .from('bill_categories')
       .select('id, name, user_id, created_at')
       .eq('user_id', user.id)
       .order('name', { ascending: true });
-      
+
     if (fetchError) {
       console.error("Error fetching user categories:", fetchError);
       return { success: false, error: `Gagal mengambil kategori: ${fetchError.message}` };
@@ -292,7 +292,7 @@ export async function createBillAction(
     const billInsertData: Database['public']['Tables']['bills']['Insert'] = {
       name: billName || "Tagihan Baru",
       user_id: user.id,
-      category_id: categoryId, 
+      category_id: categoryId,
       scheduled_at: scheduledAt || null,
     };
 
@@ -309,8 +309,8 @@ export async function createBillAction(
     if (!billData || !billData.id) {
       return { success: false, error: "Gagal membuat tagihan atau mengambil ID tagihan setelah insert." };
     }
-     if (scheduledAt) { 
-      revalidatePath('/', 'page'); 
+     if (scheduledAt) {
+      revalidatePath('/', 'page');
       revalidatePath('/app/history', 'page');
     }
     return { success: true, billId: billData.id };
@@ -370,7 +370,7 @@ export async function removeParticipantAction(participantId: string): Promise<{ 
 
 
 export async function handleScanReceiptAction(
-  billId: string, 
+  billId: string,
   receiptDataUri: string
 ): Promise<{ success: boolean; data?: { items: ScannedItem[] }; error?: string }> {
   const supabase = createSupabaseServerClient();
@@ -383,7 +383,7 @@ export async function handleScanReceiptAction(
   if (!receiptDataUri.startsWith("data:image/")) {
     return { success: false, error: "Format data gambar tidak valid." };
   }
-  
+
   console.log("handleScanReceiptAction (server): Received data URI for bill", billId);
 
   try {
@@ -398,7 +398,7 @@ export async function handleScanReceiptAction(
       }));
 
       if (itemsToInsert.length === 0) {
-        return { success: true, data: { items: [] } }; 
+        return { success: true, data: { items: [] } };
       }
 
       const { data: insertedDbItems, error: insertError } = await supabase
@@ -410,19 +410,19 @@ export async function handleScanReceiptAction(
         console.error("handleScanReceiptAction (server): Error inserting scanned items to DB:", insertError);
         return { success: false, error: `Gagal menyimpan item struk ke database: ${insertError.message}` };
       }
-      
+
       if (!insertedDbItems) {
         console.error("handleScanReceiptAction (server): No data returned after inserting scanned items.");
         return { success: false, error: "Gagal mendapatkan data item setelah disimpan ke database." };
       }
 
       const appItems: ScannedItem[] = insertedDbItems.map(dbItem => ({
-        id: dbItem.id, 
+        id: dbItem.id,
         name: dbItem.name,
         unitPrice: dbItem.unit_price,
         quantity: dbItem.quantity,
       }));
-      
+
       console.log(`handleScanReceiptAction (server): Scan successful, ${appItems.length} items mapped and saved to DB.`);
       return { success: true, data: { items: appItems } };
     } else {
@@ -613,7 +613,7 @@ export async function handleSummarizeBillAction(
         payer_participant_id: payerParticipantId,
         tax_tip_split_strategy: taxTipSplitStrategy
     }).eq('id', billId);
-    revalidatePath('/', 'page'); 
+    revalidatePath('/', 'page');
     revalidatePath('/app/history', 'page');
     return { success: true, data: zeroSummary };
   }
@@ -651,23 +651,20 @@ export async function handleSummarizeBillAction(
     }
 
     const newAssignments: ItemAssignmentInsert[] = [];
-    for (const item of splitItems) { // splitItems comes from client
-      // Ensure item.id is a valid ID from bill_items for the current bill.
-      // This check is crucial, especially if items can be added/removed on the client.
+    for (const item of splitItems) {
       if (!billItemIdsForThisBill.includes(item.id)) {
           console.warn(`Item with id ${item.id} (name: ${item.name}) from client-side splitItems is not found in the database's bill_items for bill ${billId}. Skipping assignments for this item.`);
-          continue; 
+          continue;
       }
       for (const assignment of item.assignedTo) {
         if (assignment.count > 0) {
-          // Ensure participantId is valid for this bill
           const participantExists = people.some(p => p.id === assignment.personId);
           if (!participantExists) {
               console.warn(`Participant with id ${assignment.personId} for item ${item.name} assignment is not found in the current bill's participants. Skipping this assignment.`);
               continue;
           }
           newAssignments.push({
-            bill_item_id: item.id, // This ID MUST be a valid bill_items.id
+            bill_item_id: item.id,
             participant_id: assignment.personId,
             assigned_quantity: assignment.count,
           });
@@ -819,7 +816,7 @@ export async function updateUserProfileAction(
     full_name?: string | null;
     username?: string | null;
     avatar_url?: string | null;
-    phone_number?: string | null;
+    phone_number?: string | null; // Changed to string
   },
   avatarFile?: File | null
 ): Promise<{ success: boolean; data?: any; error?: string | string[] }> {
@@ -1081,17 +1078,17 @@ export async function getBillsHistoryAction(): Promise<{ success: boolean; data?
     const { data: bills, error: billsError } = await supabase
       .from('bills')
       .select(`
-        id, 
-        name, 
-        created_at, 
-        grand_total, 
-        payer_participant_id, 
+        id,
+        name,
+        created_at,
+        grand_total,
+        payer_participant_id,
         scheduled_at,
         category_id,
         bill_categories ( name )
       `)
       .eq('user_id', user.id)
-      .or('grand_total.not.is.null,scheduled_at.not.is.null') 
+      .or('grand_total.not.is.null,scheduled_at.not.is.null')
       .order('created_at', { ascending: false });
 
     if (billsError) {
@@ -1128,13 +1125,13 @@ export async function getBillsHistoryAction(): Promise<{ success: boolean; data?
       if (countError) {
         console.warn(`Could not fetch participant count for bill ${bill.id}: ${countError.message}`);
       }
-      
+
       const categoryName = (bill.bill_categories as any)?.name || null;
 
       historyEntries.push({
         id: bill.id,
         name: bill.name,
-        createdAt: bill.created_at || new Date().toISOString(), 
+        createdAt: bill.created_at || new Date().toISOString(),
         grandTotal: bill.grand_total,
         payerName: payerName,
         participantCount: participantCount || 0,
@@ -1157,8 +1154,8 @@ const CATEGORY_ICON_KEYS: { [key: string]: string } = {
   "Transportasi": "Car",
   "Hiburan": "Gamepad2",
   "Penginapan": "BedDouble",
-  "Belanja Online": "ShoppingBag", 
-  "Lainnya": "Shapes", 
+  "Belanja Online": "ShoppingBag",
+  "Lainnya": "Shapes",
 };
 
 const PREDEFINED_CATEGORY_COLORS: { [key: string]: string } = {
@@ -1167,7 +1164,7 @@ const PREDEFINED_CATEGORY_COLORS: { [key: string]: string } = {
   "Hiburan": "hsl(var(--chart-3))",
   "Penginapan": "hsl(var(--chart-4))",
   "Belanja Online": "hsl(var(--chart-5))",
-  "Lainnya": "hsl(var(--chart-5))", 
+  "Lainnya": "hsl(var(--chart-5))",
 };
 
 const DEFAULT_CATEGORY_ORDER_FOR_DASHBOARD = ["Makanan", "Transportasi", "Hiburan", "Penginapan"];
@@ -1202,7 +1199,7 @@ export async function getDashboardDataAction(): Promise<{ success: boolean; data
       .select('category_id, grand_total')
       .eq('user_id', user.id)
       .not('grand_total', 'is', null)
-      .not('payer_participant_id', 'is', null) 
+      .not('payer_participant_id', 'is', null)
       .gte('created_at', startDate)
       .lte('created_at', endDate);
 
@@ -1219,7 +1216,7 @@ export async function getDashboardDataAction(): Promise<{ success: boolean; data
         }
       }
     }
-    
+
     let allMonthlyExpensesRaw: MonthlyExpenseByCategory[] = (userCategories || []).map(category => {
       const totalAmount = spendingPerCategory[category.id] || 0;
       return {
@@ -1229,30 +1226,25 @@ export async function getDashboardDataAction(): Promise<{ success: boolean; data
         color: PREDEFINED_CATEGORY_COLORS[category.name] || PREDEFINED_CATEGORY_COLORS["Lainnya"] || "hsl(var(--chart-1))",
       };
     });
-   
+
     if (!allMonthlyExpensesRaw.find(cat => cat.categoryName === OTHERS_CATEGORY_NAME_FOR_DASHBOARD)) {
         const lainnyaDefault = (userCategories || []).find(cat => cat.name === OTHERS_CATEGORY_NAME_FOR_DASHBOARD);
-        if (lainnyaDefault){ 
+        if (lainnyaDefault){
              allMonthlyExpensesRaw.push({
                 categoryName: OTHERS_CATEGORY_NAME_FOR_DASHBOARD,
                 totalAmount: spendingPerCategory[lainnyaDefault.id] || 0,
                 icon: CATEGORY_ICON_KEYS[OTHERS_CATEGORY_NAME_FOR_DASHBOARD] || "Shapes",
                 color: PREDEFINED_CATEGORY_COLORS[OTHERS_CATEGORY_NAME_FOR_DASHBOARD] || "hsl(var(--chart-1))",
             });
-        } else { 
-             // Ensure "Lainnya" is added even if not explicitly in userCategories (e.g. if it was a default and then deleted but still has bills)
-            // Or if it was never a user category but some bills might have had it (less likely with current setup)
-            // This ensures "Lainnya" from the predefined list is considered if it has spending or should be shown.
-            // A more robust way would be to ensure "Lainnya" from `DEFAULT_CATEGORY_ORDER_FOR_DASHBOARD` is always included.
+        } else {
             let totalForLainnyaCat = 0;
             const lainnyaCatFromDb = (userCategories || []).find(c => c.name === OTHERS_CATEGORY_NAME_FOR_DASHBOARD);
             if (lainnyaCatFromDb) {
                 totalForLainnyaCat = spendingPerCategory[lainnyaCatFromDb.id] || 0;
-            } // else, if "Lainnya" bills exist without a category_id mapping (unlikely) or it's just to show 0.
-
+            }
             allMonthlyExpensesRaw.push({
                 categoryName: OTHERS_CATEGORY_NAME_FOR_DASHBOARD,
-                totalAmount: totalForLainnyaCat, // Default to 0 if no specific "Lainnya" category ID had spending
+                totalAmount: totalForLainnyaCat,
                 icon: CATEGORY_ICON_KEYS[OTHERS_CATEGORY_NAME_FOR_DASHBOARD] || "Shapes",
                 color: PREDEFINED_CATEGORY_COLORS[OTHERS_CATEGORY_NAME_FOR_DASHBOARD] || "hsl(var(--chart-1))",
             });
@@ -1278,33 +1270,30 @@ export async function getDashboardDataAction(): Promise<{ success: boolean; data
       }
     });
 
-    // Sort predefined by the order in DEFAULT_CATEGORY_ORDER_FOR_DASHBOARD
     predefinedExpenses.sort((a, b) => DEFAULT_CATEGORY_ORDER_FOR_DASHBOARD.indexOf(a.categoryName) - DEFAULT_CATEGORY_ORDER_FOR_DASHBOARD.indexOf(b.categoryName));
-    // Sort custom expenses alphabetically
     customExpenses.sort((a, b) => a.categoryName.localeCompare(b.categoryName));
 
     let monthlyExpenses: MonthlyExpenseByCategory[] = [...predefinedExpenses, ...customExpenses];
     if (othersExpense) {
       monthlyExpenses.push(othersExpense);
     }
-    
+
     const expenseChartData: ExpenseChartDataPoint[] = monthlyExpenses
       .filter(e => e.totalAmount > 0)
       .map(e => ({ name: e.categoryName, total: e.totalAmount }));
 
-    // Fetch Recent Bills
     const { data: dbRecentBills, error: recentBillsError } = await supabase
         .from('bills')
         .select(`
-            id, 
-            name, 
-            created_at, 
+            id,
+            name,
+            created_at,
             grand_total,
             bill_categories ( name )
         `)
         .eq('user_id', user.id)
         .not('grand_total', 'is', null)
-        .not('payer_participant_id', 'is', null) // Ensure it's a completed bill
+        .not('payer_participant_id', 'is', null)
         .order('created_at', { ascending: false })
         .limit(3);
 
@@ -1332,19 +1321,18 @@ export async function getDashboardDataAction(): Promise<{ success: boolean; data
         }
     }
 
-    // Fetch Scheduled Bills
     const { data: dbScheduledBills, error: scheduledBillsError } = await supabase
         .from('bills')
         .select(`
-            id, 
-            name, 
+            id,
+            name,
             scheduled_at,
             bill_categories ( name )
         `)
         .eq('user_id', user.id)
-        .is('grand_total', null) // Unprocessed bills
+        .is('grand_total', null)
         .not('scheduled_at', 'is', null)
-        .gt('scheduled_at', new Date().toISOString()) // Scheduled for the future
+        .gt('scheduled_at', new Date().toISOString())
         .order('scheduled_at', { ascending: true })
         .limit(3);
 
@@ -1352,7 +1340,7 @@ export async function getDashboardDataAction(): Promise<{ success: boolean; data
         console.error("Error fetching scheduled bills for dashboard:", scheduledBillsError);
         return { success: false, error: `Gagal mengambil tagihan terjadwal: ${scheduledBillsError.message}` };
     }
-    
+
     const scheduledBills: ScheduledBillDisplayItem[] = [];
     if (dbScheduledBills) {
         for (const bill of dbScheduledBills) {
@@ -1370,8 +1358,8 @@ export async function getDashboardDataAction(): Promise<{ success: boolean; data
             });
         }
     }
-    
-    revalidatePath('/', 'page'); 
+
+    revalidatePath('/', 'page');
 
     return {
       success: true,
@@ -1413,7 +1401,7 @@ export async function getBillDetailsAction(billId: string): Promise<{ success: b
     if (!bill) {
       return { success: false, error: "Tagihan tidak ditemukan atau Anda tidak memiliki akses." };
     }
-    
+
     if (bill.grand_total === null && bill.scheduled_at && isFuture(parseISO(bill.scheduled_at))) {
         const emptySummary: DetailedBillSummaryData = {
             payerName: "Belum Ditentukan",
@@ -1424,28 +1412,33 @@ export async function getBillDetailsAction(billId: string): Promise<{ success: b
             settlements: [],
             grandTotal: 0,
         };
-         return { 
-            success: true, 
-            data: { 
-                billName: bill.name, 
-                createdAt: bill.created_at || new Date().toISOString(), 
+         return {
+            success: true,
+            data: {
+                billName: bill.name,
+                createdAt: bill.created_at || new Date().toISOString(),
                 summaryData: emptySummary,
-                participants: [] 
-            } 
+                participants: []
+            }
         };
     }
 
     const { data: participantsData, error: participantsError } = await supabase
       .from('bill_participants')
-      .select('id, name, total_share_amount')
+      .select('id, name, total_share_amount, profile_id, profiles (id, avatar_url)') // Fetch profile_id and avatar_url
       .eq('bill_id', billId);
 
     if (participantsError) {
       console.error("Error fetching participants for bill:", participantsError);
       return { success: false, error: `Gagal mengambil partisipan: ${participantsError.message}` };
     }
-    const participants: Person[] = participantsData?.map(p => ({ id: p.id, name: p.name })) || [];
-    
+
+    const participants: Person[] = (participantsData || []).map(p => ({
+        id: p.id,
+        name: p.name,
+        avatar_url: (p.profiles as any)?.avatar_url || null
+    }));
+
     const { data: allBillItems, error: billItemsError } = await supabase
       .from('bill_items')
       .select('id, name, unit_price')
@@ -1459,7 +1452,7 @@ export async function getBillDetailsAction(billId: string): Promise<{ success: b
     const { data: allItemAssignments, error: assignmentsError } = await supabase
       .from('item_assignments')
       .select('bill_item_id, participant_id, assigned_quantity')
-      .in('bill_item_id', (allBillItems || []).map(item => item.id)); 
+      .in('bill_item_id', (allBillItems || []).map(item => item.id));
 
     if (assignmentsError) {
       console.error("Error fetching item assignments:", assignmentsError);
@@ -1515,8 +1508,6 @@ export async function getBillDetailsAction(billId: string): Promise<{ success: b
               personDetail.tipShare = bill.tip_amount || 0;
           }
       }
-      // Ensure totalShare from DB is used, and calculated subTotalFromItems, taxShare, tipShare are for display detail
-      // No need to recalculate totalShare here as it's already fetched from bill_participants.total_share_amount
       detailedPersonalSharesData.push(personDetail);
     }
 
@@ -1524,8 +1515,8 @@ export async function getBillDetailsAction(billId: string): Promise<{ success: b
       .from('settlements')
       .select(`
         amount,
-        from_participant:bill_participants!settlements_from_participant_id_fkey ( name ),
-        to_participant:bill_participants!settlements_to_participant_id_fkey ( name )
+        from_participant:bill_participants!settlements_from_participant_id_fkey ( name, profiles (avatar_url) ),
+        to_participant:bill_participants!settlements_to_participant_id_fkey ( name, profiles (avatar_url) )
       `)
       .eq('bill_id', billId);
 
@@ -1550,14 +1541,14 @@ export async function getBillDetailsAction(billId: string): Promise<{ success: b
       grandTotal: bill.grand_total || 0,
     };
 
-    return { 
-      success: true, 
-      data: { 
-        billName: bill.name, 
-        createdAt: bill.created_at || new Date().toISOString(), 
-        summaryData, 
-        participants 
-      } 
+    return {
+      success: true,
+      data: {
+        billName: bill.name,
+        createdAt: bill.created_at || new Date().toISOString(),
+        summaryData,
+        participants
+      }
     };
 
   } catch (e: any) {
@@ -1565,5 +1556,318 @@ export async function getBillDetailsAction(billId: string): Promise<{ success: b
     return { success: false, error: e.message || "Terjadi kesalahan server saat mengambil detail tagihan." };
   }
 }
-    
-    
+
+// ===== FRIENDSHIP ACTIONS =====
+
+export async function searchUsersAction(query: string): Promise<{ success: boolean; users?: UserProfileBasic[]; error?: string }> {
+  const supabase = createSupabaseServerClient();
+  const { data: { user: currentUser }, error: authError } = await supabase.auth.getUser();
+
+  if (authError || !currentUser) {
+    return { success: false, error: "Pengguna tidak terautentikasi." };
+  }
+
+  if (!query.trim()) {
+    return { success: true, users: [] };
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id, username, full_name, avatar_url')
+      .or(`username.ilike.%${query}%,full_name.ilike.%${query}%`)
+      .neq('id', currentUser.id) // Exclude current user
+      .limit(10);
+
+    if (error) throw error;
+    return { success: true, users: data as UserProfileBasic[] };
+  } catch (e: any) {
+    console.error("Error searching users:", e);
+    return { success: false, error: e.message || "Gagal mencari pengguna." };
+  }
+}
+
+export async function sendFriendRequestAction(receiverId: string): Promise<{ success: boolean; error?: string }> {
+  const supabase = createSupabaseServerClient();
+  const { data: { user: requester }, error: authError } = await supabase.auth.getUser();
+
+  if (authError || !requester) {
+    return { success: false, error: "Pengguna tidak terautentikasi." };
+  }
+  if (requester.id === receiverId) {
+    return { success: false, error: "Anda tidak dapat mengirim permintaan pertemanan ke diri sendiri." };
+  }
+
+  try {
+    // Check if already friends
+    const { data: existingFriendship, error: friendshipCheckError } = await supabase
+      .from('friendships')
+      .select('id')
+      .or(`user1_id.eq.${requester.id},user2_id.eq.${requester.id}`)
+      .or(`user1_id.eq.${receiverId},user2_id.eq.${receiverId}`)
+      .eq('user1_id', requester.id < receiverId ? requester.id : receiverId) // Simplified check
+      .eq('user2_id', requester.id < receiverId ? receiverId : requester.id)
+      .maybeSingle();
+
+    if (friendshipCheckError) throw friendshipCheckError;
+    if (existingFriendship) return { success: false, error: "Anda sudah berteman dengan pengguna ini." };
+
+
+    // Check for existing pending request (either way)
+    const { data: existingRequest, error: requestCheckError } = await supabase
+        .from('friend_requests')
+        .select('id, status, requester_id')
+        .or(`and(requester_id.eq.${requester.id},receiver_id.eq.${receiverId}),and(requester_id.eq.${receiverId},receiver_id.eq.${requester.id})`)
+        .in('status', ['pending', 'accepted']) // 'accepted' means friendship should exist, but check as safeguard
+        .maybeSingle();
+
+
+    if (requestCheckError) throw requestCheckError;
+
+    if (existingRequest) {
+        if (existingRequest.status === 'pending') {
+            if (existingRequest.requester_id === requester.id) {
+                return { success: false, error: "Anda sudah mengirim permintaan ke pengguna ini." };
+            } else {
+                return { success: false, error: "Pengguna ini sudah mengirim permintaan kepada Anda. Silakan cek permintaan masuk." };
+            }
+        }
+        if (existingRequest.status === 'accepted') {
+             return { success: false, error: "Anda sudah berteman (berdasarkan status permintaan sebelumnya)." };
+        }
+    }
+
+
+    const { error: insertError } = await supabase
+      .from('friend_requests')
+      .insert({ requester_id: requester.id, receiver_id: receiverId, status: 'pending' });
+
+    if (insertError) {
+        if (insertError.code === '23505') { // Unique violation
+            return { success: false, error: "Permintaan pertemanan sudah ada atau Anda sudah berteman." };
+        }
+        throw insertError;
+    }
+    revalidatePath('/app/social', 'page');
+    return { success: true };
+  } catch (e: any) {
+    console.error("Error sending friend request:", e);
+    return { success: false, error: e.message || "Gagal mengirim permintaan pertemanan." };
+  }
+}
+
+export async function getFriendRequestsAction(): Promise<{ success: boolean; requests?: FriendRequestDisplay[]; error?: string }> {
+  const supabase = createSupabaseServerClient();
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+  if (authError || !user) {
+    return { success: false, error: "Pengguna tidak terautentikasi." };
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('friend_requests')
+      .select(`
+        id,
+        requester_id,
+        created_at,
+        status,
+        profile:profiles!friend_requests_requester_id_fkey (id, username, full_name, avatar_url)
+      `)
+      .eq('receiver_id', user.id)
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    const requests: FriendRequestDisplay[] = data.map(req => ({
+      requestId: req.id,
+      id: (req.profile as UserProfileBasic).id,
+      username: (req.profile as UserProfileBasic).username,
+      fullName: (req.profile as UserProfileBasic).full_name,
+      avatarUrl: (req.profile as UserProfileBasic).avatar_url,
+      requestedAt: req.created_at,
+      status: req.status as FriendRequestDisplay['status'],
+    }));
+    return { success: true, requests };
+  } catch (e: any) {
+    console.error("Error fetching friend requests:", e);
+    return { success: false, error: e.message || "Gagal mengambil permintaan pertemanan." };
+  }
+}
+
+
+export async function acceptFriendRequestAction(requestId: string): Promise<{ success: boolean; error?: string }> {
+  const supabase = createSupabaseServerClient();
+  const { data: { user: currentUser }, error: authError } = await supabase.auth.getUser();
+
+  if (authError || !currentUser) {
+    return { success: false, error: "Pengguna tidak terautentikasi." };
+  }
+
+  try {
+    const { data: request, error: requestError } = await supabase
+      .from('friend_requests')
+      .select('requester_id, receiver_id, status')
+      .eq('id', requestId)
+      .single();
+
+    if (requestError || !request) {
+      throw new Error(requestError?.message || "Permintaan tidak ditemukan.");
+    }
+    if (request.receiver_id !== currentUser.id) {
+      return { success: false, error: "Anda tidak berhak menerima permintaan ini." };
+    }
+    if (request.status !== 'pending') {
+      return { success: false, error: "Permintaan ini sudah tidak pending." };
+    }
+
+    // Update request status
+    const { error: updateError } = await supabase
+      .from('friend_requests')
+      .update({ status: 'accepted', updated_at: new Date().toISOString() })
+      .eq('id', requestId);
+    if (updateError) throw updateError;
+
+    // Create friendship
+    const user1_id = request.requester_id < request.receiver_id ? request.requester_id : request.receiver_id;
+    const user2_id = request.requester_id < request.receiver_id ? request.receiver_id : request.requester_id;
+
+    const { error: friendshipError } = await supabase
+      .from('friendships')
+      .insert({ user1_id: user1_id, user2_id: user2_id });
+    if (friendshipError) {
+        if (friendshipError.code === '23505') { // unique_violation for uq_friendship_pair
+             console.warn("Friendship already exists, but request was pending. Proceeding.");
+        } else {
+            // Rollback request status update if friendship creation fails for other reasons? Complex.
+            // For now, log and report.
+            console.error("Error creating friendship after accepting request:", friendshipError);
+            // Attempt to revert request status for consistency, though this might also fail.
+            await supabase.from('friend_requests').update({ status: 'pending' }).eq('id', requestId);
+            return { success: false, error: `Gagal membuat pertemanan: ${friendshipError.message}` };
+        }
+    }
+    revalidatePath('/app/social', 'page');
+    return { success: true };
+  } catch (e: any) {
+    console.error("Error accepting friend request:", e);
+    return { success: false, error: e.message || "Gagal menerima permintaan pertemanan." };
+  }
+}
+
+export async function declineOrCancelFriendRequestAction(requestId: string, actionType: 'decline' | 'cancel'): Promise<{ success: boolean; error?: string }> {
+  const supabase = createSupabaseServerClient();
+  const { data: { user: currentUser }, error: authError } = await supabase.auth.getUser();
+
+  if (authError || !currentUser) {
+    return { success: false, error: "Pengguna tidak terautentikasi." };
+  }
+  try {
+    const { data: request, error: requestError } = await supabase
+        .from('friend_requests')
+        .select('requester_id, receiver_id, status')
+        .eq('id', requestId)
+        .single();
+
+    if (requestError || !request) throw new Error(requestError?.message || "Permintaan tidak ditemukan.");
+
+    let newStatus: 'declined' | 'cancelled';
+    if (actionType === 'decline') {
+        if (request.receiver_id !== currentUser.id) return { success: false, error: "Anda tidak berhak menolak permintaan ini." };
+        newStatus = 'declined';
+    } else { // cancel
+        if (request.requester_id !== currentUser.id) return { success: false, error: "Anda tidak berhak membatalkan permintaan ini." };
+        newStatus = 'cancelled';
+    }
+
+    if (request.status !== 'pending') return { success: false, error: "Permintaan ini sudah tidak tertunda." };
+
+    const { error: updateError } = await supabase
+      .from('friend_requests')
+      .update({ status: newStatus, updated_at: new Date().toISOString() })
+      .eq('id', requestId);
+
+    if (updateError) throw updateError;
+    revalidatePath('/app/social', 'page');
+    return { success: true };
+  } catch (e: any) {
+    console.error(`Error ${actionType === 'decline' ? 'declining' : 'cancelling'} friend request:`, e);
+    return { success: false, error: e.message || `Gagal ${actionType === 'decline' ? 'menolak' : 'membatalkan'} permintaan.` };
+  }
+}
+
+export async function getFriendsAction(): Promise<{ success: boolean; friends?: FriendDisplay[]; error?: string }> {
+    const supabase = createSupabaseServerClient();
+    const { data: { user: currentUser }, error: authError } = await supabase.auth.getUser();
+
+    if (authError || !currentUser) {
+        return { success: false, error: "Pengguna tidak terautentikasi." };
+    }
+
+    try {
+        const { data, error } = await supabase
+            .from('friendships')
+            .select(`
+                id,
+                created_at,
+                user1:profiles!friendships_user1_id_fkey (id, username, full_name, avatar_url),
+                user2:profiles!friendships_user2_id_fkey (id, username, full_name, avatar_url)
+            `)
+            .or(`user1_id.eq.${currentUser.id},user2_id.eq.${currentUser.id}`);
+
+        if (error) throw error;
+
+        const friends: FriendDisplay[] = data.map(f => {
+            const friendProfile = f.user1_id === currentUser.id ? f.user2 as UserProfileBasic : f.user1 as UserProfileBasic;
+            return {
+                friendshipId: f.id,
+                id: friendProfile.id,
+                username: friendProfile.username,
+                fullName: friendProfile.full_name,
+                avatarUrl: friendProfile.avatar_url,
+                since: f.created_at,
+            };
+        }).sort((a,b) => (a.fullName || a.username || "").localeCompare(b.fullName || b.username || ""));
+
+        return { success: true, friends };
+    } catch (e: any) {
+        console.error("Error fetching friends:", e);
+        return { success: false, error: e.message || "Gagal mengambil daftar teman." };
+    }
+}
+
+export async function removeFriendAction(friendshipId: string): Promise<{ success: boolean; error?: string }> {
+    const supabase = createSupabaseServerClient();
+    const { data: { user: currentUser }, error: authError } = await supabase.auth.getUser();
+
+    if (authError || !currentUser) {
+        return { success: false, error: "Pengguna tidak terautentikasi." };
+    }
+
+    try {
+        // Optional: Verify the current user is part of this friendship before deleting
+        const { data: friendship, error: fetchError } = await supabase
+            .from('friendships')
+            .select('user1_id, user2_id')
+            .eq('id', friendshipId)
+            .or(`user1_id.eq.${currentUser.id},user2_id.eq.${currentUser.id}`)
+            .single();
+
+        if (fetchError || !friendship) {
+            return { success: false, error: "Pertemanan tidak ditemukan atau Anda tidak berhak menghapusnya." };
+        }
+
+        const { error: deleteError } = await supabase
+            .from('friendships')
+            .delete()
+            .eq('id', friendshipId);
+
+        if (deleteError) throw deleteError;
+        revalidatePath('/app/social', 'page');
+        return { success: true };
+    } catch (e: any) {
+        console.error("Error removing friend:", e);
+        return { success: false, error: e.message || "Gagal menghapus teman." };
+    }
+}

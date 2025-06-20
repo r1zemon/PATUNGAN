@@ -1,7 +1,8 @@
 
 export interface Person {
-  id: string;
+  id: string; // Ini bisa jadi participant_id atau user_id (profile_id)
   name: string;
+  avatar_url?: string | null; // Tambahkan untuk avatar di summary jika partisipan adalah user
 }
 
 export interface ScannedItem {
@@ -75,7 +76,7 @@ export interface BillHistoryEntry {
   payerName: string | null;
   participantCount: number;
   scheduled_at?: string | null;
-  categoryName?: string | null; 
+  categoryName?: string | null;
 }
 
 export interface Notification {
@@ -85,7 +86,7 @@ export interface Notification {
   description?: string;
   createdAt: string; // ISO string date
   read: boolean;
-  icon?: string; // Changed from React.ElementType to string
+  icon?: string;
   link?: string;
   sender?: {
     name: string;
@@ -112,28 +113,47 @@ export interface RecentBillDisplayItem {
 }
 
 export interface MonthlyExpenseByCategory {
-  categoryName: string; 
+  categoryName: string;
   totalAmount: number;
-  icon?: string; 
-  color?: string; 
+  icon?: string;
+  color?: string;
 }
 
 export interface ExpenseChartDataPoint {
-  name: string; 
-  total: number; 
+  name: string;
+  total: number;
 }
 
 export interface DashboardData {
   monthlyExpenses: MonthlyExpenseByCategory[];
-  expenseChartData: ExpenseChartDataPoint[]; 
+  expenseChartData: ExpenseChartDataPoint[];
   recentBills: RecentBillDisplayItem[];
   scheduledBills: ScheduledBillDisplayItem[];
 }
 
-// Renamed from BillDetailsForHistory to be more general
 export interface FetchedBillDetails {
   billName: string | null;
   createdAt: string;
-  summaryData: DetailedBillSummaryData; // This will now contain detailedPersonalShares
-  participants: Person[]; // List of participants involved in this bill
+  summaryData: DetailedBillSummaryData;
+  participants: Person[];
+}
+
+// ===== SOCIAL/FRIENDSHIP TYPES =====
+export interface UserProfileBasic {
+  id: string;
+  username: string | null;
+  fullName: string | null;
+  avatarUrl: string | null;
+}
+
+export interface FriendRequestDisplay extends UserProfileBasic {
+  requestId: string;
+  requestedAt: string; // ISO string date
+  status: 'pending' | 'accepted' | 'declined' | 'cancelled';
+}
+
+export interface FriendDisplay extends UserProfileBasic {
+  friendshipId: string;
+  since: string; // ISO string date
+  // isOnline?: boolean; // Future enhancement
 }

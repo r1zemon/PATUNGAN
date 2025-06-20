@@ -206,7 +206,7 @@ export async function createBillCategoryAction(name: string): Promise<{ success:
     }
 
     if (existingCategory) {
-      return { success: true, category: existingCategory as BillCategory }; // Return existing if found
+      return { success: true, category: existingCategory as BillCategory }; 
     }
 
     const { data: newCategoryData, error: insertError } = await supabase
@@ -230,7 +230,8 @@ export async function createBillCategoryAction(name: string): Promise<{ success:
         name: newCategoryData.name,
         created_at: newCategoryData.created_at
     };
-    revalidatePath('/app', 'page'); // Revalidate the app page where categories are listed/used
+    revalidatePath('/app', 'page'); 
+    revalidatePath('/', 'page'); // For dashboard updates
     return { success: true, category: finalCategory };
 
   } catch (e: any) {
@@ -853,6 +854,7 @@ export async function getBillsHistoryAction(): Promise<{ success: boolean; data?
         grand_total, 
         payer_participant_id, 
         scheduled_at,
+        category_id,
         bill_categories ( name )
       `)
       .eq('user_id', user.id)
@@ -917,13 +919,12 @@ export async function getBillsHistoryAction(): Promise<{ success: boolean; data?
 
 // ===== DASHBOARD ACTIONS =====
 
-// These map category names to icon STRING KEYS
 const CATEGORY_ICON_KEYS: { [key: string]: string } = {
   "Makanan": "Utensils",
   "Transportasi": "Car",
   "Hiburan": "Gamepad2",
   "Penginapan": "BedDouble",
-  "Belanja Online": "ShoppingBag",
+  "Belanja Online": "ShoppingBag", // Added example for custom
   "Lainnya": "Shapes",
 };
 
@@ -933,8 +934,12 @@ const PREDEFINED_CATEGORY_COLORS: { [key: string]: string } = {
   "Hiburan": "hsl(var(--chart-3))",
   "Penginapan": "hsl(var(--chart-4))",
   "Belanja Online": "hsl(var(--chart-5))", 
-  "Lainnya": "hsl(var(--chart-5))", 
+  "Lainnya": "hsl(var(--chart-5))", // Can use the same or a different one
 };
+
+// Order for default categories (excluding "Lainnya")
+const DEFAULT_CATEGORY_ORDER = ["Makanan", "Transportasi", "Hiburan", "Penginapan"]; // Add more predefined defaults here if needed
+const OTHERS_CATEGORY_NAME = "Lainnya";
 
 
 export async function getDashboardDataAction(): Promise<{ success: boolean; data?: DashboardData; error?: string }> {
@@ -978,32 +983,47 @@ export async function getDashboardDataAction(): Promise<{ success: boolean; data
       }
     }
     
-    const monthlyExpenses: MonthlyExpenseByCategory[] = categories.map(category => {
+    let allMonthlyExpensesRaw: MonthlyExpenseByCategory[] = categories.map(category => {
       const totalAmount = spendingPerCategory[category.id] || 0;
-      const categoryNameLower = category.name.toLowerCase();
-      let iconKey = "Shapes"; // Default icon key
-      let color = PREDEFINED_CATEGORY_COLORS["Lainnya"]; // Default color
-
-      const predefinedCatKey = Object.keys(CATEGORY_ICON_KEYS).find(key => key.toLowerCase() === categoryNameLower);
-      if (predefinedCatKey) {
-        iconKey = CATEGORY_ICON_KEYS[predefinedCatKey];
-        color = PREDEFINED_CATEGORY_COLORS[predefinedCatKey] || color;
-      }
+      const iconKey = CATEGORY_ICON_KEYS[category.name] || CATEGORY_ICON_KEYS["Lainnya"];
+      const color = PREDEFINED_CATEGORY_COLORS[category.name] || PREDEFINED_CATEGORY_COLORS["Lainnya"];
       
       return {
         categoryName: category.name,
         totalAmount: totalAmount,
-        icon: iconKey, // Pass the string key
+        icon: iconKey,
         color: color,
       };
     });
-    
-     monthlyExpenses.sort((a, b) => a.categoryName.localeCompare(b.categoryName));
 
+    // Sorting logic
+    const predefinedExpenses: MonthlyExpenseByCategory[] = [];
+    const customExpenses: MonthlyExpenseByCategory[] = [];
+    let othersExpense: MonthlyExpenseByCategory | null = null;
+
+    allMonthlyExpensesRaw.forEach(expense => {
+      if (expense.categoryName === OTHERS_CATEGORY_NAME) {
+        othersExpense = expense;
+      } else if (DEFAULT_CATEGORY_ORDER.includes(expense.categoryName)) {
+        predefinedExpenses.push(expense);
+      } else {
+        customExpenses.push(expense);
+      }
+    });
+
+    predefinedExpenses.sort((a, b) => DEFAULT_CATEGORY_ORDER.indexOf(a.categoryName) - DEFAULT_CATEGORY_ORDER.indexOf(b.categoryName));
+    customExpenses.sort((a, b) => a.categoryName.localeCompare(b.categoryName));
+
+    const monthlyExpenses: MonthlyExpenseByCategory[] = [...predefinedExpenses, ...customExpenses];
+    if (othersExpense) {
+      monthlyExpenses.push(othersExpense);
+    }
+    
     const expenseChartData: ExpenseChartDataPoint[] = monthlyExpenses
-      .filter(e => e.totalAmount > 0)
+      .filter(e => e.totalAmount > 0) // Keep filtering for chart to avoid zero bars
       .map(e => ({ name: e.categoryName, total: e.totalAmount }));
 
+    // --- Dummy Data for Recent and Scheduled Bills (as per previous agreement) ---
     const dummyNow = new Date();
     const recentBills: RecentBillDisplayItem[] = [
       { id: "rb1", name: "Makan Malam Tim (Dummy)", createdAt: subDays(dummyNow, 2).toISOString(), grandTotal: 680000, categoryName: "Makanan", participantCount: 5 },
@@ -1012,13 +1032,14 @@ export async function getDashboardDataAction(): Promise<{ success: boolean; data
     const scheduledBills: ScheduledBillDisplayItem[] = [
       { id: "sb1", name: "Trip ke Puncak (Dummy)", scheduled_at: addDays(dummyNow, 7).toISOString(), categoryName: "Hiburan", participantCount: 3 },
     ];
+    // --- End of Dummy Data ---
     
     revalidatePath('/', 'page'); 
 
     return {
       success: true,
       data: {
-        monthlyExpenses,
+        monthlyExpenses, // This is now the sorted list
         expenseChartData,
         recentBills,
         scheduledBills,
@@ -1030,4 +1051,3 @@ export async function getDashboardDataAction(): Promise<{ success: boolean; data
     return { success: false, error: e.message || "Terjadi kesalahan server saat mengambil data dashboard." };
   }
 }
-

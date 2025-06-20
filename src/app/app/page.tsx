@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
-import type { SplitItem, Person, BillDetails, TaxTipSplitStrategy, DetailedBillSummaryData, BillCategory } from "@/lib/types";
+import type { SplitItem, Person, BillDetails, TaxTipSplitStrategy, DetailedBillSummaryData, BillCategory, ScannedItem } from "@/lib/types";
 import type { User as SupabaseUser } from "@supabase/supabase-js";
 import { 
   handleScanReceiptAction, 
@@ -13,7 +13,10 @@ import {
   getCurrentUserAction,
   logoutUserAction,
   getUserCategoriesAction, 
-  createBillCategoryAction 
+  createBillCategoryAction,
+  addBillItemToDbAction, // New
+  updateBillItemInDbAction, // New
+  deleteBillItemFromDbAction // New
 } from "@/lib/actions";
 import { ReceiptUploader } from "@/components/receipt-uploader";
 import { ItemEditor } from "@/components/item-editor";
@@ -140,22 +143,25 @@ export default function SplitBillAppPage() {
       }
     }
     
-    // Custom sorting for categories: Default Order -> Custom (Alphabetical) -> "Lainnya"
     let orderedDefaults: BillCategory[] = [];
     let customCats: BillCategory[] = [];
     let othersCat: BillCategory | null = null;
 
     fetchedCategories.forEach(cat => {
-      if (cat.name === OTHERS_CATEGORY_NAME_FOR_PAGE) {
+      if (cat.name.toLowerCase() === OTHERS_CATEGORY_NAME_FOR_PAGE.toLowerCase()) {
         othersCat = cat;
-      } else if (ORDERED_DEFAULT_CATEGORY_NAMES_FOR_PAGE.includes(cat.name)) {
+      } else if (ORDERED_DEFAULT_CATEGORY_NAMES_FOR_PAGE.some(dn => dn.toLowerCase() === cat.name.toLowerCase())) {
         orderedDefaults.push(cat);
       } else {
         customCats.push(cat);
       }
     });
-
-    orderedDefaults.sort((a, b) => ORDERED_DEFAULT_CATEGORY_NAMES_FOR_PAGE.indexOf(a.name) - ORDERED_DEFAULT_CATEGORY_NAMES_FOR_PAGE.indexOf(b.name));
+    
+    orderedDefaults.sort((a, b) => {
+        const indexA = ORDERED_DEFAULT_CATEGORY_NAMES_FOR_PAGE.findIndex(name => name.toLowerCase() === a.name.toLowerCase());
+        const indexB = ORDERED_DEFAULT_CATEGORY_NAMES_FOR_PAGE.findIndex(name => name.toLowerCase() === b.name.toLowerCase());
+        return indexA - indexB;
+    });
     customCats.sort((a, b) => a.name.localeCompare(b.name));
 
     const finalSortedCategories = [...orderedDefaults, ...customCats];
@@ -165,9 +171,9 @@ export default function SplitBillAppPage() {
     
     setCategories(finalSortedCategories);
     setIsLoadingCategories(false);
-    if (newCategoriesAdded) { // If default categories were added, revalidate relevant paths
+    if (newCategoriesAdded) { 
         revalidatePath('/app', 'page');
-        revalidatePath('/', 'page'); // For dashboard updates
+        revalidatePath('/', 'page');
     }
 
   }, [router, toast]);
@@ -202,8 +208,7 @@ export default function SplitBillAppPage() {
         const categoryResult = await createBillCategoryAction(newCategoryInput.trim());
         if (categoryResult.success && categoryResult.category) {
             finalCategoryId = categoryResult.category.id;
-            // After creating a new category, re-fetch and re-sort categories
-            await fetchUserAndCategories(); // This will re-sort and update the `categories` state
+            await fetchUserAndCategories(); 
             setSelectedCategoryId(finalCategoryId); 
             setShowNewCategoryInput(false);
             setNewCategoryInput("");
@@ -382,12 +387,10 @@ export default function SplitBillAppPage() {
     setError(null);
     setDetailedBillSummary(null); 
     
-    // Pass currentBillId to the action
     const result = await handleScanReceiptAction(currentBillId, receiptDataUri);
     if (result.success && result.data) {
-      // Items now have database IDs
       const newSplitItems: SplitItem[] = result.data.items.map(item => ({ 
-        id: item.id, // This is now the database ID
+        id: item.id, 
         name: item.name,
         unitPrice: item.unitPrice,
         quantity: item.quantity,
@@ -405,35 +408,63 @@ export default function SplitBillAppPage() {
     setIsScanning(false);
   };
 
-  const handleUpdateItem = (updatedItem: SplitItem) => {
-    // TODO: Implement saving changes to DB via a server action (updateBillItemAction)
-    setSplitItems((prevItems) =>
-      prevItems.map((item) => (item.id === updatedItem.id ? updatedItem : item))
-    );
+  const handleUpdateItem = async (updatedItem: SplitItem) => {
+    setDetailedBillSummary(null);
+    const result = await updateBillItemInDbAction(updatedItem.id, {
+      name: updatedItem.name,
+      unitPrice: updatedItem.unitPrice,
+      quantity: updatedItem.quantity,
+    });
+
+    if (result.success && result.item) {
+      setSplitItems((prevItems) =>
+        prevItems.map((item) => (item.id === result.item!.id ? { ...item, ...result.item, assignedTo: updatedItem.assignedTo } : item))
+      );
+      // assignments are part of the updatedItem and are passed to the local state, 
+      // but they are saved to DB only during handleSummarizeBillAction
+      toast({ title: "Item Diperbarui", description: `Item "${result.item.name}" berhasil diperbarui di database.` });
+    } else {
+      toast({ variant: "destructive", title: "Gagal Memperbarui Item", description: result.error || "Tidak dapat menyimpan perubahan item." });
+      // Revert UI optimistically if needed, or refresh state from DB
+      // For simplicity, we are not reverting UI here.
+    }
+  };
+
+  const handleAddItem = async () => {
+    if (!currentBillId) {
+      toast({ variant: "destructive", title: "Sesi Tagihan Tidak Aktif", description: "Harap mulai sesi tagihan baru terlebih dahulu." });
+      return;
+    }
+    setDetailedBillSummary(null);
+    const newItemData = { name: "Item Baru", unitPrice: 0, quantity: 1 };
+    const result = await addBillItemToDbAction(currentBillId, newItemData);
+
+    if (result.success && result.item) {
+      const newSplitItem: SplitItem = {
+        ...result.item,
+        assignedTo: [],
+      };
+      setSplitItems(prevItems => [...prevItems, newSplitItem]);
+      toast({ title: "Item Ditambahkan", description: `Item "${newSplitItem.name}" berhasil ditambahkan ke database.` });
+    } else {
+      toast({ variant: "destructive", title: "Gagal Menambah Item", description: result.error || "Tidak dapat menyimpan item baru." });
+    }
+  };
+
+  const handleDeleteItem = async (itemId: string) => {
     setDetailedBillSummary(null); 
-    toast({title: "Info", description: "Perubahan item belum disimpan ke database. Fitur ini sedang dikembangkan."})
+    const itemToDelete = splitItems.find(item => item.id === itemId);
+    if (!itemToDelete) return;
+
+    const result = await deleteBillItemFromDbAction(itemId);
+    if (result.success) {
+      setSplitItems(prevItems => prevItems.filter(item => item.id !== itemId));
+      toast({ title: "Item Dihapus", description: `Item "${itemToDelete.name}" telah dihapus dari database.` });
+    } else {
+      toast({ variant: "destructive", title: "Gagal Menghapus Item", description: result.error || "Tidak dapat menghapus item dari database." });
+    }
   };
 
-  const handleAddItem = () => {
-    // TODO: Implement saving new manual item to DB via a server action (addBillItemAction)
-    const newItem: SplitItem = {
-      id: `manual_${Date.now()}`, // Placeholder ID until DB saving is implemented for manual items
-      name: "Item Baru",
-      unitPrice: 0,
-      quantity: 1,
-      assignedTo: [],
-    };
-    setSplitItems(prevItems => [...prevItems, newItem]);
-    setDetailedBillSummary(null);
-    toast({title: "Info", description: "Item manual belum disimpan ke database. Fitur ini sedang dikembangkan."})
-  };
-
-  const handleDeleteItem = (itemId: string) => {
-    // TODO: Implement deleting item from DB via a server action (deleteBillItemAction)
-    setSplitItems(prevItems => prevItems.filter(item => item.id !== itemId));
-    setDetailedBillSummary(null);
-     toast({title: "Info", description: "Penghapusan item dari database belum diimplementasikan. Fitur ini sedang dikembangkan."})
-  };
 
   const handleBillDetailsChange = (field: keyof BillDetails, value: string | number | TaxTipSplitStrategy) => {
     setBillDetails(prev => ({ ...prev, [field]: value }));
@@ -506,33 +537,16 @@ export default function SplitBillAppPage() {
       const rawSummary = result.data;
       const payer = people.find(p => p.id === billDetails.payerId);
 
-      const detailedSummary: DetailedBillSummaryData = {
-        payerName: payer ? payer.name : "Pembayar Tidak Diketahui",
-        taxAmount: billDetails.taxAmount,
-        tipAmount: billDetails.tipAmount,
-        personalTotalShares: rawSummary,
-        settlements: [],
-        grandTotal: 0,
-      };
-
-      let currentGrandTotal = 0;
-      Object.values(rawSummary).forEach(share => currentGrandTotal += share);
-      detailedSummary.grandTotal = currentGrandTotal;
-      
-      for (const person of people) {
-        const personShare = rawSummary[person.name] || 0; 
-        if (person.id !== billDetails.payerId && personShare > 0) {
-          detailedSummary.settlements.push({
-            from: person.name,
-            to: payer ? payer.name : "Pembayar Tidak Diketahui",
-            amount: personShare,
-          });
-        }
+      // Fetch full bill details to populate the summary display accurately
+      const detailedResult = await getBillDetailsAction(currentBillId);
+      if (detailedResult.success && detailedResult.data) {
+          setDetailedBillSummary(detailedResult.data.summaryData);
+          toast({ title: "Tagihan Diringkas & Disimpan", description: "Ringkasan berhasil dihitung dan tagihan ini akan muncul di riwayat." });
+          setCurrentStep(2);
+      } else {
+          setError(detailedResult.error || "Gagal mengambil detail ringkasan setelah perhitungan.");
+          toast({ variant: "destructive", title: "Gagal Memuat Detail Ringkasan", description: detailedResult.error });
       }
-      
-      setDetailedBillSummary(detailedSummary);
-      toast({ title: "Tagihan Diringkas & Disimpan", description: "Ringkasan berhasil dihitung dan tagihan ini akan muncul di riwayat." });
-      setCurrentStep(2); 
     } else {
       setError(result.error || "Gagal meringkas tagihan.");
       toast({ variant: "destructive", title: "Ringkasan Gagal", description: result.error || "Tidak dapat menghitung ringkasan." });

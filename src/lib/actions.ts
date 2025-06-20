@@ -447,6 +447,137 @@ export async function handleScanReceiptAction(
   }
 }
 
+export async function addBillItemToDbAction(
+  billId: string,
+  newItemData: { name: string; unitPrice: number; quantity: number }
+): Promise<{ success: boolean; item?: ScannedItem; error?: string }> {
+  const supabase = createSupabaseServerClient();
+  if (!billId) {
+    return { success: false, error: "Bill ID is required to add an item." };
+  }
+  if (!newItemData.name.trim()) {
+    return { success: false, error: "Item name cannot be empty." };
+  }
+
+  try {
+    const { data: insertedItem, error } = await supabase
+      .from('bill_items')
+      .insert({
+        bill_id: billId,
+        name: newItemData.name,
+        unit_price: newItemData.unitPrice,
+        quantity: newItemData.quantity,
+      })
+      .select('id, name, unit_price, quantity')
+      .single();
+
+    if (error) {
+      console.error("Error adding bill item to DB:", error);
+      return { success: false, error: `Failed to add item to database: ${error.message}` };
+    }
+    if (!insertedItem) {
+      return { success: false, error: "Failed to retrieve item data after insert." };
+    }
+    return {
+      success: true,
+      item: {
+        id: insertedItem.id,
+        name: insertedItem.name,
+        unitPrice: insertedItem.unit_price,
+        quantity: insertedItem.quantity,
+      },
+    };
+  } catch (e: any) {
+    console.error("Exception in addBillItemToDbAction:", e);
+    return { success: false, error: e.message || "Server error while adding bill item." };
+  }
+}
+
+export async function updateBillItemInDbAction(
+  itemId: string,
+  updates: Partial<Omit<ScannedItem, 'id'>>
+): Promise<{ success: boolean; item?: ScannedItem; error?: string }> {
+  const supabase = createSupabaseServerClient();
+  if (!itemId) {
+    return { success: false, error: "Item ID is required to update an item." };
+  }
+  if (updates.name !== undefined && !updates.name.trim()) {
+    return { success: false, error: "Item name cannot be empty." };
+  }
+
+  try {
+    const { data: updatedItem, error } = await supabase
+      .from('bill_items')
+      .update({
+        name: updates.name,
+        unit_price: updates.unitPrice,
+        quantity: updates.quantity,
+      })
+      .eq('id', itemId)
+      .select('id, name, unit_price, quantity')
+      .single();
+
+    if (error) {
+      console.error("Error updating bill item in DB:", error);
+      return { success: false, error: `Failed to update item in database: ${error.message}` };
+    }
+     if (!updatedItem) {
+      return { success: false, error: "Failed to retrieve updated item data." };
+    }
+    return {
+      success: true,
+      item: {
+        id: updatedItem.id,
+        name: updatedItem.name,
+        unitPrice: updatedItem.unit_price,
+        quantity: updatedItem.quantity,
+      },
+    };
+  } catch (e: any) {
+    console.error("Exception in updateBillItemInDbAction:", e);
+    return { success: false, error: e.message || "Server error while updating bill item." };
+  }
+}
+
+export async function deleteBillItemFromDbAction(
+  itemId: string
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = createSupabaseServerClient();
+  if (!itemId) {
+    return { success: false, error: "Item ID is required to delete an item." };
+  }
+
+  try {
+    // First, delete any assignments related to this item
+    const { error: deleteAssignmentsError } = await supabase
+      .from('item_assignments')
+      .delete()
+      .eq('bill_item_id', itemId);
+
+    if (deleteAssignmentsError) {
+      console.error("Error deleting item assignments for item ID:", itemId, deleteAssignmentsError);
+      return { success: false, error: `Failed to delete related item assignments: ${deleteAssignmentsError.message}` };
+    }
+
+    // Then, delete the item itself
+    const { error: deleteItemError } = await supabase
+      .from('bill_items')
+      .delete()
+      .eq('id', itemId);
+
+    if (deleteItemError) {
+      console.error("Error deleting bill item from DB:", deleteItemError);
+      return { success: false, error: `Failed to delete item from database: ${deleteItemError.message}` };
+    }
+
+    return { success: true };
+  } catch (e: any) {
+    console.error("Exception in deleteBillItemFromDbAction:", e);
+    return { success: false, error: e.message || "Server error while deleting bill item." };
+  }
+}
+
+
 export async function handleSummarizeBillAction(
   splitItems: SplitItem[],
   people: Person[],
@@ -520,15 +651,23 @@ export async function handleSummarizeBillAction(
     }
 
     const newAssignments: ItemAssignmentInsert[] = [];
-    for (const item of splitItems) {
+    for (const item of splitItems) { // splitItems comes from client
+      // Ensure item.id is a valid ID from bill_items for the current bill.
+      // This check is crucial, especially if items can be added/removed on the client.
       if (!billItemIdsForThisBill.includes(item.id)) {
-          console.warn(`Item with id ${item.id} (name: ${item.name}) is in splitItems but not found in current bill_items for bill ${billId}. Skipping assignments for this item as it might be stale or from a different context.`);
+          console.warn(`Item with id ${item.id} (name: ${item.name}) from client-side splitItems is not found in the database's bill_items for bill ${billId}. Skipping assignments for this item.`);
           continue; 
       }
       for (const assignment of item.assignedTo) {
         if (assignment.count > 0) {
+          // Ensure participantId is valid for this bill
+          const participantExists = people.some(p => p.id === assignment.personId);
+          if (!participantExists) {
+              console.warn(`Participant with id ${assignment.personId} for item ${item.name} assignment is not found in the current bill's participants. Skipping this assignment.`);
+              continue;
+          }
           newAssignments.push({
-            bill_item_id: item.id,
+            bill_item_id: item.id, // This ID MUST be a valid bill_items.id
             participant_id: assignment.personId,
             assigned_quantity: assignment.count,
           });
@@ -1101,9 +1240,19 @@ export async function getDashboardDataAction(): Promise<{ success: boolean; data
                 color: PREDEFINED_CATEGORY_COLORS[OTHERS_CATEGORY_NAME_FOR_DASHBOARD] || "hsl(var(--chart-1))",
             });
         } else { 
+             // Ensure "Lainnya" is added even if not explicitly in userCategories (e.g. if it was a default and then deleted but still has bills)
+            // Or if it was never a user category but some bills might have had it (less likely with current setup)
+            // This ensures "Lainnya" from the predefined list is considered if it has spending or should be shown.
+            // A more robust way would be to ensure "Lainnya" from `DEFAULT_CATEGORY_ORDER_FOR_DASHBOARD` is always included.
+            let totalForLainnyaCat = 0;
+            const lainnyaCatFromDb = (userCategories || []).find(c => c.name === OTHERS_CATEGORY_NAME_FOR_DASHBOARD);
+            if (lainnyaCatFromDb) {
+                totalForLainnyaCat = spendingPerCategory[lainnyaCatFromDb.id] || 0;
+            } // else, if "Lainnya" bills exist without a category_id mapping (unlikely) or it's just to show 0.
+
             allMonthlyExpensesRaw.push({
                 categoryName: OTHERS_CATEGORY_NAME_FOR_DASHBOARD,
-                totalAmount: 0,
+                totalAmount: totalForLainnyaCat, // Default to 0 if no specific "Lainnya" category ID had spending
                 icon: CATEGORY_ICON_KEYS[OTHERS_CATEGORY_NAME_FOR_DASHBOARD] || "Shapes",
                 color: PREDEFINED_CATEGORY_COLORS[OTHERS_CATEGORY_NAME_FOR_DASHBOARD] || "hsl(var(--chart-1))",
             });
@@ -1129,7 +1278,9 @@ export async function getDashboardDataAction(): Promise<{ success: boolean; data
       }
     });
 
+    // Sort predefined by the order in DEFAULT_CATEGORY_ORDER_FOR_DASHBOARD
     predefinedExpenses.sort((a, b) => DEFAULT_CATEGORY_ORDER_FOR_DASHBOARD.indexOf(a.categoryName) - DEFAULT_CATEGORY_ORDER_FOR_DASHBOARD.indexOf(b.categoryName));
+    // Sort custom expenses alphabetically
     customExpenses.sort((a, b) => a.categoryName.localeCompare(b.categoryName));
 
     let monthlyExpenses: MonthlyExpenseByCategory[] = [...predefinedExpenses, ...customExpenses];
@@ -1141,6 +1292,7 @@ export async function getDashboardDataAction(): Promise<{ success: boolean; data
       .filter(e => e.totalAmount > 0)
       .map(e => ({ name: e.categoryName, total: e.totalAmount }));
 
+    // Fetch Recent Bills
     const { data: dbRecentBills, error: recentBillsError } = await supabase
         .from('bills')
         .select(`
@@ -1152,7 +1304,7 @@ export async function getDashboardDataAction(): Promise<{ success: boolean; data
         `)
         .eq('user_id', user.id)
         .not('grand_total', 'is', null)
-        .not('payer_participant_id', 'is', null)
+        .not('payer_participant_id', 'is', null) // Ensure it's a completed bill
         .order('created_at', { ascending: false })
         .limit(3);
 
@@ -1180,6 +1332,7 @@ export async function getDashboardDataAction(): Promise<{ success: boolean; data
         }
     }
 
+    // Fetch Scheduled Bills
     const { data: dbScheduledBills, error: scheduledBillsError } = await supabase
         .from('bills')
         .select(`
@@ -1189,9 +1342,9 @@ export async function getDashboardDataAction(): Promise<{ success: boolean; data
             bill_categories ( name )
         `)
         .eq('user_id', user.id)
-        .is('grand_total', null) 
+        .is('grand_total', null) // Unprocessed bills
         .not('scheduled_at', 'is', null)
-        .gt('scheduled_at', new Date().toISOString()) 
+        .gt('scheduled_at', new Date().toISOString()) // Scheduled for the future
         .order('scheduled_at', { ascending: true })
         .limit(3);
 
@@ -1362,6 +1515,8 @@ export async function getBillDetailsAction(billId: string): Promise<{ success: b
               personDetail.tipShare = bill.tip_amount || 0;
           }
       }
+      // Ensure totalShare from DB is used, and calculated subTotalFromItems, taxShare, tipShare are for display detail
+      // No need to recalculate totalShare here as it's already fetched from bill_participants.total_share_amount
       detailedPersonalSharesData.push(personDetail);
     }
 

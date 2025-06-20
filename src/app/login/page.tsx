@@ -10,13 +10,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Mail, Lock, Eye, EyeOff, UserCircle, ArrowLeft, Loader2 } from "lucide-react";
+import { Mail, Lock, Eye, EyeOff, UserCircle, Loader2 } from "lucide-react";
 import { GoogleIcon } from "@/components/icons/google-icon";
 import { FacebookIcon } from "@/components/icons/facebook-icon";
 import { AppleIcon } from "@/components/icons/apple-icon";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { loginUserAction } from "@/lib/actions";
+import { LandingHeader } from "@/components/landing-header";
 
 export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
@@ -64,11 +65,9 @@ export default function LoginPage() {
 
   return (
     <div className="relative flex flex-col min-h-screen bg-background bg-money-pattern bg-[length:120px_auto] before:content-[''] before:absolute before:inset-0 before:bg-white/[.90] before:dark:bg-black/[.90] before:z-0">
+      <LandingHeader />
       <div className="relative z-[1] flex flex-col items-center justify-center flex-grow p-4">
-        <Link href="/" className="absolute top-6 left-6 flex items-center text-sm text-foreground hover:underline">
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Kembali ke Beranda
-        </Link>
+        {/* Link "Kembali ke Beranda" dihilangkan karena LandingHeader sudah menyediakan navigasi "Beranda" */}
         <Card className="w-full max-w-md shadow-2xl bg-card/90 backdrop-blur-sm">
           <CardHeader className="text-center">
             <div className="mx-auto bg-muted-foreground/20 rounded-full p-3 w-fit mb-4">
@@ -164,3 +163,5 @@ export default function LoginPage() {
     </div>
   );
 }
+
+    

@@ -10,20 +10,12 @@ import { id as IndonesianLocale } from 'date-fns/locale';
 
 import type { BillHistoryEntry, DetailedBillSummaryData, Person, FetchedBillDetails } from "@/lib/types";
 import type { User as SupabaseUser } from "@supabase/supabase-js";
-import { getCurrentUserAction, logoutUserAction, getBillsHistoryAction, getBillDetailsAction } from "@/lib/actions";
+import { getCurrentUserAction, getBillsHistoryAction, getBillDetailsAction } from "@/lib/actions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
-import { Home, LogOut, Settings, UserCircle, Power, Info, FilePlus, Loader2, History as HistoryIconLucide, Users, Coins, CalendarDays, BarChart2, Star, Zap, ShoppingBag, Tag, ListChecks } from "lucide-react"; 
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { Power, FilePlus, Loader2, History as HistoryIconLucide, Users, Coins, CalendarDays, BarChart2, Star, Zap, ShoppingBag, Tag, ListChecks } from "lucide-react"; 
 import {
   Dialog,
   DialogContent,
@@ -32,13 +24,12 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { formatCurrency } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
-import { NotificationBell } from "@/components/notification-bell";
 import { Badge } from "@/components/ui/badge"; 
 import { SummaryDisplay } from "@/components/summary-display";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { LandingHeader } from "@/components/landing-header";
 
 interface Profile {
   username?: string;
@@ -55,7 +46,7 @@ export default function HistoryPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [authUser, setAuthUser] = useState<SupabaseUser | null>(null);
-  const [userProfile, setUserProfile] = useState<Profile | null>(null);
+  // Profile state no longer needed here
   const [isLoadingUser, setIsLoadingUser] = useState(true);
   const [isPremiumUser, setIsPremiumUser] = useState(false); 
 
@@ -72,7 +63,7 @@ export default function HistoryPage() {
     setIsLoadingUser(true);
     setIsLoadingHistory(true);
 
-    const { user, profile, error: userError } = await getCurrentUserAction();
+    const { user, error: userError } = await getCurrentUserAction(); // Removed profile
     if (userError || !user) {
       toast({ variant: "destructive", title: "Akses Ditolak", description: userError || "Anda harus login untuk melihat riwayat." });
       router.push("/login");
@@ -81,7 +72,6 @@ export default function HistoryPage() {
       return;
     }
     setAuthUser(user);
-    setUserProfile(profile);
     setIsLoadingUser(false);
 
 
@@ -99,18 +89,6 @@ export default function HistoryPage() {
     fetchUserAndHistory();
   }, [fetchUserAndHistory]);
 
-  const handleLogout = async () => {
-    const { success, error: logoutErr } = await logoutUserAction();
-    if (success) {
-      toast({ title: "Logout Berhasil" });
-      setAuthUser(null);
-      setUserProfile(null);
-      router.push("/"); 
-    } else {
-      toast({ variant: "destructive", title: "Logout Gagal", description: logoutErr });
-    }
-  };
-
   const handleViewDetails = async (billId: string) => {
     setIsLoadingBillDetail(true);
     setDetailError(null);
@@ -126,27 +104,10 @@ export default function HistoryPage() {
     setIsLoadingBillDetail(false);
   };
   
-  const displayName = userProfile?.username || userProfile?.full_name || authUser?.email || "Pengguna";
-  const avatarInitial = displayName ? displayName.substring(0,1).toUpperCase() : "P";
-  const shortDisplayName = userProfile?.username || (userProfile?.full_name ? userProfile.full_name.split(' ')[0] : (authUser?.email ? authUser.email.split('@')[0] : "Pengguna"));
-
-
   if (isLoadingUser || isLoadingHistory) {
     return (
       <div className="relative flex flex-col min-h-screen bg-background bg-money-pattern bg-[length:120px_auto] before:content-[''] before:absolute before:inset-0 before:bg-white/[.90] before:dark:bg-black/[.90] before:z-0">
-        <header className="sticky top-0 z-50 w-full bg-background/80 backdrop-blur-md shadow-sm">
-          <div className="container mx-auto flex h-20 items-center justify-between px-4 sm:px-6"> 
-            <Link href="/" className="flex items-center gap-2 text-primary hover:text-primary/80 transition-colors">
-              <Image src="/logo.png" alt="Patungan Logo" width={56} height={56} className="rounded-lg shadow-sm" data-ai-hint="logo company"/>
-              <h1 className="text-2xl font-bold tracking-tight text-foreground">Patungan</h1>
-            </Link>
-            <div className="flex items-center gap-2 sm:gap-4">
-               <Button variant="ghost" className="rounded-md p-1 sm:p-1.5 h-auto" disabled>
-                  <Home className="h-10 w-10" />
-              </Button>
-            </div>
-          </div>
-        </header>
+        <LandingHeader />
         <main className="relative z-10 container mx-auto px-4 py-8 md:px-6 md:py-12 flex-grow">
           <div className="flex items-center justify-center h-full">
             <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -164,66 +125,7 @@ export default function HistoryPage() {
 
   return (
     <div className="relative flex flex-col min-h-screen bg-background bg-money-pattern bg-[length:120px_auto] before:content-[''] before:absolute before:inset-0 before:bg-white/[.90] before:dark:bg-black/[.90] before:z-0">
-      <header className="sticky top-0 z-50 w-full bg-background/80 backdrop-blur-md shadow-sm">
-        <div className="container mx-auto flex h-20 items-center justify-between px-4 sm:px-6"> 
-          <Link href="/" className="flex items-center gap-2 text-primary hover:text-primary/80 transition-colors">
-            <Image src="/logo.png" alt="Patungan Logo" width={56} height={56} className="rounded-lg shadow-sm" data-ai-hint="logo company"/>
-            <h1 className="text-2xl font-bold tracking-tight text-foreground">
-              Patungan
-            </h1>
-          </Link>
-          <div className="flex items-center gap-2 sm:gap-4">
-            <Button variant="ghost" className="rounded-md p-1 sm:p-1.5 h-auto" onClick={() => router.push('/')} aria-label="Kembali ke Beranda">
-                <Home className="h-10 w-10" />
-            </Button>
-            {authUser && <NotificationBell authUser={authUser} />}
-            {authUser ? (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                   <Button variant="ghost" className="flex items-center gap-1.5 sm:gap-2 rounded-md p-1 sm:p-1.5 h-auto">
-                    <Avatar className="h-8 w-8 sm:h-9 sm:w-9">
-                      <AvatarImage src={userProfile?.avatar_url || undefined} alt={displayName} data-ai-hint="profile avatar"/>
-                      <AvatarFallback>{avatarInitial}</AvatarFallback>
-                    </Avatar>
-                     <span className="hidden sm:inline text-xs sm:text-sm font-medium text-foreground truncate max-w-[70px] xs:max-w-[100px] md:max-w-[120px] group-hover:text-foreground/80 transition-colors">
-                      {shortDisplayName}
-                    </span>
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent className="w-56" align="end" forceMount>
-                  <DropdownMenuLabel className="font-normal">
-                    <div className="flex flex-col space-y-1">
-                      <p className="text-sm font-medium leading-none">{userProfile?.full_name || displayName}</p>
-                      <p className="text-xs leading-none text-muted-foreground">
-                        {authUser.email}
-                      </p>
-                    </div>
-                  </DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => router.push('/app/profile')}>
-                    <UserCircle className="mr-2 h-4 w-4" />
-                    <span>Profil</span>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => toast({title: "Info", description: "Pengaturan belum diimplementasikan."})}>
-                    <Settings className="mr-2 h-4 w-4" />
-                    <span>Pengaturan</span>
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={handleLogout}>
-                    <LogOut className="mr-2 h-4 w-4" />
-                    <span>Keluar</span>
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            ) : (
-              <Button onClick={() => router.push('/login')} variant="outline" size="sm">
-                Masuk / Daftar
-              </Button>
-            )}
-          </div>
-        </div>
-      </header>
-
+      <LandingHeader />
       <main className="relative z-10 container mx-auto px-4 py-8 md:px-6 md:py-12 flex-grow">
         <div className="flex flex-col sm:flex-row justify-between items-center mb-8 gap-4">
             <h2 className="text-3xl font-semibold tracking-tight text-foreground flex items-center">
@@ -281,7 +183,7 @@ export default function HistoryPage() {
                         <span className="font-semibold text-primary">{formatCurrency(bill.grandTotal || 0, "IDR")}</span>
                       </div>
                       <div className="flex items-center justify-between text-sm">
-                        <span className="text-muted-foreground flex items-center"><UserCircle className="mr-2 h-4 w-4"/>Dibayar Oleh:</span>
+                        <span className="text-muted-foreground flex items-center"><Users className="mr-2 h-4 w-4"/>Dibayar Oleh:</span>
                         <span className="font-medium truncate">{bill.payerName || "-"}</span>
                       </div>
                       <div className="flex items-center justify-between text-sm">
@@ -404,3 +306,5 @@ export default function HistoryPage() {
     </div>
   );
 }
+
+    

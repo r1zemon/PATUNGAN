@@ -14,9 +14,9 @@ import {
   logoutUserAction,
   getUserCategoriesAction, 
   createBillCategoryAction,
-  addBillItemToDbAction, // New
-  updateBillItemInDbAction, // New
-  deleteBillItemFromDbAction // New
+  addBillItemToDbAction, 
+  updateBillItemInDbAction, 
+  deleteBillItemFromDbAction
 } from "@/lib/actions";
 import { ReceiptUploader } from "@/components/receipt-uploader";
 import { ItemEditor } from "@/components/item-editor";
@@ -30,23 +30,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useToast } from "@/hooks/use-toast";
 import { Separator } from "@/components/ui/separator";
-import { Home, LogOut, Settings, UserCircle, Power, Info, Percent, Landmark, UserCheck, Loader2, UserPlus, ArrowRight, Trash2, Users, ScanLine, PlusCircle, Edit2, ListChecks, FilePlus, FileText, CalendarClock, FolderPlus, Tag } from "lucide-react"; 
-import Link from "next/link";
-import Image from "next/image";
+import { UserCheck, Loader2, UserPlus, ArrowRight, Trash2, Users, ScanLine, PlusCircle, Edit2, ListChecks, FilePlus, FileText, CalendarClock, FolderPlus, Tag, Percent, Landmark, Power } from "lucide-react"; 
 import { useRouter } from "next/navigation";
 import { format } from 'date-fns';
 import { id as IndonesianLocale } from 'date-fns/locale';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
-import { NotificationBell } from "@/components/notification-bell";
+import { LandingHeader } from "@/components/landing-header";
 
 interface Profile {
   username?: string;
@@ -86,7 +74,7 @@ export default function SplitBillAppPage() {
   const [currentStep, setCurrentStep] = useState(0); 
 
   const [authUser, setAuthUser] = useState<SupabaseUser | null>(null);
-  const [userProfile, setUserProfile] = useState<Profile | null>(null);
+  // Profile state no longer needed here as LandingHeader handles its own profile display
   const [isLoadingUser, setIsLoadingUser] = useState(true);
   const [isInitializingBill, setIsInitializingBill] = useState(false);
 
@@ -106,12 +94,11 @@ export default function SplitBillAppPage() {
   const fetchUserAndCategories = useCallback(async () => {
     setIsLoadingUser(true);
     setIsLoadingCategories(true);
-    const { user, profile, error: userError } = await getCurrentUserAction();
+    const { user, error: userError } = await getCurrentUserAction(); // Removed profile from here
     if (userError) {
       console.error("Error fetching user data:", userError);
     }
     setAuthUser(user);
-    setUserProfile(profile);
     setIsLoadingUser(false);
     if (!user) {
         toast({variant: "destructive", title: "Akses Ditolak", description: "Anda harus login untuk menggunakan aplikasi."});
@@ -553,36 +540,11 @@ export default function SplitBillAppPage() {
     }
     setIsCalculating(false);
   };
-
-  const handleLogout = async () => {
-    const { success, error: logoutErr } = await logoutUserAction();
-    if (success) {
-      toast({ title: "Logout Berhasil" });
-      setAuthUser(null);
-      setUserProfile(null);
-      resetAppToStart(); 
-      router.push("/");
-    } else {
-      toast({ variant: "destructive", title: "Logout Gagal", description: logoutErr });
-    }
-  };
   
   if (isLoadingUser || isLoadingCategories) {
     return (
       <div className="relative flex flex-col min-h-screen bg-background bg-money-pattern bg-[length:120px_auto] before:content-[''] before:absolute before:inset-0 before:bg-white/[.90] before:dark:bg-black/[.90] before:z-0">
-        <header className="sticky top-0 z-50 w-full bg-background/80 backdrop-blur-md shadow-sm">
-          <div className="container mx-auto flex h-20 items-center justify-between px-4 sm:px-6"> 
-            <Link href="/" className="flex items-center gap-2 text-primary hover:text-primary/80 transition-colors">
-              <Image src="/logo.png" alt="Patungan Logo" width={56} height={56} className="rounded-lg shadow-sm" data-ai-hint="logo company"/>
-              <h1 className="text-2xl font-bold tracking-tight text-foreground">Patungan</h1>
-            </Link>
-            <div className="flex items-center gap-2 sm:gap-4">
-               <Button variant="ghost" className="rounded-md p-1 sm:p-1.5 h-auto" disabled>
-                  <Home className="h-10 w-10" />
-              </Button>
-            </div>
-          </div>
-        </header>
+        <LandingHeader />
         <main className="relative z-10 flex flex-col items-center justify-center text-center flex-grow p-4">
             <Loader2 className="h-12 w-12 animate-spin text-primary" />
             <p className="mt-4 text-lg text-foreground">
@@ -593,79 +555,15 @@ export default function SplitBillAppPage() {
     );
   }
 
-  const displayName = userProfile?.username || userProfile?.full_name || authUser?.email || "Pengguna";
-  const avatarInitial = displayName ? displayName.substring(0,1).toUpperCase() : "P";
-  const shortDisplayName = userProfile?.username || (userProfile?.full_name ? userProfile.full_name.split(' ')[0] : (authUser?.email ? authUser.email.split('@')[0] : "Pengguna"));
-
-
   return (
     <div className="relative flex flex-col min-h-screen bg-background bg-money-pattern bg-[length:120px_auto] before:content-[''] before:absolute before:inset-0 before:bg-white/[.90] before:dark:bg-black/[.90] before:z-0">
-      <header className="sticky top-0 z-50 w-full bg-background/80 backdrop-blur-md shadow-sm">
-        <div className="container mx-auto flex h-20 items-center justify-between px-4 sm:px-6"> 
-          <Link href="/" className="flex items-center gap-2 text-primary hover:text-primary/80 transition-colors">
-            <Image src="/logo.png" alt="Patungan Logo" width={56} height={56} className="rounded-lg shadow-sm" data-ai-hint="logo company"/>
-            <h1 className="text-2xl font-bold tracking-tight text-foreground">
-              Patungan
-            </h1>
-          </Link>
-          <div className="flex items-center gap-2 sm:gap-4">
-            <Button variant="ghost" className="rounded-md p-1 sm:p-1.5 h-auto" onClick={() => router.push('/')} disabled={!authUser} aria-label="Kembali ke Beranda">
-                <Home className="h-10 w-10" />
-            </Button>
-            {authUser && <NotificationBell authUser={authUser} />}
-            {authUser ? (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" className="flex items-center gap-1.5 sm:gap-2 rounded-md p-1 sm:p-1.5 h-auto">
-                    <Avatar className="h-8 w-8 sm:h-9 sm:w-9">
-                      <AvatarImage src={userProfile?.avatar_url || undefined} alt={displayName} data-ai-hint="profile avatar"/>
-                      <AvatarFallback>{avatarInitial}</AvatarFallback>
-                    </Avatar>
-                     <span className="hidden sm:inline text-xs sm:text-sm font-medium text-foreground truncate max-w-[70px] xs:max-w-[100px] md:max-w-[120px] group-hover:text-foreground/80 transition-colors">
-                      {shortDisplayName}
-                    </span>
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent className="w-56" align="end" forceMount>
-                  <DropdownMenuLabel className="font-normal">
-                    <div className="flex flex-col space-y-1">
-                      <p className="text-sm font-medium leading-none">{userProfile?.full_name || displayName}</p>
-                      <p className="text-xs leading-none text-muted-foreground">
-                        {authUser.email}
-                      </p>
-                    </div>
-                  </DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => router.push('/app/profile')}>
-                    <UserCircle className="mr-2 h-4 w-4" />
-                    <span>Profil</span>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => toast({title: "Info", description: "Pengaturan belum diimplementasikan."})}>
-                    <Settings className="mr-2 h-4 w-4" />
-                    <span>Pengaturan</span>
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={handleLogout}>
-                    <LogOut className="mr-2 h-4 w-4" />
-                    <span>Keluar</span>
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            ) : (
-              <Button onClick={() => router.push('/login')} variant="outline" size="sm">
-                Masuk / Daftar
-              </Button>
-            )}
-          </div>
-        </div>
-      </header>
-
+      <LandingHeader />
       <main className="relative z-10 container mx-auto px-4 py-8 md:px-6 md:py-12 flex-grow">
         {!authUser && !isLoadingUser && (
              <Card className="shadow-xl overflow-hidden bg-card/90 backdrop-blur-sm hover:shadow-2xl transition-shadow duration-300 ease-in-out">
                 <CardHeader className="bg-card/60 border-b">
                     <CardTitle className="text-xl sm:text-2xl font-semibold flex items-center">
-                        <Info className="mr-3 h-6 w-6 text-primary"/> Selamat Datang di Patungan!
+                        <Power className="mr-3 h-6 w-6 text-primary"/> Selamat Datang di Patungan!
                     </CardTitle>
                     <CardDescription>Untuk memulai membagi tagihan, silakan masuk atau daftar terlebih dahulu.</CardDescription>
                 </CardHeader>
@@ -1059,4 +957,6 @@ export default function SplitBillAppPage() {
   );
 }
     
+    
+
     

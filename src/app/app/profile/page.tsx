@@ -2,28 +2,18 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, ChangeEvent, FormEvent, useRef } from "react";
-import Link from "next/link";
-import Image from "next/image";
 import { useRouter } from "next/navigation";
 import type { User as SupabaseUser } from "@supabase/supabase-js";
 
-import { getCurrentUserAction, logoutUserAction, updateUserProfileAction, removeAvatarAction } from "@/lib/actions";
+import { getCurrentUserAction, updateUserProfileAction, removeAvatarAction } from "@/lib/actions";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useToast } from "@/hooks/use-toast";
-import { Home, LogOut, Settings, UserCircle, Save, Edit3, Shield, AlertTriangle, FileImage, Loader2, Phone, AtSign, UserSquare2, Trash2, Crop, Check, X, Undo2, Users } from "lucide-react";
+import { UserCircle, Save, Edit3, Shield, AlertTriangle, FileImage, Loader2, Phone, AtSign, UserSquare2, Trash2, Crop, Check, X, Undo2 } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   AlertDialog,
@@ -47,7 +37,7 @@ import {
 
 import ReactCrop, { type Crop, centerCrop, makeAspectCrop, PixelCrop } from 'react-image-crop';
 import { cn } from "@/lib/utils";
-import { NotificationBell } from "@/components/notification-bell"; 
+import { LandingHeader } from "@/components/landing-header";
 
 
 interface Profile {
@@ -83,10 +73,7 @@ export default function ProfilePage() {
   const [authUser, setAuthUser] = useState<SupabaseUser | null>(null);
   const [userProfile, setUserProfile] = useState<Profile | null>(null);
   
-  const [headerAvatarUrl, setHeaderAvatarUrl] = useState<string | null>(null);
-  const [headerDisplayName, setHeaderDisplayName] = useState<string>("Pengguna");
-  const [headerAvatarInitial, setHeaderAvatarInitial] = useState<string>("P");
-
+  // Header related states are now managed by LandingHeader
   const [isLoadingUser, setIsLoadingUser] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isRemovingAvatar, setIsRemovingAvatar] = useState(false);
@@ -132,15 +119,15 @@ export default function ProfilePage() {
         username: typedProfile.username || "",
         phoneNumber: typedProfile.phone_number || "",
       });
-      setHeaderAvatarUrl(typedProfile.avatar_url || null);
-      const initialDisplayNameForHeader = typedProfile.username || typedProfile.full_name || user.email || "Pengguna"; 
-      setHeaderDisplayName(initialDisplayNameForHeader);
-      setHeaderAvatarInitial(initialDisplayNameForHeader ? initialDisplayNameForHeader.substring(0,1).toUpperCase() : "P");
+      // setHeaderAvatarUrl(typedProfile.avatar_url || null); No longer needed
+      // const initialDisplayNameForHeader = typedProfile.username || typedProfile.full_name || user.email || "Pengguna"; No longer needed
+      // setHeaderDisplayName(initialDisplayNameForHeader); No longer needed
+      // setHeaderAvatarInitial(initialDisplayNameForHeader ? initialDisplayNameForHeader.substring(0,1).toUpperCase() : "P"); No longer needed
 
     } else {
-      const initialDisplayNameForHeader = user.email || "Pengguna";
-      setHeaderDisplayName(initialDisplayNameForHeader);
-      setHeaderAvatarInitial(initialDisplayNameForHeader ? initialDisplayNameForHeader.substring(0,1).toUpperCase() : "P");
+      // const initialDisplayNameForHeader = user.email || "Pengguna"; No longer needed
+      // setHeaderDisplayName(initialDisplayNameForHeader); No longer needed
+      // setHeaderAvatarInitial(initialDisplayNameForHeader ? initialDisplayNameForHeader.substring(0,1).toUpperCase() : "P"); No longer needed
     }
     setIsLoadingUser(false);
   }, [router, toast]);
@@ -343,10 +330,14 @@ export default function ProfilePage() {
         setAvatarFile(null); 
         if (avatarFileInputRef.current) avatarFileInputRef.current.value = "";
         
-        setHeaderAvatarUrl(typedUpdatedProfile.avatar_url || null);
-        const newHeaderDisplayName = typedUpdatedProfile.username || typedUpdatedProfile.full_name || authUser.email || "Pengguna";
-        setHeaderDisplayName(newHeaderDisplayName);
-        setHeaderAvatarInitial(newHeaderDisplayName ? newHeaderDisplayName.substring(0,1).toUpperCase() : "P");
+        // setHeaderAvatarUrl(typedUpdatedProfile.avatar_url || null); No longer needed
+        // const newHeaderDisplayName = typedUpdatedProfile.username || typedUpdatedProfile.full_name || authUser.email || "Pengguna"; No longer needed
+        // setHeaderDisplayName(newHeaderDisplayName); No longer needed
+        // setHeaderAvatarInitial(newHeaderDisplayName ? newHeaderDisplayName.substring(0,1).toUpperCase() : "P"); No longer needed
+        
+        // Re-fetch user to update LandingHeader via its own logic
+        await getCurrentUserAction(); 
+        router.refresh(); // To ensure LandingHeader re-renders with fresh data if it relies on path revalidation
         
       } else {
         const errorMessagesToShow = Array.isArray(updateError) ? updateError.join('; ') : updateError;
@@ -377,10 +368,13 @@ export default function ProfilePage() {
             setAvatarFile(null);
             if (avatarFileInputRef.current) avatarFileInputRef.current.value = "";
 
-            setHeaderAvatarUrl(null);
-            const newHeaderDisplayName = formData.fullName || formData.username || authUser.email || "Pengguna";
-            setHeaderDisplayName(newHeaderDisplayName);
-            setHeaderAvatarInitial(newHeaderDisplayName ? newHeaderDisplayName.substring(0,1).toUpperCase() : "P");
+            // setHeaderAvatarUrl(null); No longer needed
+            // const newHeaderDisplayName = formData.fullName || formData.username || authUser.email || "Pengguna"; No longer needed
+            // setHeaderDisplayName(newHeaderDisplayName); No longer needed
+            // setHeaderAvatarInitial(newHeaderDisplayName ? newHeaderDisplayName.substring(0,1).toUpperCase() : "P"); No longer needed
+             // Re-fetch user to update LandingHeader via its own logic
+            await getCurrentUserAction();
+            router.refresh();
         } else {
             toast({ variant: "destructive", title: "Gagal Menghapus Foto", description: error || "Tidak dapat menghapus foto profil." });
         }
@@ -392,40 +386,17 @@ export default function ProfilePage() {
     }
   };
 
-  const handleLogout = async () => {
-    const { success, error: logoutErr } = await logoutUserAction();
-    if (success) {
-      toast({ title: "Logout Berhasil" });
-      router.push("/"); 
-    } else {
-      toast({ variant: "destructive", title: "Logout Gagal", description: logoutErr });
-    }
-  };
-  
   const formAvatarDisplayUrl = croppedAvatarPreview || userProfile?.avatar_url;
   const formDisplayFullName = formData.fullName || formData.username || authUser?.email || "Pengguna";
   const formAvatarDisplayInitial = formDisplayFullName ? formDisplayFullName.substring(0,1).toUpperCase() : "P";
 
   const hasAvatarChangesPending = croppedAvatarPreview !== null;
-  const shortDisplayNameForHeader = userProfile?.username || (userProfile?.full_name ? userProfile.full_name.split(' ')[0] : (authUser?.email ? authUser.email.split('@')[0] : "Pengguna"));
 
 
   if (isLoadingUser || !authUser || !userProfile) {
     return (
       <div className="relative flex flex-col min-h-screen bg-background bg-money-pattern bg-[length:120px_auto] before:content-[''] before:absolute before:inset-0 before:bg-white/[.90] before:dark:bg-black/[.90] before:z-0">
-        <header className="sticky top-0 z-50 w-full bg-background/80 backdrop-blur-md shadow-sm">
-          <div className="container mx-auto flex h-20 items-center justify-between px-4 sm:px-6"> 
-            <Link href="/" className="flex items-center gap-2 text-primary hover:text-primary/80 transition-colors">
-              <Image src="/logo.png" alt="Patungan Logo" width={56} height={56} className="rounded-lg shadow-sm" data-ai-hint="logo company"/>
-              <h1 className="text-2xl font-bold tracking-tight text-foreground">Patungan</h1>
-            </Link>
-            <div className="flex items-center gap-2 sm:gap-4">
-               <Skeleton className="h-9 w-28 hidden sm:block" /> 
-               <Skeleton className="h-10 w-10 rounded-full" /> 
-               <Skeleton className="h-10 w-10 rounded-full" /> 
-            </div>
-          </div>
-        </header>
+        <LandingHeader />
         <main className="relative z-10 container mx-auto px-4 py-8 md:px-6 md:py-12 flex-grow">
           <div className="flex items-center justify-center h-full">
             <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -441,56 +412,7 @@ export default function ProfilePage() {
 
   return (
     <div className="relative flex flex-col min-h-screen bg-background bg-money-pattern bg-[length:120px_auto] before:content-[''] before:absolute before:inset-0 before:bg-white/[.90] before:dark:bg-black/[.90] before:z-0">
-      <header className="sticky top-0 z-50 w-full bg-background/80 backdrop-blur-md shadow-sm">
-        <div className="container mx-auto flex h-20 items-center justify-between px-4 sm:px-6"> 
-          <Link href="/" className="flex items-center gap-2 text-primary hover:text-primary/80 transition-colors">
-            <Image src="/logo.png" alt="Patungan Logo" width={56} height={56} className="rounded-lg shadow-sm" data-ai-hint="logo company"/>
-            <h1 className="text-2xl font-bold tracking-tight text-foreground">
-              Patungan
-            </h1>
-          </Link>
-          <div className="flex items-center gap-2 sm:gap-4">
-            <Button variant="ghost" className="rounded-md p-1 sm:p-1.5 h-auto" onClick={() => router.push('/')} aria-label="Kembali ke Beranda">
-                <Home className="h-10 w-10" />
-            </Button>
-            {authUser && <NotificationBell authUser={authUser} />}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                 <Button variant="ghost" className="flex items-center gap-1.5 sm:gap-2 rounded-md p-1 sm:p-1.5 h-auto">
-                    <Avatar className="h-8 w-8 sm:h-9 sm:w-9">
-                      <AvatarImage src={headerAvatarUrl || undefined} alt={headerDisplayName} data-ai-hint="profile avatar"/>
-                      <AvatarFallback>{headerAvatarInitial}</AvatarFallback>
-                    </Avatar>
-                     <span className="hidden sm:inline text-xs sm:text-sm font-medium text-foreground truncate max-w-[70px] xs:max-w-[100px] md:max-w-[120px] group-hover:text-foreground/80 transition-colors">
-                      {shortDisplayNameForHeader}
-                    </span>
-                  </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-56" align="end" forceMount>
-                <DropdownMenuLabel className="font-normal">
-                  <div className="flex flex-col space-y-1">
-                    <p className="text-sm font-medium leading-none">{headerDisplayName}</p>
-                    <p className="text-xs leading-none text-muted-foreground">
-                      {authUser.email}
-                    </p>
-                  </div>
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => toast({title: "Info", description: "Pengaturan belum diimplementasikan."})}>
-                  <Settings className="mr-2 h-4 w-4" />
-                  <span>Pengaturan</span>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={handleLogout}>
-                  <LogOut className="mr-2 h-4 w-4" />
-                  <span>Keluar</span>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        </div>
-      </header>
-
+      <LandingHeader />
       <main className="relative z-10 container mx-auto px-4 py-8 md:px-6 md:py-12 flex-grow">
         <div className="max-w-3xl mx-auto space-y-8">
           <div className="text-center relative z-[1]">
@@ -704,3 +626,5 @@ export default function ProfilePage() {
     </div>
   );
 }
+
+    

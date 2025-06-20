@@ -194,22 +194,52 @@ export async function createBillCategoryAction(name: string): Promise<{ success:
       return { success: false, error: "Nama kategori maksimal 20 karakter." };
     }
 
-    // Dummy implementation: Do not check for existence or insert into DB
-    // console.log("Dummy createBillCategoryAction: Simulating category creation for:", trimmedName);
+    // Check if category with the same name already exists for this user
+    const { data: existingCategory, error: selectError } = await supabase
+      .from('bill_categories')
+      .select('id')
+      .eq('user_id', user.id)
+      .eq('name', trimmedName)
+      .single();
 
-    const dummyCategory: BillCategory = {
-      id: `dummy_cat_${Date.now()}_${Math.random().toString(36).substring(7)}`,
-      user_id: user.id,
-      name: trimmedName,
-      created_at: new Date().toISOString(),
+    if (selectError && selectError.code !== 'PGRST116') { // PGRST116: No rows found
+      console.error("Error checking existing category:", selectError);
+      return { success: false, error: "Gagal memeriksa kategori yang ada." };
+    }
+
+    if (existingCategory) {
+      return { success: false, error: `Kategori "${trimmedName}" sudah ada.` };
+    }
+
+    // Create new category
+    const { data: newCategoryData, error: insertError } = await supabase
+      .from('bill_categories')
+      .insert({ user_id: user.id, name: trimmedName })
+      .select()
+      .single();
+
+    if (insertError) {
+      console.error("Error creating new category:", insertError);
+      return { success: false, error: `Gagal membuat kategori baru: ${insertError.message}` };
+    }
+
+    if (!newCategoryData) {
+        return { success: false, error: "Gagal membuat kategori baru atau data tidak kembali." };
+    }
+    
+    // Explicitly cast to BillCategory
+    const finalCategory: BillCategory = {
+        id: newCategoryData.id,
+        user_id: newCategoryData.user_id,
+        name: newCategoryData.name,
+        created_at: newCategoryData.created_at
     };
 
-    return { success: true, category: dummyCategory };
+    return { success: true, category: finalCategory };
 
   } catch (e: any) {
-    // This catch block might still be useful if supabase.auth.getUser() throws an unexpected error
-    console.error("Exception in DUMMY createBillCategoryAction:", e);
-    return { success: false, error: e.message || "Terjadi kesalahan server saat memproses kategori (dummy mode)." };
+    console.error("Exception in createBillCategoryAction:", e);
+    return { success: false, error: e.message || "Terjadi kesalahan server saat membuat kategori." };
   }
 }
 
@@ -222,21 +252,29 @@ export async function getUserCategoriesAction(): Promise<{ success: boolean; cat
       return { success: false, error: "Pengguna tidak terautentikasi." };
     }
     
-    // Dummy implementation: Return empty list
-    // console.log("Dummy getUserCategoriesAction: Returning empty list.");
-    return { success: true, categories: [] };
+    const { data: categoriesData, error: fetchError } = await supabase
+      .from('bill_categories')
+      .select('id, name, user_id, created_at')
+      .eq('user_id', user.id)
+      .order('name', { ascending: true });
+      
+    if (fetchError) {
+      console.error("Error fetching user categories:", fetchError);
+      return { success: false, error: `Gagal mengambil kategori: ${fetchError.message}` };
+    }
+
+    return { success: true, categories: categoriesData as BillCategory[] };
 
   } catch (e: any) {
-    // This catch block might still be useful if supabase.auth.getUser() throws an unexpected error
-    console.error("Exception in DUMMY getUserCategoriesAction:", e);
-    return { success: false, error: e.message || "Terjadi kesalahan server saat mengambil kategori (dummy mode)." };
+    console.error("Exception in getUserCategoriesAction:", e);
+    return { success: false, error: e.message || "Terjadi kesalahan server saat mengambil kategori." };
   }
 }
 
 
 export async function createBillAction(
   billName: string,
-  categoryId: string | null, // Can be a dummy_cat_... ID or null
+  categoryId: string | null,
   scheduledAt?: string | null
 ): Promise<{ success: boolean; billId?: string; error?: string }> {
   try {
@@ -253,22 +291,16 @@ export async function createBillAction(
        return { success: false, error: "Pengguna tidak terautentikasi. Tidak dapat membuat tagihan." };
     }
 
-    // Remove category_id from insert data if it doesn't exist in the DB schema
-    const billInsertData: Omit<Database['public']['Tables']['bills']['Insert'], 'category_id'> & { category_id?: string | null } = {
+    const billInsertData: Database['public']['Tables']['bills']['Insert'] = {
       name: billName || "Tagihan Baru",
       user_id: user.id,
-      // category_id: categoryId, // Commented out or removed if column doesn't exist
+      category_id: categoryId, // Now included
       scheduled_at: scheduledAt || null,
     };
-    // If you *are* sure category_id exists and is just nullable, you can conditionally add it:
-    // if (categoryId) {
-    //   billInsertData.category_id = categoryId;
-    // }
-
 
     const { data: billData, error: billInsertError } = await supabase
       .from('bills')
-      .insert([billInsertData as Database['public']['Tables']['bills']['Insert']]) // Cast if necessary after omitting
+      .insert([billInsertData])
       .select('id')
       .single();
 
@@ -816,10 +848,18 @@ export async function getBillsHistoryAction(): Promise<{ success: boolean; data?
   }
 
   try {
-    // Fetch bills without trying to select category_id if it doesn't exist
     const { data: bills, error: billsError } = await supabase
       .from('bills')
-      .select('id, name, created_at, grand_total, payer_participant_id, scheduled_at') // Removed category_id
+      .select(`
+        id, 
+        name, 
+        created_at, 
+        grand_total, 
+        payer_participant_id, 
+        scheduled_at,
+        category_id,
+        bill_categories ( name ) 
+      `)
       .eq('user_id', user.id)
       .or('grand_total.not.is.null,scheduled_at.not.is.null')
       .order('created_at', { ascending: false });
@@ -859,7 +899,8 @@ export async function getBillsHistoryAction(): Promise<{ success: boolean; data?
         console.warn(`Could not fetch participant count for bill ${bill.id}: ${countError.message}`);
       }
       
-      const categoryName = null; // Category is dummy, so name is null
+      // Safely access category name
+      const categoryName = (bill.bill_categories as any)?.name || null;
 
       historyEntries.push({
         id: bill.id,

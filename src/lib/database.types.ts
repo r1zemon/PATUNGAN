@@ -1,8 +1,8 @@
 
 // src/lib/database.types.ts
-// File ini akan diisi dengan tipe yang di-generate oleh Supabase CLI
+// IMPORTANT: After applying the SQL changes,
+// regenerate this file by running:
 // supabase gen types typescript --linked > src/lib/database.types.ts
-// Untuk sekarang, kita bisa biarkan kosong atau definisikan secara manual jika diperlukan.
 
 export type Json =
   | string
@@ -15,7 +15,7 @@ export type Json =
 export interface Database {
   public: {
     Tables: {
-      bill_categories: { // New table - kept for type definition, but not actively used by bills table
+      bill_categories: {
         Row: {
           id: string
           user_id: string
@@ -119,7 +119,7 @@ export interface Database {
       }
       bills: {
         Row: {
-          // category_id: string | null // Removed as it does not exist in DB
+          category_id: string | null // Added
           created_at: string | null
           grand_total: number | null
           id: string
@@ -133,7 +133,7 @@ export interface Database {
           user_id: string | null 
         }
         Insert: {
-          // category_id?: string | null // Removed
+          category_id?: string | null // Added
           created_at?: string | null
           grand_total?: number | null
           id?: string
@@ -147,7 +147,7 @@ export interface Database {
           user_id?: string | null
         }
         Update: {
-          // category_id?: string | null // Removed
+          category_id?: string | null // Added
           created_at?: string | null
           grand_total?: number | null
           id?: string
@@ -161,13 +161,12 @@ export interface Database {
           user_id?: string | null
         }
         Relationships: [
-          // Removed relationship to bill_categories as category_id is removed
-          // {
-          //   foreignKeyName: "bills_category_id_fkey" 
-          //   columns: ["category_id"]
-          //   referencedRelation: "bill_categories"
-          //   referencedColumns: ["id"]
-          // },
+          {
+            foreignKeyName: "bills_category_id_fkey" 
+            columns: ["category_id"]
+            referencedRelation: "bill_categories"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "bills_payer_participant_id_fkey"
             columns: ["payer_participant_id"]
@@ -320,4 +319,3 @@ export interface Database {
     }
   }
 }
-

@@ -164,7 +164,7 @@ export async function logoutUserAction() {
 
 export async function createBillCategoryAction(name: string): Promise<{ success: boolean; category?: BillCategory; error?: string }> {
   try {
-    const supabase = createSupabaseServerClient(); // Keep for user auth check
+    const supabase = createSupabaseServerClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
 
     if (authError || !user) {
@@ -178,7 +178,7 @@ export async function createBillCategoryAction(name: string): Promise<{ success:
       return { success: false, error: "Nama kategori maksimal 20 karakter." };
     }
 
-    // Skip database check and insert for dummy implementation
+    // Dummy implementation: Do not check for existence or insert into DB
     // console.log("Dummy createBillCategoryAction: Simulating category creation for:", trimmedName);
 
     const dummyCategory: BillCategory = {
@@ -191,27 +191,36 @@ export async function createBillCategoryAction(name: string): Promise<{ success:
     return { success: true, category: dummyCategory };
 
   } catch (e: any) {
-    console.error("Exception in DUMMY createBillCategoryAction (should not happen if DB calls removed):", e);
-    return { success: false, error: e.message || "Terjadi kesalahan server saat membuat kategori (dummy mode)." };
+    // This catch block might still be useful if supabase.auth.getUser() throws an unexpected error
+    console.error("Exception in DUMMY createBillCategoryAction:", e);
+    return { success: false, error: e.message || "Terjadi kesalahan server saat memproses kategori (dummy mode)." };
   }
 }
 
 export async function getUserCategoriesAction(): Promise<{ success: boolean; categories?: BillCategory[]; error?: string }> {
-  // const supabase = createSupabaseServerClient(); // Keep for user auth check
-  // const { data: { user }, error: authError } = await supabase.auth.getUser();
+ try {
+    const supabase = createSupabaseServerClient();
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
 
-  // if (authError || !user) {
-  // return { success: false, error: "Pengguna tidak terautentikasi." };
-  // }
-  // console.log("Dummy getUserCategoriesAction: Returning empty list.");
-  // Skip database fetch for dummy implementation
-  return { success: true, categories: [] };
+    if (authError || !user) {
+      return { success: false, error: "Pengguna tidak terautentikasi." };
+    }
+    
+    // Dummy implementation: Return empty list
+    // console.log("Dummy getUserCategoriesAction: Returning empty list.");
+    return { success: true, categories: [] };
+
+  } catch (e: any) {
+    // This catch block might still be useful if supabase.auth.getUser() throws an unexpected error
+    console.error("Exception in DUMMY getUserCategoriesAction:", e);
+    return { success: false, error: e.message || "Terjadi kesalahan server saat mengambil kategori (dummy mode)." };
+  }
 }
 
 
 export async function createBillAction(
   billName: string,
-  categoryId: string | null,
+  categoryId: string | null, // Can be a dummy_cat_... ID or null
   scheduledAt?: string | null
 ): Promise<{ success: boolean; billId?: string; error?: string }> {
   try {
@@ -231,7 +240,7 @@ export async function createBillAction(
     const billInsertData: Database['public']['Tables']['bills']['Insert'] = {
       name: billName || "Tagihan Baru",
       user_id: user.id,
-      category_id: categoryId, // This will be the dummy_cat_... ID or null
+      category_id: categoryId, 
       scheduled_at: scheduledAt || null,
     };
 
@@ -248,8 +257,8 @@ export async function createBillAction(
     if (!billData || !billData.id) {
       return { success: false, error: "Gagal membuat tagihan atau mengambil ID tagihan setelah insert." };
     }
-     if (scheduledAt) { // If it's a scheduled bill, revalidate homepage for dashboard
-      revalidatePath('/', 'page');
+     if (scheduledAt) { 
+      revalidatePath('/', 'page'); 
     }
     return { success: true, billId: billData.id };
   } catch (e: any) {
@@ -380,7 +389,7 @@ export async function handleSummarizeBillAction(
         payer_participant_id: payerParticipantId,
         tax_tip_split_strategy: taxTipSplitStrategy
     }).eq('id', billId);
-    revalidatePath('/', 'page'); // For dashboard
+    revalidatePath('/', 'page'); 
     revalidatePath('/app/history', 'page');
     return { success: true, data: zeroSummary };
   }
@@ -776,10 +785,10 @@ export async function getBillsHistoryAction(): Promise<{ success: boolean; data?
     return { success: false, error: "Pengguna tidak terautentikasi atau sesi tidak valid." };
   }
 
-  // Fetch bills and join with bill_categories to get category_name
+  // Fetch bills without trying to join bill_categories directly in the select
   const { data: bills, error: billsError } = await supabase
     .from('bills')
-    .select('id, name, created_at, grand_total, payer_participant_id, scheduled_at, bill_categories(name)')
+    .select('id, name, created_at, grand_total, payer_participant_id, scheduled_at, category_id') // Keep category_id if you plan to fetch category name separately
     .eq('user_id', user.id)
     .or('grand_total.not.is.null,scheduled_at.not.is.null')
     .order('created_at', { ascending: false });
@@ -818,8 +827,11 @@ export async function getBillsHistoryAction(): Promise<{ success: boolean; data?
     if (countError) {
       console.warn(`Could not fetch participant count for bill ${bill.id}: ${countError.message}`);
     }
-
-    const categoryInfo = bill.bill_categories as { name: string } | null;
+    
+    // Since we are in dummy mode for categories, and the relationship might not exist,
+    // we will set categoryName to null.
+    // If bill.category_id is a dummy ID, trying to fetch its name from a non-existent table would fail.
+    const categoryName = null; 
 
     historyEntries.push({
       id: bill.id,
@@ -829,7 +841,7 @@ export async function getBillsHistoryAction(): Promise<{ success: boolean; data?
       payerName: payerName,
       participantCount: participantCount || 0,
       scheduled_at: bill.scheduled_at,
-      categoryName: categoryInfo?.name || null,
+      categoryName: categoryName, // Will be null as per dummy implementation
     });
   }
 
@@ -852,5 +864,3 @@ export async function getDashboardDataAction(): Promise<{ success: boolean; data
     },
   };
 }
-
-    

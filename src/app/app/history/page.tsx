@@ -8,14 +8,14 @@ import { useRouter } from "next/navigation";
 import { format } from 'date-fns';
 import { id as IndonesianLocale } from 'date-fns/locale';
 
-import type { BillHistoryEntry } from "@/lib/types";
+import type { BillHistoryEntry, DetailedBillSummaryData, Person } from "@/lib/types";
 import type { User as SupabaseUser } from "@supabase/supabase-js";
-import { getCurrentUserAction, logoutUserAction, getBillsHistoryAction } from "@/lib/actions";
+import { getCurrentUserAction, logoutUserAction, getBillsHistoryAction, getBillDetailsAction, type BillDetailsForHistory } from "@/lib/actions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
-import { Home, LogOut, Settings, UserCircle, Power, Info, FilePlus, Loader2, History as HistoryIconLucide, Users, Coins, CalendarDays, BarChart2, Star, Zap, ShoppingBag, Tag } from "lucide-react"; 
+import { Home, LogOut, Settings, UserCircle, Power, Info, FilePlus, Loader2, History as HistoryIconLucide, Users, Coins, CalendarDays, BarChart2, Star, Zap, ShoppingBag, Tag, ListChecks } from "lucide-react"; 
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -24,11 +24,21 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { formatCurrency } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import { NotificationBell } from "@/components/notification-bell";
 import { Badge } from "@/components/ui/badge"; 
+import { SummaryDisplay } from "@/components/summary-display";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface Profile {
   username?: string;
@@ -48,6 +58,12 @@ export default function HistoryPage() {
   const [userProfile, setUserProfile] = useState<Profile | null>(null);
   const [isLoadingUser, setIsLoadingUser] = useState(true);
   const [isPremiumUser, setIsPremiumUser] = useState(false); 
+
+  const [selectedBillForDetail, setSelectedBillForDetail] = useState<BillDetailsForHistory | null>(null);
+  const [isLoadingBillDetail, setIsLoadingBillDetail] = useState(false);
+  const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
+
 
   const { toast } = useToast();
   const router = useRouter();
@@ -93,6 +109,21 @@ export default function HistoryPage() {
     } else {
       toast({ variant: "destructive", title: "Logout Gagal", description: logoutErr });
     }
+  };
+
+  const handleViewDetails = async (billId: string) => {
+    setIsLoadingBillDetail(true);
+    setDetailError(null);
+    setSelectedBillForDetail(null);
+    setIsDetailDialogOpen(true);
+    const result = await getBillDetailsAction(billId);
+    if (result.success && result.data) {
+      setSelectedBillForDetail(result.data);
+    } else {
+      setDetailError(result.error || "Gagal memuat detail tagihan.");
+      toast({ variant: "destructive", title: "Gagal Detail", description: result.error });
+    }
+    setIsLoadingBillDetail(false);
   };
   
   const displayName = userProfile?.username || userProfile?.full_name || authUser?.email || "Pengguna";
@@ -266,7 +297,7 @@ export default function HistoryPage() {
                    )}
                 </CardContent>
                 <CardFooter>
-                  <Button variant="outline" className="w-full" onClick={() => toast({title: "Info", description:"Fitur lihat detail riwayat belum tersedia."})}>
+                  <Button variant="outline" className="w-full" onClick={() => handleViewDetails(bill.id)}>
                     Lihat Detail
                   </Button>
                 </CardFooter>
@@ -319,6 +350,53 @@ export default function HistoryPage() {
         </Card>
       </main>
 
+      <Dialog open={isDetailDialogOpen} onOpenChange={setIsDetailDialogOpen}>
+        <DialogContent className="sm:max-w-lg md:max-w-xl max-h-[90vh]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center">
+              <ListChecks className="mr-3 h-6 w-6 text-primary flex-shrink-0"/>
+                <span className="truncate">
+                  Detail Tagihan: {selectedBillForDetail?.billName || "Memuat..."}
+                </span>
+            </DialogTitle>
+            {selectedBillForDetail && (
+                 <DialogDescription>
+                    Dibuat pada: {format(new Date(selectedBillForDetail.createdAt), "dd MMMM yyyy, HH:mm", { locale: IndonesianLocale })}
+                </DialogDescription>
+            )}
+          </DialogHeader>
+          <ScrollArea className="max-h-[calc(90vh-12rem)] pr-2"> {/* Adjust max-height as needed */}
+            {isLoadingBillDetail ? (
+              <div className="flex flex-col items-center justify-center py-10">
+                <Loader2 className="h-10 w-10 animate-spin text-primary mb-3" />
+                <p className="text-muted-foreground">Memuat detail tagihan...</p>
+              </div>
+            ) : detailError ? (
+              <Alert variant="destructive">
+                <Power className="h-4 w-4" />
+                <AlertTitle>Gagal Memuat Detail</AlertTitle>
+                <AlertDescription>{detailError}</AlertDescription>
+              </Alert>
+            ) : selectedBillForDetail ? (
+              <div className="py-2 pr-4"> {/* Added padding for ScrollArea content */}
+                <SummaryDisplay 
+                  summary={selectedBillForDetail.summaryData} 
+                  people={selectedBillForDetail.participants} 
+                />
+              </div>
+            ) : (
+              <p className="text-muted-foreground text-center py-10">Tidak ada detail untuk ditampilkan.</p>
+            )}
+          </ScrollArea>
+          <DialogFooter className="sm:justify-end pt-4 border-t">
+            <Button type="button" variant="outline" onClick={() => setIsDetailDialogOpen(false)}>
+              Tutup
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+
       <footer className="relative z-10 mt-auto pt-8 text-center text-sm text-muted-foreground">
         <p>&copy; {new Date().getFullYear()} Patungan. Hak cipta dilindungi.</p>
         <p>Ditenagai oleh Next.js, Shadcn/UI, Genkit, dan Supabase.</p>
@@ -326,3 +404,4 @@ export default function HistoryPage() {
     </div>
   );
 }
+

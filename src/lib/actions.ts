@@ -3,7 +3,7 @@
 
 import { scanReceipt, ScanReceiptOutput, ReceiptItem as AiReceiptItem } from "@/ai/flows/scan-receipt";
 import { summarizeBill, SummarizeBillInput } from "@/ai/flows/summarize-bill";
-import type { SplitItem, Person, RawBillSummary, TaxTipSplitStrategy, ScannedItem, BillHistoryEntry, BillCategory, DashboardData, MonthlyExpenseByCategory, ExpenseChartDataPoint, RecentBillDisplayItem, ScheduledBillDisplayItem } from "./types";
+import type { SplitItem, Person, RawBillSummary, TaxTipSplitStrategy, ScannedItem, BillHistoryEntry, BillCategory, DashboardData, MonthlyExpenseByCategory, ExpenseChartDataPoint, RecentBillDisplayItem, ScheduledBillDisplayItem, DetailedBillSummaryData, Settlement } from "./types";
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
 import type { PostgrestSingleResponse, User as SupabaseUser } from "@supabase/supabase-js";
@@ -310,6 +310,7 @@ export async function createBillAction(
     }
      if (scheduledAt) { 
       revalidatePath('/', 'page'); 
+      revalidatePath('/app/history', 'page');
     }
     return { success: true, billId: billData.id };
   } catch (e: any) {
@@ -951,14 +952,13 @@ export async function getBillsHistoryAction(): Promise<{ success: boolean; data?
 
 // ===== DASHBOARD ACTIONS =====
 
-// Maps category name to a Lucide icon name (string)
 const CATEGORY_ICON_KEYS: { [key: string]: string } = {
   "Makanan": "Utensils",
   "Transportasi": "Car",
   "Hiburan": "Gamepad2",
   "Penginapan": "BedDouble",
-  "Belanja Online": "ShoppingBag", // Example of another potential default or user-added category
-  "Lainnya": "Shapes", // Default for others
+  "Belanja Online": "ShoppingBag", 
+  "Lainnya": "Shapes", 
 };
 
 const PREDEFINED_CATEGORY_COLORS: { [key: string]: string } = {
@@ -967,10 +967,9 @@ const PREDEFINED_CATEGORY_COLORS: { [key: string]: string } = {
   "Hiburan": "hsl(var(--chart-3))",
   "Penginapan": "hsl(var(--chart-4))",
   "Belanja Online": "hsl(var(--chart-5))",
-  "Lainnya": "hsl(var(--chart-5))", // Can be a more neutral color if desired
+  "Lainnya": "hsl(var(--chart-5))", 
 };
 
-// Standard order for default categories, "Lainnya" will be handled to be last.
 const DEFAULT_CATEGORY_ORDER = ["Makanan", "Transportasi", "Hiburan", "Penginapan"];
 const OTHERS_CATEGORY_NAME = "Lainnya";
 
@@ -984,7 +983,6 @@ export async function getDashboardDataAction(): Promise<{ success: boolean; data
   }
 
   try {
-    // 1. Fetch all user categories
     const { data: userCategories, error: categoriesError } = await supabase
       .from('bill_categories')
       .select('id, name')
@@ -994,11 +992,7 @@ export async function getDashboardDataAction(): Promise<{ success: boolean; data
       console.error("Error fetching user categories for dashboard:", categoriesError);
       return { success: false, error: `Gagal mengambil kategori pengguna: ${categoriesError.message}` };
     }
-    if (!userCategories) { // Should be an empty array if none, not null.
-        console.warn("No categories found for user, dashboard might be sparse.");
-    }
 
-    // 2. Fetch monthly bills data (completed bills for the current month)
     const now = new Date();
     const startDate = format(startOfMonth(now), "yyyy-MM-dd'T'HH:mm:ss.SSSxxx");
     const endDate = format(endOfMonth(now), "yyyy-MM-dd'T'HH:mm:ss.SSSxxx");
@@ -1008,7 +1002,7 @@ export async function getDashboardDataAction(): Promise<{ success: boolean; data
       .select('category_id, grand_total')
       .eq('user_id', user.id)
       .not('grand_total', 'is', null)
-      .not('payer_participant_id', 'is', null) // Ensure bill is completed
+      .not('payer_participant_id', 'is', null)
       .gte('created_at', startDate)
       .lte('created_at', endDate);
 
@@ -1017,7 +1011,7 @@ export async function getDashboardDataAction(): Promise<{ success: boolean; data
       return { success: false, error: `Gagal mengambil data tagihan bulanan: ${billsError.message}` };
     }
 
-    const spendingPerCategory: Record<string, number> = {}; // category_id -> totalAmount
+    const spendingPerCategory: Record<string, number> = {};
     if (monthlyBillData) {
       for (const bill of monthlyBillData) {
         if (bill.category_id && bill.grand_total !== null) {
@@ -1026,7 +1020,6 @@ export async function getDashboardDataAction(): Promise<{ success: boolean; data
       }
     }
     
-    // Create a comprehensive list of MonthlyExpenseByCategory including all user categories
     let allMonthlyExpensesRaw: MonthlyExpenseByCategory[] = (userCategories || []).map(category => {
       const totalAmount = spendingPerCategory[category.id] || 0;
       return {
@@ -1037,7 +1030,6 @@ export async function getDashboardDataAction(): Promise<{ success: boolean; data
       };
     });
 
-    // Sort categories: Default Order -> Custom (Alphabetical) -> "Lainnya"
     const predefinedExpenses: MonthlyExpenseByCategory[] = [];
     const customExpenses: MonthlyExpenseByCategory[] = [];
     let othersExpense: MonthlyExpenseByCategory | null = null;
@@ -1055,13 +1047,12 @@ export async function getDashboardDataAction(): Promise<{ success: boolean; data
     predefinedExpenses.sort((a, b) => DEFAULT_CATEGORY_ORDER.indexOf(a.categoryName) - DEFAULT_CATEGORY_ORDER.indexOf(b.categoryName));
     customExpenses.sort((a, b) => a.categoryName.localeCompare(b.categoryName));
 
-    const monthlyExpenses: MonthlyExpenseByCategory[] = [...predefinedExpenses, ...customExpenses];
+    let monthlyExpenses: MonthlyExpenseByCategory[] = [...predefinedExpenses, ...customExpenses];
     if (othersExpense) {
       monthlyExpenses.push(othersExpense);
     } else {
-      // If "Lainnya" category doesn't exist for user but we want it displayed
-      const lainnyaCatMeta = (userCategories || []).find(cat => cat.name === OTHERS_CATEGORY_NAME);
-      if (lainnyaCatMeta || !(userCategories || []).some(cat => cat.name === OTHERS_CATEGORY_NAME)) { // Ensure it's only added if not naturally occurring OR always add if missing
+      const lainnyaCatExistsForUser = (userCategories || []).some(cat => cat.name === OTHERS_CATEGORY_NAME);
+      if (!lainnyaCatExistsForUser) {
          monthlyExpenses.push({
             categoryName: OTHERS_CATEGORY_NAME,
             totalAmount: 0,
@@ -1072,10 +1063,10 @@ export async function getDashboardDataAction(): Promise<{ success: boolean; data
     }
     
     const expenseChartData: ExpenseChartDataPoint[] = monthlyExpenses
-      .filter(e => e.totalAmount > 0) // Chart still only shows categories with spending
+      .filter(e => e.totalAmount > 0)
       .map(e => ({ name: e.categoryName, total: e.totalAmount }));
 
-    // 3. Fetch Recent Bills (Completed)
+    // Fetch Recent Bills (Completed)
     const { data: dbRecentBills, error: recentBillsError } = await supabase
         .from('bills')
         .select(`
@@ -1115,7 +1106,7 @@ export async function getDashboardDataAction(): Promise<{ success: boolean; data
         }
     }
 
-    // 4. Fetch Scheduled Bills (Not yet completed, scheduled in future)
+    // Fetch Scheduled Bills
     const { data: dbScheduledBills, error: scheduledBillsError } = await supabase
         .from('bills')
         .select(`
@@ -1147,7 +1138,7 @@ export async function getDashboardDataAction(): Promise<{ success: boolean; data
             scheduledBills.push({
                 id: bill.id,
                 name: bill.name,
-                scheduled_at: bill.scheduled_at || new Date().toISOString(),
+                scheduled_at: bill.scheduled_at || new Date().toISOString(), // Should always have a value based on query
                 categoryName: (bill.bill_categories as any)?.name || null,
                 participantCount: countError ? 0 : participantCount || 0,
             });
@@ -1169,6 +1160,135 @@ export async function getDashboardDataAction(): Promise<{ success: boolean; data
   } catch (e: any) {
     console.error("Exception in getDashboardDataAction:", e);
     return { success: false, error: e.message || "Terjadi kesalahan server saat mengambil data dashboard." };
+  }
+}
+
+export interface BillDetailsForHistory {
+  billName: string | null;
+  createdAt: string;
+  summaryData: DetailedBillSummaryData;
+  participants: Person[];
+}
+
+export async function getBillDetailsAction(billId: string): Promise<{ success: boolean; data?: BillDetailsForHistory; error?: string }> {
+  const supabase = createSupabaseServerClient();
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+  if (authError || !user) {
+    return { success: false, error: "Pengguna tidak terautentikasi." };
+  }
+
+  try {
+    const { data: bill, error: billError } = await supabase
+      .from('bills')
+      .select('id, name, created_at, grand_total, tax_amount, tip_amount, payer_participant_id, tax_tip_split_strategy')
+      .eq('id', billId)
+      .eq('user_id', user.id)
+      .single();
+
+    if (billError) {
+      console.error("Error fetching bill details:", billError);
+      return { success: false, error: `Gagal mengambil detail tagihan: ${billError.message}` };
+    }
+    if (!bill) {
+      return { success: false, error: "Tagihan tidak ditemukan atau Anda tidak memiliki akses." };
+    }
+    
+    // Handle case where bill is scheduled but not yet filled (grand_total is null)
+    if (bill.grand_total === null && bill.scheduled_at && isFuture(parseISO(bill.scheduled_at))) {
+        const emptySummary: DetailedBillSummaryData = {
+            payerName: "Belum Ditentukan",
+            taxAmount: 0,
+            tipAmount: 0,
+            personalTotalShares: {},
+            settlements: [],
+            grandTotal: 0,
+        };
+         return { 
+            success: true, 
+            data: { 
+                billName: bill.name, 
+                createdAt: bill.created_at || new Date().toISOString(), 
+                summaryData: emptySummary,
+                participants: [] 
+            } 
+        };
+    }
+
+
+    const { data: participantsData, error: participantsError } = await supabase
+      .from('bill_participants')
+      .select('id, name, total_share_amount')
+      .eq('bill_id', billId);
+
+    if (participantsError) {
+      console.error("Error fetching participants for bill:", participantsError);
+      return { success: false, error: `Gagal mengambil partisipan: ${participantsError.message}` };
+    }
+    const participants: Person[] = participantsData?.map(p => ({ id: p.id, name: p.name })) || [];
+
+    let payerName = "Tidak Diketahui";
+    if (bill.payer_participant_id) {
+      const payer = participantsData?.find(p => p.id === bill.payer_participant_id);
+      if (payer) {
+        payerName = payer.name;
+      } else {
+         const { data: specificPayerData, error: specificPayerError } = await supabase
+          .from('bill_participants')
+          .select('name')
+          .eq('id', bill.payer_participant_id)
+          .single();
+        if (!specificPayerError && specificPayerData) payerName = specificPayerData.name;
+      }
+    }
+
+    const personalTotalShares: RawBillSummary = {};
+    (participantsData || []).forEach(p => {
+      personalTotalShares[p.name] = p.total_share_amount ?? 0;
+    });
+
+    const { data: settlementsData, error: settlementsError } = await supabase
+      .from('settlements')
+      .select(`
+        amount,
+        from_participant:bill_participants!settlements_from_participant_id_fkey ( name ),
+        to_participant:bill_participants!settlements_to_participant_id_fkey ( name )
+      `)
+      .eq('bill_id', billId);
+
+    if (settlementsError) {
+      console.error("Error fetching settlements for bill:", settlementsError);
+      return { success: false, error: `Gagal mengambil penyelesaian: ${settlementsError.message}` };
+    }
+
+    const settlements: Settlement[] = (settlementsData || []).map(s => ({
+      from: (s.from_participant as any)?.name || "Tidak Diketahui",
+      to: (s.to_participant as any)?.name || "Tidak Diketahui",
+      amount: s.amount,
+    }));
+
+    const summaryData: DetailedBillSummaryData = {
+      payerName: payerName,
+      taxAmount: bill.tax_amount || 0,
+      tipAmount: bill.tip_amount || 0,
+      personalTotalShares: personalTotalShares,
+      settlements: settlements,
+      grandTotal: bill.grand_total || 0,
+    };
+
+    return { 
+      success: true, 
+      data: { 
+        billName: bill.name, 
+        createdAt: bill.created_at || new Date().toISOString(), 
+        summaryData, 
+        participants 
+      } 
+    };
+
+  } catch (e: any) {
+    console.error("Exception in getBillDetailsAction:", e);
+    return { success: false, error: e.message || "Terjadi kesalahan server saat mengambil detail tagihan." };
   }
 }
     

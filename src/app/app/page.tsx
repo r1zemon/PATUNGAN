@@ -16,7 +16,8 @@ import {
   createBillCategoryAction,
   addBillItemToDbAction, 
   updateBillItemInDbAction, 
-  deleteBillItemFromDbAction
+  deleteBillItemFromDbAction,
+  getBillDetailsAction // Added import
 } from "@/lib/actions";
 import { ReceiptUploader } from "@/components/receipt-uploader";
 import { ItemEditor } from "@/components/item-editor";
@@ -160,8 +161,10 @@ export default function SplitBillAppPage() {
     setCategories(finalSortedCategories);
     setIsLoadingCategories(false);
     if (newCategoriesAdded) { 
-        revalidatePath('/app', 'page');
-        revalidatePath('/', 'page');
+        // revalidatePath('/app', 'page'); // This is client-side, revalidatePath is for server actions
+        // revalidatePath('/', 'page');
+        // To refresh categories on client-side, a re-fetch or state update is needed if a category is added mid-session elsewhere.
+        // The current `fetchUserAndCategories` already handles sorting.
     }
 
   }, [router, toast]);
@@ -487,6 +490,15 @@ export default function SplitBillAppPage() {
             payerName: payer?.name || "Pembayar",
             taxAmount: 0, tipAmount: 0, grandTotal: 0,
             personalTotalShares: people.reduce((acc, p) => ({...acc, [p.name]: 0}), {}),
+            detailedPersonalShares: people.map(p => ({
+              personId: p.id,
+              personName: p.name,
+              items: [],
+              taxShare: 0,
+              tipShare: 0,
+              subTotalFromItems: 0,
+              totalShare: 0,
+            })),
             settlements: []
         });
         await handleSummarizeBillAction( 
@@ -522,9 +534,6 @@ export default function SplitBillAppPage() {
     );
 
     if (result.success && result.data) {
-      const rawSummary = result.data;
-      const payer = people.find(p => p.id === billDetails.payerId);
-
       // Fetch full bill details to populate the summary display accurately
       const detailedResult = await getBillDetailsAction(currentBillId);
       if (detailedResult.success && detailedResult.data) {
@@ -958,6 +967,4 @@ export default function SplitBillAppPage() {
   );
 }
     
-    
-
     

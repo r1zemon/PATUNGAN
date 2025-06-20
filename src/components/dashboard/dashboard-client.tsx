@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { BarChart, CalendarClock, ChevronRight, Info, ListChecks, Loader2, PieChart, TrendingUp, Users, Wallet, XCircle, Tag, Clock, Shapes } from 'lucide-react';
+import { BarChart, CalendarClock, ChevronRight, Info, ListChecks, Loader2, PieChart, TrendingUp, Users, Wallet, XCircle, Tag, Clock, Shapes, Utensils, Car, Gamepad2, BedDouble, ShoppingBag } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils';
 import { format, parseISO } from 'date-fns';
 import { id as IndonesianLocale } from 'date-fns/locale';
@@ -23,6 +23,17 @@ import { useToast } from '@/hooks/use-toast';
 interface DashboardClientProps {
   authUser: SupabaseUser;
 }
+
+// Client-side map for icon string keys to actual components
+const ICON_COMPONENTS_MAP: { [key: string]: React.ElementType } = {
+  "Utensils": Utensils,
+  "Car": Car,
+  "Gamepad2": Gamepad2,
+  "BedDouble": BedDouble,
+  "ShoppingBag": ShoppingBag,
+  "Shapes": Shapes,
+};
+
 
 export function DashboardClient({ authUser }: DashboardClientProps) {
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
@@ -53,12 +64,12 @@ export function DashboardClient({ authUser }: DashboardClientProps) {
 
   const chartConfig = useMemo(() => {
     const config: ChartConfig = {};
-    // Icons and colors are now part of MonthlyExpenseByCategory fetched from the action
     dashboardData?.monthlyExpenses?.forEach(expense => {
+      const IconComponent = expense.icon ? ICON_COMPONENTS_MAP[expense.icon] || Shapes : Shapes;
       config[expense.categoryName] = {
         label: expense.categoryName,
-        color: expense.color || "hsl(var(--chart-1))", // Fallback color
-        icon: expense.icon || Shapes, // Fallback icon
+        color: expense.color || "hsl(var(--chart-1))", 
+        icon: IconComponent,
       };
     });
     return config;
@@ -123,10 +134,10 @@ export function DashboardClient({ authUser }: DashboardClientProps) {
                 <p className="text-3xl font-bold text-primary">{formatCurrency(totalMonthlySpending)}</p>
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mt-4">
                     {monthlyExpenses.map((expense) => {
-                       const Icon = expense.icon || Shapes; // Default icon
+                       const IconComponent = expense.icon ? ICON_COMPONENTS_MAP[expense.icon] || Shapes : Shapes;
                        return (
                         <div key={expense.categoryName} className="flex flex-col items-center p-3 bg-muted/50 rounded-lg shadow-sm">
-                            <Icon className="h-6 w-6 mb-1.5" style={{ color: expense.color }} />
+                            <IconComponent className="h-6 w-6 mb-1.5" style={{ color: expense.color }} />
                             <span className="text-xs font-medium text-muted-foreground">{expense.categoryName}</span>
                             <span className="text-sm font-semibold text-foreground">{formatCurrency(expense.totalAmount)}</span>
                         </div>
@@ -157,7 +168,7 @@ export function DashboardClient({ authUser }: DashboardClientProps) {
                     tickLine={false} 
                     axisLine={false}
                     tickFormatter={(value) => chartConfig[value]?.label || value}
-                    width={100} // Adjust width based on label length
+                    width={100} 
                     />
                   <ChartTooltip cursor={false} content={<ChartTooltipContent hideLabel />} />
                   <Bar dataKey="total" layout="vertical" radius={5}>
@@ -271,3 +282,4 @@ export function DashboardClient({ authUser }: DashboardClientProps) {
     </div>
   );
 }
+

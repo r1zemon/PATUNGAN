@@ -8,7 +8,6 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
 import type { PostgrestSingleResponse, User as SupabaseUser } from "@supabase/supabase-js";
 import type { Database } from '@/lib/database.types';
-import { Utensils, Car, Gamepad2, BedDouble, Shapes, ShoppingBag } from "lucide-react"; // Added ShoppingBag
 import { format, startOfMonth, endOfMonth, parseISO, addDays, subDays } from 'date-fns';
 import { id as IndonesianLocale } from 'date-fns/locale';
 
@@ -198,7 +197,7 @@ export async function createBillCategoryAction(name: string): Promise<{ success:
       .from('bill_categories')
       .select('id, name, user_id, created_at')
       .eq('user_id', user.id)
-      .ilike('name', trimmedName) // case-insensitive check
+      .ilike('name', trimmedName) 
       .single();
 
     if (selectError && selectError.code !== 'PGRST116') { 
@@ -207,7 +206,7 @@ export async function createBillCategoryAction(name: string): Promise<{ success:
     }
 
     if (existingCategory) {
-      return { success: true, category: existingCategory as BillCategory, error: `Kategori "${trimmedName}" sudah ada.` };
+      return { success: true, category: existingCategory as BillCategory }; // Return existing if found
     }
 
     const { data: newCategoryData, error: insertError } = await supabase
@@ -231,7 +230,7 @@ export async function createBillCategoryAction(name: string): Promise<{ success:
         name: newCategoryData.name,
         created_at: newCategoryData.created_at
     };
-
+    revalidatePath('/app', 'page'); // Revalidate the app page where categories are listed/used
     return { success: true, category: finalCategory };
 
   } catch (e: any) {
@@ -854,11 +853,10 @@ export async function getBillsHistoryAction(): Promise<{ success: boolean; data?
         grand_total, 
         payer_participant_id, 
         scheduled_at,
-        category_id,
         bill_categories ( name )
       `)
       .eq('user_id', user.id)
-      .or('grand_total.not.is.null,scheduled_at.not.is.null') // Ensures either completed or scheduled bills are fetched
+      .or('grand_total.not.is.null,scheduled_at.not.is.null') 
       .order('created_at', { ascending: false });
 
     if (billsError) {
@@ -901,7 +899,7 @@ export async function getBillsHistoryAction(): Promise<{ success: boolean; data?
       historyEntries.push({
         id: bill.id,
         name: bill.name,
-        createdAt: bill.created_at || new Date().toISOString(), // Fallback for createdAt
+        createdAt: bill.created_at || new Date().toISOString(), 
         grand_total: bill.grand_total,
         payerName: payerName,
         participantCount: participantCount || 0,
@@ -919,14 +917,14 @@ export async function getBillsHistoryAction(): Promise<{ success: boolean; data?
 
 // ===== DASHBOARD ACTIONS =====
 
-// Define these outside the function or pass them if they need to be dynamic
-const CATEGORY_ICONS: { [key: string]: React.ElementType } = {
-  "Makanan": Utensils,
-  "Transportasi": Car,
-  "Hiburan": Gamepad2,
-  "Penginapan": BedDouble,
-  "Belanja Online": ShoppingBag, // Added ShoppingBag here as well
-  "Lainnya": Shapes,
+// These map category names to icon STRING KEYS
+const CATEGORY_ICON_KEYS: { [key: string]: string } = {
+  "Makanan": "Utensils",
+  "Transportasi": "Car",
+  "Hiburan": "Gamepad2",
+  "Penginapan": "BedDouble",
+  "Belanja Online": "ShoppingBag",
+  "Lainnya": "Shapes",
 };
 
 const PREDEFINED_CATEGORY_COLORS: { [key: string]: string } = {
@@ -934,8 +932,8 @@ const PREDEFINED_CATEGORY_COLORS: { [key: string]: string } = {
   "Transportasi": "hsl(var(--chart-2))",
   "Hiburan": "hsl(var(--chart-3))",
   "Penginapan": "hsl(var(--chart-4))",
-  "Belanja Online": "hsl(var(--chart-5))", // Ensure color exists
-  "Lainnya": "hsl(var(--chart-5))", // Default or specific color
+  "Belanja Online": "hsl(var(--chart-5))", 
+  "Lainnya": "hsl(var(--chart-5))", 
 };
 
 
@@ -948,13 +946,11 @@ export async function getDashboardDataAction(): Promise<{ success: boolean; data
   }
 
   try {
-    // 1. Fetch all user categories
     const { categories, error: categoriesError } = await getUserCategoriesAction();
     if (categoriesError || !categories) {
       return { success: false, error: categoriesError || "Gagal mengambil kategori pengguna." };
     }
 
-    // 2. Fetch bills for the current month
     const now = new Date();
     const startDate = format(startOfMonth(now), "yyyy-MM-dd'T'HH:mm:ss.SSSxxx");
     const endDate = format(endOfMonth(now), "yyyy-MM-dd'T'HH:mm:ss.SSSxxx");
@@ -963,9 +959,9 @@ export async function getDashboardDataAction(): Promise<{ success: boolean; data
       .from('bills')
       .select('category_id, grand_total')
       .eq('user_id', user.id)
-      .not('grand_total', 'is', null) // Completed bills
-      .not('payer_participant_id', 'is', null) // Ensure it's processed
-      .gte('created_at', startDate) // Use created_at or updated_at as appropriate for "completion"
+      .not('grand_total', 'is', null) 
+      .not('payer_participant_id', 'is', null) 
+      .gte('created_at', startDate) 
       .lte('created_at', endDate);
 
     if (billsError) {
@@ -973,7 +969,6 @@ export async function getDashboardDataAction(): Promise<{ success: boolean; data
       return { success: false, error: `Gagal mengambil data tagihan bulanan: ${billsError.message}` };
     }
 
-    // 3. Calculate total spending per category
     const spendingPerCategory: Record<string, number> = {};
     if (monthlyBillData) {
       for (const bill of monthlyBillData) {
@@ -982,39 +977,33 @@ export async function getDashboardDataAction(): Promise<{ success: boolean; data
         }
       }
     }
-
-    // 4. Construct MonthlyExpenseByCategory for ALL user categories
+    
     const monthlyExpenses: MonthlyExpenseByCategory[] = categories.map(category => {
       const totalAmount = spendingPerCategory[category.id] || 0;
       const categoryNameLower = category.name.toLowerCase();
-      let icon = Shapes; // Default icon
+      let iconKey = "Shapes"; // Default icon key
       let color = PREDEFINED_CATEGORY_COLORS["Lainnya"]; // Default color
 
-      // Find matching predefined icon and color
-      const predefinedCatName = Object.keys(CATEGORY_ICONS).find(key => key.toLowerCase() === categoryNameLower);
-      if (predefinedCatName) {
-        icon = CATEGORY_ICONS[predefinedCatName];
-        color = PREDEFINED_CATEGORY_COLORS[predefinedCatName] || color;
+      const predefinedCatKey = Object.keys(CATEGORY_ICON_KEYS).find(key => key.toLowerCase() === categoryNameLower);
+      if (predefinedCatKey) {
+        iconKey = CATEGORY_ICON_KEYS[predefinedCatKey];
+        color = PREDEFINED_CATEGORY_COLORS[predefinedCatKey] || color;
       }
       
       return {
         categoryName: category.name,
         totalAmount: totalAmount,
-        icon: icon,
+        icon: iconKey, // Pass the string key
         color: color,
       };
     });
     
-    // Sort categories for consistent display
      monthlyExpenses.sort((a, b) => a.categoryName.localeCompare(b.categoryName));
 
-
-    // 5. Prepare chart data (only for categories with spending > 0 for a cleaner chart)
     const expenseChartData: ExpenseChartDataPoint[] = monthlyExpenses
       .filter(e => e.totalAmount > 0)
       .map(e => ({ name: e.categoryName, total: e.totalAmount }));
 
-    // 6. Dummy data for recent and scheduled bills (as per previous setup)
     const dummyNow = new Date();
     const recentBills: RecentBillDisplayItem[] = [
       { id: "rb1", name: "Makan Malam Tim (Dummy)", createdAt: subDays(dummyNow, 2).toISOString(), grandTotal: 680000, categoryName: "Makanan", participantCount: 5 },
@@ -1024,7 +1013,7 @@ export async function getDashboardDataAction(): Promise<{ success: boolean; data
       { id: "sb1", name: "Trip ke Puncak (Dummy)", scheduled_at: addDays(dummyNow, 7).toISOString(), categoryName: "Hiburan", participantCount: 3 },
     ];
     
-    revalidatePath('/', 'page'); // Revalidate dashboard page
+    revalidatePath('/', 'page'); 
 
     return {
       success: true,
@@ -1041,3 +1030,4 @@ export async function getDashboardDataAction(): Promise<{ success: boolean; data
     return { success: false, error: e.message || "Terjadi kesalahan server saat mengambil data dashboard." };
   }
 }
+

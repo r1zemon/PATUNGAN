@@ -58,7 +58,7 @@ export interface BillHistoryEntry {
   payerName: string | null;
   participantCount: number;
   scheduled_at?: string | null;
-  categoryName?: string | null; // New optional field
+  categoryName?: string | null; 
 }
 
 export interface Notification {
@@ -68,7 +68,7 @@ export interface Notification {
   description?: string;
   createdAt: string; // ISO string date
   read: boolean;
-  icon?: React.ElementType; // Lucide icon component
+  icon?: React.ElementType; 
   link?: string;
   sender?: {
     name: string;
@@ -97,14 +97,13 @@ export interface RecentBillDisplayItem {
 export interface MonthlyExpenseByCategory {
   categoryName: string; 
   totalAmount: number;
-  icon?: React.ElementType; 
+  icon?: string; // Changed from React.ElementType to string
   color?: string; 
 }
 
 export interface ExpenseChartDataPoint {
-  name: string; // Label for the axis (e.g., month name, date, category name)
-  total: number; // Value for the bar/line
-  // fill?: string; // Optional: for individual bar colors if needed directly in data
+  name: string; 
+  total: number; 
 }
 
 export interface DashboardData {
@@ -113,3 +112,4 @@ export interface DashboardData {
   recentBills: RecentBillDisplayItem[];
   scheduledBills: ScheduledBillDisplayItem[];
 }
+

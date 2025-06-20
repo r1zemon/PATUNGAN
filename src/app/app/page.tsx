@@ -35,6 +35,7 @@ import { useRouter } from "next/navigation";
 import { format } from 'date-fns';
 import { id as IndonesianLocale } from 'date-fns/locale';
 import { LandingHeader } from "@/components/landing-header";
+import { Badge } from "@/components/ui/badge"; // Added import for Badge
 
 interface Profile {
   username?: string;

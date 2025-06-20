@@ -3,13 +3,13 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import type { User as SupabaseUser } from "@supabase/supabase-js";
-import type { DashboardData, MonthlyExpenseByCategory, ExpenseChartDataPoint, RecentBillDisplayItem, ScheduledBillDisplayItem } from '@/lib/types';
-import { getDashboardDataAction } from '@/lib/actions';
+import type { DashboardData, MonthlyExpenseByCategory, ExpenseChartDataPoint, RecentBillDisplayItem, ScheduledBillDisplayItem, DetailedBillSummaryData, Person, BillDetailsForHistory } from '@/lib/types';
+import { getDashboardDataAction, getBillDetailsAction } from '@/lib/actions';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { BarChart, CalendarClock, ChevronRight, Info, ListChecks, Loader2, PieChart, TrendingUp, Users, Wallet, XCircle, Tag, Clock, Shapes, Utensils, Car, Gamepad2, BedDouble, ShoppingBag } from 'lucide-react';
+import { BarChart, CalendarClock, ChevronRight, Info, ListChecks, Loader2, PieChart, TrendingUp, Users, Wallet, XCircle, Tag, Clock, Shapes, Utensils, Car, Gamepad2, BedDouble, ShoppingBag, Power } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils';
 import { format, parseISO } from 'date-fns';
 import { id as IndonesianLocale } from 'date-fns/locale';
@@ -19,6 +19,17 @@ import { Bar, BarChart as RechartsBarChart, ResponsiveContainer, XAxis, YAxis, T
 import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent, type ChartConfig } from "@/components/ui/chart";
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { SummaryDisplay } from "@/components/summary-display";
+
 
 interface DashboardClientProps {
   authUser: SupabaseUser;
@@ -41,6 +52,13 @@ export function DashboardClient({ authUser }: DashboardClientProps) {
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
   const { toast } = useToast();
+
+  // State for bill details dialog
+  const [selectedBillForDetail, setSelectedBillForDetail] = useState<BillDetailsForHistory | null>(null);
+  const [isLoadingBillDetail, setIsLoadingBillDetail] = useState(false);
+  const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
+
 
   useEffect(() => {
     const fetchData = async () => {
@@ -74,6 +92,21 @@ export function DashboardClient({ authUser }: DashboardClientProps) {
     });
     return config;
   }, [dashboardData?.monthlyExpenses]);
+
+  const handleViewDetailsDashboard = async (billId: string) => {
+    setIsLoadingBillDetail(true);
+    setDetailError(null);
+    setSelectedBillForDetail(null);
+    setIsDetailDialogOpen(true);
+    const result = await getBillDetailsAction(billId);
+    if (result.success && result.data) {
+      setSelectedBillForDetail(result.data);
+    } else {
+      setDetailError(result.error || "Gagal memuat detail tagihan.");
+      toast({ variant: "destructive", title: "Gagal Detail", description: result.error });
+    }
+    setIsLoadingBillDetail(false);
+  };
 
 
   if (isLoading) {
@@ -194,7 +227,7 @@ export function DashboardClient({ authUser }: DashboardClientProps) {
           <Card className="flex flex-col">
             <CardHeader>
               <CardTitle className="flex items-center"><CalendarClock className="mr-2 h-5 w-5 text-primary"/>Tagihan Terjadwal</CardTitle>
-              <CardDescription>Tagihan yang akan datang dan perlu diisi detailnya. (Data Dummy)</CardDescription>
+              <CardDescription>Tagihan yang akan datang dan perlu diisi detailnya.</CardDescription>
             </CardHeader>
             <CardContent className="flex-grow space-y-3">
               {scheduledBills.length > 0 ? (
@@ -222,7 +255,7 @@ export function DashboardClient({ authUser }: DashboardClientProps) {
                 <p className="text-sm text-muted-foreground text-center py-4">Tidak ada tagihan yang dijadwalkan.</p>
               )}
             </CardContent>
-            {scheduledBills.length > 0 && (
+            {dashboardData.recentBills.length > 0 && ( // Check against dashboardData as recentBills might be empty
                 <CardFooter>
                     <Button variant="ghost" className="w-full text-primary" onClick={() => router.push('/app/history?tab=scheduled')}>
                         Lihat Semua Terjadwal <ChevronRight className="ml-1 h-4 w-4"/>
@@ -234,7 +267,7 @@ export function DashboardClient({ authUser }: DashboardClientProps) {
           <Card className="flex flex-col">
             <CardHeader>
               <CardTitle className="flex items-center"><ListChecks className="mr-2 h-5 w-5 text-primary"/>Riwayat Tagihan Terbaru</CardTitle>
-              <CardDescription>3 tagihan terakhir yang telah diselesaikan. (Data Dummy)</CardDescription>
+              <CardDescription>3 tagihan terakhir yang telah diselesaikan.</CardDescription>
             </CardHeader>
             <CardContent className="flex-grow space-y-3">
               {recentBills.length > 0 ? (
@@ -253,7 +286,7 @@ export function DashboardClient({ authUser }: DashboardClientProps) {
                         <div className="flex items-center text-muted-foreground">
                             <Users className="mr-1.5 h-3 w-3"/> {bill.participantCount} orang
                         </div>
-                         <Button variant="outline" size="xs" onClick={() => toast({title: "Info", description: "Fitur lihat detail riwayat belum diimplementasikan."})}>
+                         <Button variant="outline" size="xs" onClick={() => handleViewDetailsDashboard(bill.id)}>
                             Lihat Detail <ChevronRight className="h-3 w-3 ml-1"/>
                          </Button>
                     </div>
@@ -263,7 +296,7 @@ export function DashboardClient({ authUser }: DashboardClientProps) {
                 <p className="text-sm text-muted-foreground text-center py-4">Belum ada riwayat tagihan.</p>
               )}
             </CardContent>
-             {recentBills.length > 0 && (
+             {dashboardData.recentBills.length > 0 && ( // Check against dashboardData
                 <CardFooter>
                      <Button variant="ghost" className="w-full text-primary" onClick={() => router.push('/app/history')}>
                         Lihat Semua Riwayat <ChevronRight className="ml-1 h-4 w-4"/>
@@ -279,7 +312,55 @@ export function DashboardClient({ authUser }: DashboardClientProps) {
             <TrendingUp className="mr-2 h-5 w-5"/> Buat Sesi Tagihan Baru
         </Button>
       </div>
+
+      <Dialog open={isDetailDialogOpen} onOpenChange={setIsDetailDialogOpen}>
+        <DialogContent className="sm:max-w-lg md:max-w-xl max-h-[90vh]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center">
+              <ListChecks className="mr-3 h-6 w-6 text-primary flex-shrink-0"/>
+                <span className="truncate">
+                  Detail Tagihan: {selectedBillForDetail?.billName || "Memuat..."}
+                </span>
+            </DialogTitle>
+            {selectedBillForDetail && (
+                 <DialogDescription>
+                    Dibuat pada: {format(parseISO(selectedBillForDetail.createdAt), "dd MMMM yyyy, HH:mm", { locale: IndonesianLocale })}
+                </DialogDescription>
+            )}
+          </DialogHeader>
+          <ScrollArea className="max-h-[calc(90vh-12rem)] pr-2">
+            {isLoadingBillDetail ? (
+              <div className="flex flex-col items-center justify-center py-10">
+                <Loader2 className="h-10 w-10 animate-spin text-primary mb-3" />
+                <p className="text-muted-foreground">Memuat detail tagihan...</p>
+              </div>
+            ) : detailError ? (
+              <Alert variant="destructive">
+                <Power className="h-4 w-4" />
+                <AlertTitle>Gagal Memuat Detail</AlertTitle>
+                <AlertDescription>{detailError}</AlertDescription>
+              </Alert>
+            ) : selectedBillForDetail ? (
+              <div className="py-2 pr-4">
+                <SummaryDisplay 
+                  summary={selectedBillForDetail.summaryData} 
+                  people={selectedBillForDetail.participants} 
+                />
+              </div>
+            ) : (
+              <p className="text-muted-foreground text-center py-10">Tidak ada detail untuk ditampilkan.</p>
+            )}
+          </ScrollArea>
+          <DialogFooter className="sm:justify-end pt-4 border-t">
+            <Button type="button" variant="outline" onClick={() => setIsDetailDialogOpen(false)}>
+              Tutup
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
     </div>
   );
 }
 
+    

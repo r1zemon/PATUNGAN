@@ -124,25 +124,20 @@ export default function SplitBillAppPage() {
 
     // Check and create default categories if missing
     const existingCategoryNamesLower = fetchedCategories.map(cat => cat.name.toLowerCase());
-    let newCategoriesAdded = false;
-
+    
     for (const defaultCatName of DEFAULT_CATEGORIES) {
       if (!existingCategoryNamesLower.includes(defaultCatName.toLowerCase())) {
         console.log(`Default category "${defaultCatName}" not found. Attempting to create.`);
         const creationResult = await createBillCategoryAction(defaultCatName);
         if (creationResult.success && creationResult.category) {
           fetchedCategories.push(creationResult.category);
-          newCategoriesAdded = true;
           console.log(`Successfully created default category: "${defaultCatName}"`);
         } else {
           console.warn(`Failed to create default category "${defaultCatName}": ${creationResult.error}`);
-          // Optionally, show a less intrusive toast for default category creation failure
-          // toast({ variant: "default", title: "Info Kategori", description: `Gagal membuat kategori default "${defaultCatName}". Anda bisa membuatnya manual.` });
         }
       }
     }
     
-    // Sort categories alphabetically by name after potential additions
     fetchedCategories.sort((a, b) => a.name.localeCompare(b.name));
     setCategories(fetchedCategories);
     setIsLoadingCategories(false);
@@ -156,7 +151,7 @@ export default function SplitBillAppPage() {
   const startNewBillSession = useCallback(async () => {
     if (!authUser) { 
       setError("Pengguna tidak terautentikasi. Mohon login untuk membuat tagihan.");
-      toast({variant: "destructive", title: "Akses Ditolak", description: "Anda harus login untuk membuat tagihan."});
+      toast({variant: "destructive", title: "Akses Ditolak", description: "Anda harus login untuk menggunakan aplikasi."});
       router.push("/login");
       return;
     }
@@ -179,7 +174,6 @@ export default function SplitBillAppPage() {
         const categoryResult = await createBillCategoryAction(newCategoryInput.trim());
         if (categoryResult.success && categoryResult.category) {
             finalCategoryId = categoryResult.category.id;
-            // Optimistically update categories list locally or re-fetch
             setCategories(prev => {
                 const newCats = [...prev, categoryResult.category!];
                 newCats.sort((a,b) => a.name.localeCompare(b.name));
@@ -259,7 +253,7 @@ export default function SplitBillAppPage() {
       }
     }
     setIsInitializingBill(false);
-  }, [authUser, billNameInput, billTimingOption, scheduledAt, router, toast, selectedCategoryId, newCategoryInput, showNewCategoryInput, categories]); // Added categories to dependency array
+  }, [authUser, billNameInput, billTimingOption, scheduledAt, router, toast, selectedCategoryId, newCategoryInput, showNewCategoryInput, categories]);
   
   const resetAppToStart = () => {
      setCurrentBillId(null);
@@ -282,7 +276,6 @@ export default function SplitBillAppPage() {
         router.push("/login");
      }
      if (authUser) {
-        // Re-fetch categories, which will also ensure defaults are present
         fetchUserAndCategories(); 
      }
   }
@@ -695,7 +688,7 @@ export default function SplitBillAppPage() {
                                 maxLength={20}
                                 className="flex-grow"
                             />
-                            <Button variant="ghost" onClick={() => {setShowNewCategoryInput(false); setNewCategoryInput(""); if(categories.length > 0) setSelectedCategoryId(categories[0].id)}}>Batal</Button>
+                            <Button variant="ghost" onClick={() => {setShowNewCategoryInput(false); setNewCategoryInput(""); if(categories.length > 0 && categories[0]) setSelectedCategoryId(categories[0].id)}}>Batal</Button>
                         </div>
                     </div>
                   )}
@@ -1014,3 +1007,4 @@ export default function SplitBillAppPage() {
   );
 }
 
+    

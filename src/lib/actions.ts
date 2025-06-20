@@ -368,35 +368,67 @@ export async function removeParticipantAction(participantId: string): Promise<{ 
 
 
 export async function handleScanReceiptAction(
+  billId: string, // Added billId parameter
   receiptDataUri: string
 ): Promise<{ success: boolean; data?: { items: ScannedItem[] }; error?: string }> {
+  const supabase = createSupabaseServerClient();
+  if (!billId) {
+    return { success: false, error: "Bill ID tidak disediakan untuk menyimpan item struk." };
+  }
   if (!receiptDataUri) {
     return { success: false, error: "Tidak ada data gambar struk." };
   }
-
   if (!receiptDataUri.startsWith("data:image/")) {
     return { success: false, error: "Format data gambar tidak valid." };
   }
-  console.log("handleScanReceiptAction (server): Received data URI (first 100 chars):", receiptDataUri.substring(0, 100));
+  
+  console.log("handleScanReceiptAction (server): Received data URI for bill", billId);
 
   try {
-    const result: ScanReceiptOutput = await scanReceipt({ receiptDataUri });
+    const aiResult: ScanReceiptOutput = await scanReceipt({ receiptDataUri });
 
-    if (result && result.items !== undefined) {
-      const appItems: ScannedItem[] = result.items.map((item: AiReceiptItem, index: number) => ({
-        id: `scanned_${Date.now()}_${index}`,
+    if (aiResult && aiResult.items !== undefined) {
+      const itemsToInsert = aiResult.items.map((item: AiReceiptItem) => ({
+        bill_id: billId,
         name: item.name || "Item Tidak Dikenal",
-        unitPrice: typeof item.unitPrice === 'number' ? item.unitPrice : 0,
+        unit_price: typeof item.unitPrice === 'number' ? item.unitPrice : 0,
         quantity: (typeof item.quantity === 'number' && item.quantity > 0) ? item.quantity : 1,
       }));
-      console.log(`handleScanReceiptAction (server): Scan successful, ${appItems.length} items mapped.`);
+
+      if (itemsToInsert.length === 0) {
+        return { success: true, data: { items: [] } }; // No items found by AI, but operation is successful.
+      }
+
+      const { data: insertedDbItems, error: insertError } = await supabase
+        .from('bill_items')
+        .insert(itemsToInsert)
+        .select('id, name, unit_price, quantity');
+
+      if (insertError) {
+        console.error("handleScanReceiptAction (server): Error inserting scanned items to DB:", insertError);
+        return { success: false, error: `Gagal menyimpan item struk ke database: ${insertError.message}` };
+      }
+      
+      if (!insertedDbItems) {
+        console.error("handleScanReceiptAction (server): No data returned after inserting scanned items.");
+        return { success: false, error: "Gagal mendapatkan data item setelah disimpan ke database." };
+      }
+
+      const appItems: ScannedItem[] = insertedDbItems.map(dbItem => ({
+        id: dbItem.id, // This is now the database ID
+        name: dbItem.name,
+        unitPrice: dbItem.unit_price,
+        quantity: dbItem.quantity,
+      }));
+      
+      console.log(`handleScanReceiptAction (server): Scan successful, ${appItems.length} items mapped and saved to DB.`);
       return { success: true, data: { items: appItems } };
     } else {
-      console.error("handleScanReceiptAction (server): scanReceipt returned an unexpected structure:", result);
+      console.error("handleScanReceiptAction (server): scanReceipt returned an unexpected structure:", aiResult);
       return { success: false, error: "Menerima data tak terduga dari pemindai. Silakan coba lagi." };
     }
   } catch (error) {
-    console.error("handleScanReceiptAction (server): Critical error during scanReceipt call:", error);
+    console.error("handleScanReceiptAction (server): Critical error during scanReceipt call or DB operation:", error);
     let errorMessage = "Gagal memindai struk karena kesalahan server tak terduga. Silakan coba lagi.";
     if (error instanceof Error) {
         errorMessage = `Pemindaian gagal: ${error.message}`;
@@ -902,7 +934,7 @@ export async function getBillsHistoryAction(): Promise<{ success: boolean; data?
         id: bill.id,
         name: bill.name,
         createdAt: bill.created_at || new Date().toISOString(), 
-        grand_total: bill.grand_total,
+        grandTotal: bill.grand_total,
         payerName: payerName,
         participantCount: participantCount || 0,
         scheduled_at: bill.scheduled_at,
@@ -925,8 +957,8 @@ const CATEGORY_ICON_KEYS: { [key: string]: string } = {
   "Transportasi": "Car",
   "Hiburan": "Gamepad2",
   "Penginapan": "BedDouble",
-  "Belanja Online": "ShoppingBag",
-  "Lainnya": "Shapes",
+  "Belanja Online": "ShoppingBag", // Example of another potential default or user-added category
+  "Lainnya": "Shapes", // Default for others
 };
 
 const PREDEFINED_CATEGORY_COLORS: { [key: string]: string } = {
@@ -935,9 +967,10 @@ const PREDEFINED_CATEGORY_COLORS: { [key: string]: string } = {
   "Hiburan": "hsl(var(--chart-3))",
   "Penginapan": "hsl(var(--chart-4))",
   "Belanja Online": "hsl(var(--chart-5))",
-  "Lainnya": "hsl(var(--chart-5))", // Default for others
+  "Lainnya": "hsl(var(--chart-5))", // Can be a more neutral color if desired
 };
 
+// Standard order for default categories, "Lainnya" will be handled to be last.
 const DEFAULT_CATEGORY_ORDER = ["Makanan", "Transportasi", "Hiburan", "Penginapan"];
 const OTHERS_CATEGORY_NAME = "Lainnya";
 
@@ -961,11 +994,11 @@ export async function getDashboardDataAction(): Promise<{ success: boolean; data
       console.error("Error fetching user categories for dashboard:", categoriesError);
       return { success: false, error: `Gagal mengambil kategori pengguna: ${categoriesError.message}` };
     }
-    if (!userCategories) {
-        return { success: false, error: "Tidak ada kategori ditemukan untuk pengguna."};
+    if (!userCategories) { // Should be an empty array if none, not null.
+        console.warn("No categories found for user, dashboard might be sparse.");
     }
 
-    // 2. Fetch monthly bills data
+    // 2. Fetch monthly bills data (completed bills for the current month)
     const now = new Date();
     const startDate = format(startOfMonth(now), "yyyy-MM-dd'T'HH:mm:ss.SSSxxx");
     const endDate = format(endOfMonth(now), "yyyy-MM-dd'T'HH:mm:ss.SSSxxx");
@@ -975,7 +1008,7 @@ export async function getDashboardDataAction(): Promise<{ success: boolean; data
       .select('category_id, grand_total')
       .eq('user_id', user.id)
       .not('grand_total', 'is', null)
-      .not('payer_participant_id', 'is', null)
+      .not('payer_participant_id', 'is', null) // Ensure bill is completed
       .gte('created_at', startDate)
       .lte('created_at', endDate);
 
@@ -993,16 +1026,18 @@ export async function getDashboardDataAction(): Promise<{ success: boolean; data
       }
     }
     
-    let allMonthlyExpensesRaw: MonthlyExpenseByCategory[] = userCategories.map(category => {
+    // Create a comprehensive list of MonthlyExpenseByCategory including all user categories
+    let allMonthlyExpensesRaw: MonthlyExpenseByCategory[] = (userCategories || []).map(category => {
       const totalAmount = spendingPerCategory[category.id] || 0;
       return {
         categoryName: category.name,
         totalAmount: totalAmount,
-        icon: CATEGORY_ICON_KEYS[category.name] || CATEGORY_ICON_KEYS["Lainnya"] || "Shapes",
-        color: PREDEFINED_CATEGORY_COLORS[category.name] || PREDEFINED_CATEGORY_COLORS["Lainnya"] || "hsl(var(--chart-1))",
+        icon: CATEGORY_ICON_KEYS[category.name] || CATEGORY_ICON_KEYS[OTHERS_CATEGORY_NAME] || "Shapes",
+        color: PREDEFINED_CATEGORY_COLORS[category.name] || PREDEFINED_CATEGORY_COLORS[OTHERS_CATEGORY_NAME] || "hsl(var(--chart-1))",
       };
     });
 
+    // Sort categories: Default Order -> Custom (Alphabetical) -> "Lainnya"
     const predefinedExpenses: MonthlyExpenseByCategory[] = [];
     const customExpenses: MonthlyExpenseByCategory[] = [];
     let othersExpense: MonthlyExpenseByCategory | null = null;
@@ -1023,10 +1058,21 @@ export async function getDashboardDataAction(): Promise<{ success: boolean; data
     const monthlyExpenses: MonthlyExpenseByCategory[] = [...predefinedExpenses, ...customExpenses];
     if (othersExpense) {
       monthlyExpenses.push(othersExpense);
+    } else {
+      // If "Lainnya" category doesn't exist for user but we want it displayed
+      const lainnyaCatMeta = (userCategories || []).find(cat => cat.name === OTHERS_CATEGORY_NAME);
+      if (lainnyaCatMeta || !(userCategories || []).some(cat => cat.name === OTHERS_CATEGORY_NAME)) { // Ensure it's only added if not naturally occurring OR always add if missing
+         monthlyExpenses.push({
+            categoryName: OTHERS_CATEGORY_NAME,
+            totalAmount: 0,
+            icon: CATEGORY_ICON_KEYS[OTHERS_CATEGORY_NAME] || "Shapes",
+            color: PREDEFINED_CATEGORY_COLORS[OTHERS_CATEGORY_NAME] || "hsl(var(--chart-1))",
+         });
+      }
     }
     
     const expenseChartData: ExpenseChartDataPoint[] = monthlyExpenses
-      .filter(e => e.totalAmount > 0)
+      .filter(e => e.totalAmount > 0) // Chart still only shows categories with spending
       .map(e => ({ name: e.categoryName, total: e.totalAmount }));
 
     // 3. Fetch Recent Bills (Completed)
@@ -1079,9 +1125,9 @@ export async function getDashboardDataAction(): Promise<{ success: boolean; data
             bill_categories ( name )
         `)
         .eq('user_id', user.id)
-        .is('grand_total', null) // Indicates not yet filled/completed
+        .is('grand_total', null) 
         .not('scheduled_at', 'is', null)
-        .gt('scheduled_at', new Date().toISOString()) // Scheduled for the future
+        .gt('scheduled_at', new Date().toISOString()) 
         .order('scheduled_at', { ascending: true })
         .limit(3);
 
@@ -1125,5 +1171,5 @@ export async function getDashboardDataAction(): Promise<{ success: boolean; data
     return { success: false, error: e.message || "Terjadi kesalahan server saat mengambil data dashboard." };
   }
 }
-
+    
     

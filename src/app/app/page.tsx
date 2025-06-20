@@ -126,19 +126,21 @@ export default function SplitBillAppPage() {
     }
 
     const existingCategoryNamesLower = fetchedCategories.map(cat => cat.name.toLowerCase());
+    let newCategoriesAdded = false;
     
     for (const defaultCatName of DEFAULT_CATEGORIES) {
       if (!existingCategoryNamesLower.includes(defaultCatName.toLowerCase())) {
         const creationResult = await createBillCategoryAction(defaultCatName);
         if (creationResult.success && creationResult.category) {
           fetchedCategories.push(creationResult.category);
+          newCategoriesAdded = true;
         } else {
           console.warn(`Failed to create default category "${defaultCatName}": ${creationResult.error}`);
         }
       }
     }
     
-    // Custom sorting for categories
+    // Custom sorting for categories: Default Order -> Custom (Alphabetical) -> "Lainnya"
     let orderedDefaults: BillCategory[] = [];
     let customCats: BillCategory[] = [];
     let othersCat: BillCategory | null = null;
@@ -163,6 +165,10 @@ export default function SplitBillAppPage() {
     
     setCategories(finalSortedCategories);
     setIsLoadingCategories(false);
+    if (newCategoriesAdded) { // If default categories were added, revalidate relevant paths
+        revalidatePath('/app', 'page');
+        revalidatePath('/', 'page'); // For dashboard updates
+    }
 
   }, [router, toast]);
 
@@ -367,21 +373,28 @@ export default function SplitBillAppPage() {
   };
   
   const handleScanReceipt = async (receiptDataUri: string) => {
+    if (!currentBillId) {
+      toast({ variant: "destructive", title: "Sesi Tagihan Tidak Aktif", description: "Harap mulai sesi tagihan baru terlebih dahulu." });
+      setIsScanning(false);
+      return;
+    }
     setIsScanning(true);
     setError(null);
     setDetailedBillSummary(null); 
     
-    const result = await handleScanReceiptAction(receiptDataUri);
+    // Pass currentBillId to the action
+    const result = await handleScanReceiptAction(currentBillId, receiptDataUri);
     if (result.success && result.data) {
+      // Items now have database IDs
       const newSplitItems: SplitItem[] = result.data.items.map(item => ({ 
-        id: item.id, 
+        id: item.id, // This is now the database ID
         name: item.name,
         unitPrice: item.unitPrice,
         quantity: item.quantity,
         assignedTo: [], 
       }));
       setSplitItems(prev => [...prev, ...newSplitItems]); 
-      toast({ title: "Struk Dipindai", description: `${newSplitItems.length} baris item ditambahkan.` });
+      toast({ title: "Struk Dipindai & Disimpan", description: `${newSplitItems.length} baris item ditambahkan ke tagihan.` });
        if (newSplitItems.length === 0) {
         toast({ variant: "default", title: "Tidak ada item ditemukan", description: "Pemindaian struk tidak menemukan item apapun. Coba tambahkan manual atau pindai/ambil foto ulang." });
       }
@@ -393,15 +406,18 @@ export default function SplitBillAppPage() {
   };
 
   const handleUpdateItem = (updatedItem: SplitItem) => {
+    // TODO: Implement saving changes to DB via a server action (updateBillItemAction)
     setSplitItems((prevItems) =>
       prevItems.map((item) => (item.id === updatedItem.id ? updatedItem : item))
     );
     setDetailedBillSummary(null); 
+    toast({title: "Info", description: "Perubahan item belum disimpan ke database. Fitur ini sedang dikembangkan."})
   };
 
   const handleAddItem = () => {
+    // TODO: Implement saving new manual item to DB via a server action (addBillItemAction)
     const newItem: SplitItem = {
-      id: `manual_${Date.now()}`, 
+      id: `manual_${Date.now()}`, // Placeholder ID until DB saving is implemented for manual items
       name: "Item Baru",
       unitPrice: 0,
       quantity: 1,
@@ -409,11 +425,14 @@ export default function SplitBillAppPage() {
     };
     setSplitItems(prevItems => [...prevItems, newItem]);
     setDetailedBillSummary(null);
+    toast({title: "Info", description: "Item manual belum disimpan ke database. Fitur ini sedang dikembangkan."})
   };
 
   const handleDeleteItem = (itemId: string) => {
+    // TODO: Implement deleting item from DB via a server action (deleteBillItemAction)
     setSplitItems(prevItems => prevItems.filter(item => item.id !== itemId));
     setDetailedBillSummary(null);
+     toast({title: "Info", description: "Penghapusan item dari database belum diimplementasikan. Fitur ini sedang dikembangkan."})
   };
 
   const handleBillDetailsChange = (field: keyof BillDetails, value: string | number | TaxTipSplitStrategy) => {
@@ -1025,5 +1044,5 @@ export default function SplitBillAppPage() {
     </div>
   );
 }
-
+    
     

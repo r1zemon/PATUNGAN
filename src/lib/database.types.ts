@@ -1,9 +1,4 @@
 
-// src/lib/database.types.ts
-// IMPORTANT: After applying the SQL changes,
-// regenerate this file by running:
-// supabase gen types typescript --linked > src/lib/database.types.ts
-
 export type Json =
   | string
   | number
@@ -12,36 +7,54 @@ export type Json =
   | { [key: string]: Json | undefined }
   | Json[]
 
-export interface Database {
+export type Database = {
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          operationName?: string
+          query?: string
+          variables?: Json
+          extensions?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   public: {
     Tables: {
       bill_categories: {
         Row: {
-          id: string
-          user_id: string
-          name: string
           created_at: string
+          id: string
+          name: string
+          user_id: string
         }
         Insert: {
-          id?: string
-          user_id: string
-          name: string
           created_at?: string
+          id?: string
+          name: string
+          user_id: string
         }
         Update: {
-          id?: string
-          user_id?: string
-          name?: string
           created_at?: string
+          id?: string
+          name?: string
+          user_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "bill_categories_user_id_fkey"
-            columns: ["user_id"]
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          }
-        ]
+        Relationships: []
       }
       bill_items: {
         Row: {
@@ -72,9 +85,10 @@ export interface Database {
           {
             foreignKeyName: "bill_items_bill_id_fkey"
             columns: ["bill_id"]
+            isOneToOne: false
             referencedRelation: "bills"
             referencedColumns: ["id"]
-          }
+          },
         ]
       }
       bill_participants: {
@@ -84,7 +98,6 @@ export interface Database {
           id: string
           name: string
           total_share_amount: number | null
-          // user_profile_id: string | null 
         }
         Insert: {
           bill_id: string
@@ -92,7 +105,6 @@ export interface Database {
           id?: string
           name: string
           total_share_amount?: number | null
-          // user_profile_id?: string | null
         }
         Update: {
           bill_id?: string
@@ -100,26 +112,20 @@ export interface Database {
           id?: string
           name?: string
           total_share_amount?: number | null
-          // user_profile_id?: string | null
         }
         Relationships: [
           {
             foreignKeyName: "bill_participants_bill_id_fkey"
             columns: ["bill_id"]
+            isOneToOne: false
             referencedRelation: "bills"
             referencedColumns: ["id"]
-          }
-          // {
-          //   foreignKeyName: "bill_participants_user_profile_id_fkey"
-          //   columns: ["user_profile_id"]
-          //   referencedRelation: "profiles"
-          //   referencedColumns: ["id"]
-          // }
+          },
         ]
       }
       bills: {
         Row: {
-          category_id: string | null // Added
+          category_id: string | null
           created_at: string | null
           grand_total: number | null
           id: string
@@ -127,13 +133,13 @@ export interface Database {
           payer_participant_id: string | null
           scheduled_at: string | null
           tax_amount: number | null
-          tax_tip_split_strategy: string | null 
+          tax_tip_split_strategy: string | null
           tip_amount: number | null
           updated_at: string | null
-          user_id: string | null 
+          user_id: string | null
         }
         Insert: {
-          category_id?: string | null // Added
+          category_id?: string | null
           created_at?: string | null
           grand_total?: number | null
           id?: string
@@ -147,7 +153,7 @@ export interface Database {
           user_id?: string | null
         }
         Update: {
-          category_id?: string | null // Added
+          category_id?: string | null
           created_at?: string | null
           grand_total?: number | null
           id?: string
@@ -162,23 +168,19 @@ export interface Database {
         }
         Relationships: [
           {
-            foreignKeyName: "bills_category_id_fkey" 
+            foreignKeyName: "bills_category_id_fkey"
             columns: ["category_id"]
+            isOneToOne: false
             referencedRelation: "bill_categories"
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "bills_payer_participant_id_fkey"
+            foreignKeyName: "fk_payer_participant"
             columns: ["payer_participant_id"]
+            isOneToOne: false
             referencedRelation: "bill_participants"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "bills_user_id_fkey"
-            columns: ["user_id"]
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          }
         ]
       }
       item_assignments: {
@@ -207,53 +209,48 @@ export interface Database {
           {
             foreignKeyName: "item_assignments_bill_item_id_fkey"
             columns: ["bill_item_id"]
+            isOneToOne: false
             referencedRelation: "bill_items"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "item_assignments_participant_id_fkey"
             columns: ["participant_id"]
+            isOneToOne: false
             referencedRelation: "bill_participants"
             referencedColumns: ["id"]
-          }
+          },
         ]
       }
       profiles: {
         Row: {
           avatar_url: string | null
+          email: string | null
           full_name: string | null
-          id: string 
+          id: string
+          phone_number: number | null
           updated_at: string | null
           username: string | null
-          email: string | null 
-          phone_number: string | null
         }
         Insert: {
           avatar_url?: string | null
+          email?: string | null
           full_name?: string | null
           id: string
+          phone_number?: number | null
           updated_at?: string | null
           username?: string | null
-          email?: string | null
-          phone_number?: string | null
         }
         Update: {
           avatar_url?: string | null
+          email?: string | null
           full_name?: string | null
           id?: string
+          phone_number?: number | null
           updated_at?: string | null
           username?: string | null
-          email?: string | null
-          phone_number?: string | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "profiles_id_fkey"
-            columns: ["id"]
-            referencedRelation: "users" 
-            referencedColumns: ["id"]
-          }
-        ]
+        Relationships: []
       }
       settlements: {
         Row: {
@@ -284,21 +281,24 @@ export interface Database {
           {
             foreignKeyName: "settlements_bill_id_fkey"
             columns: ["bill_id"]
+            isOneToOne: false
             referencedRelation: "bills"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "settlements_from_participant_id_fkey"
             columns: ["from_participant_id"]
+            isOneToOne: false
             referencedRelation: "bill_participants"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "settlements_to_participant_id_fkey"
             columns: ["to_participant_id"]
+            isOneToOne: false
             referencedRelation: "bill_participants"
             referencedColumns: ["id"]
-          }
+          },
         ]
       }
     }
@@ -306,10 +306,7 @@ export interface Database {
       [_ in never]: never
     }
     Functions: {
-      handle_updated_at: {
-        Args: Record<PropertyKey, never>
-        Returns: unknown
-      }
+      [_ in never]: never
     }
     Enums: {
       [_ in never]: never
@@ -319,3 +316,117 @@ export interface Database {
     }
   }
 }
+
+type DefaultSchema = Database[Extract<keyof Database, "public">]
+
+export type Tables<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
+    | { schema: keyof Database },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof Database
+  }
+    ? keyof (Database[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+        Database[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends { schema: keyof Database }
+  ? (Database[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+      Database[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
+      Row: infer R
+    }
+    ? R
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])
+    ? (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
+        Row: infer R
+      }
+      ? R
+      : never
+    : never
+
+export type TablesInsert<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof Database },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof Database
+  }
+    ? keyof Database[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends { schema: keyof Database }
+  ? Database[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Insert: infer I
+    }
+    ? I
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Insert: infer I
+      }
+      ? I
+      : never
+    : never
+
+export type TablesUpdate<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof Database },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof Database
+  }
+    ? keyof Database[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends { schema: keyof Database }
+  ? Database[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Update: infer U
+    }
+    ? U
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Update: infer U
+      }
+      ? U
+      : never
+    : never
+
+export type Enums<
+  DefaultSchemaEnumNameOrOptions extends
+    | keyof DefaultSchema["Enums"]
+    | { schema: keyof Database },
+  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+    schema: keyof Database
+  }
+    ? keyof Database[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
+    : never = never,
+> = DefaultSchemaEnumNameOrOptions extends { schema: keyof Database }
+  ? Database[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
+  : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
+    ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
+    : never
+
+export type CompositeTypes<
+  PublicCompositeTypeNameOrOptions extends
+    | keyof DefaultSchema["CompositeTypes"]
+    | { schema: keyof Database },
+  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+    schema: keyof Database
+  }
+    ? keyof Database[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
+    : never = never,
+> = PublicCompositeTypeNameOrOptions extends { schema: keyof Database }
+  ? Database[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
+  : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
+    ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
+    : never
+
+export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
+  public: {
+    Enums: {},
+  },
+} as const

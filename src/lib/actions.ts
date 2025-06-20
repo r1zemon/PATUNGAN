@@ -83,7 +83,7 @@ export async function signupUserAction(formData: FormData) {
         full_name: trimmedFullName,
         username: trimmedUsername,
         email: email,
-        phone_number: phoneNumber ? phoneNumber.trim() : null // Ensure phone_number is string
+        phone_number: phoneNumber ? phoneNumber.trim() : null
       });
 
     if (profileError) {
@@ -151,7 +151,7 @@ export async function getCurrentUserAction(): Promise<{ user: SupabaseUser | nul
   try {
     const { data: profileData, error: profileError } = await supabase
       .from('profiles')
-      .select('id, username, full_name, avatar_url, email') // Removed phone_number for now from UserProfileBasic
+      .select('id, username, full_name, avatar_url, email')
       .eq('id', user.id)
       .single();
 
@@ -816,7 +816,7 @@ export async function updateUserProfileAction(
     full_name?: string | null;
     username?: string | null;
     avatar_url?: string | null;
-    phone_number?: string | null; // Changed to string
+    phone_number?: string | null;
   },
   avatarFile?: File | null
 ): Promise<{ success: boolean; data?: any; error?: string | string[] }> {
@@ -1077,16 +1077,7 @@ export async function getBillsHistoryAction(): Promise<{ success: boolean; data?
   try {
     const { data: bills, error: billsError } = await supabase
       .from('bills')
-      .select(`
-        id,
-        name,
-        created_at,
-        grand_total,
-        payer_participant_id,
-        scheduled_at,
-        category_id,
-        bill_categories ( name )
-      `)
+      .select(`id, name, created_at, grand_total, payer_participant_id, scheduled_at, category_id, bill_categories(name)`)
       .eq('user_id', user.id)
       .or('grand_total.not.is.null,scheduled_at.not.is.null')
       .order('created_at', { ascending: false });
@@ -1423,21 +1414,50 @@ export async function getBillDetailsAction(billId: string): Promise<{ success: b
         };
     }
 
-    const { data: participantsData, error: participantsError } = await supabase
+    // Step 1: Fetch participants with their profile_id
+    const { data: participantsRawData, error: participantsFetchError } = await supabase
       .from('bill_participants')
-      .select('id, name, total_share_amount, profile_id, profiles (id, avatar_url)') // Fetch profile_id and avatar_url
+      .select('id, name, total_share_amount, profile_id') // Assuming profile_id exists on bill_participants
       .eq('bill_id', billId);
 
-    if (participantsError) {
-      console.error("Error fetching participants for bill:", participantsError);
-      return { success: false, error: `Gagal mengambil partisipan: ${participantsError.message}` };
+    if (participantsFetchError) {
+      console.error("Error fetching participants for bill (raw):", participantsFetchError);
+      return { success: false, error: `Gagal mengambil partisipan (raw): ${participantsFetchError.message}` };
+    }
+    if (!participantsRawData) {
+        return { success: false, error: "Tidak ada data partisipan yang ditemukan." };
     }
 
-    const participants: Person[] = (participantsData || []).map(p => ({
-        id: p.id,
-        name: p.name,
-        avatar_url: (p.profiles as any)?.avatar_url || null
+    // Step 2: Collect profile_ids
+    const profileIds = participantsRawData
+        .map(p => p.profile_id)
+        .filter(id => id !== null) as string[];
+
+    // Step 3: Fetch profiles if there are any profile_ids
+    let profilesMap = new Map<string, { avatar_url: string | null }>();
+    if (profileIds.length > 0) {
+        const { data: profilesData, error: profilesFetchError } = await supabase
+            .from('profiles')
+            .select('id, avatar_url')
+            .in('id', profileIds);
+
+        if (profilesFetchError) {
+            console.warn("Warning: Could not fetch profiles for participants:", profilesFetchError.message);
+            // Continue, avatars will be null for these participants
+        } else if (profilesData) {
+            profilesData.forEach(profile => {
+                profilesMap.set(profile.id, { avatar_url: profile.avatar_url });
+            });
+        }
+    }
+
+    // Step 4 & 5: Construct Person array with avatar_url
+    const participants: Person[] = participantsRawData.map(p_raw => ({
+        id: p_raw.id,
+        name: p_raw.name,
+        avatar_url: p_raw.profile_id ? (profilesMap.get(p_raw.profile_id)?.avatar_url || null) : null
     }));
+
 
     const { data: allBillItems, error: billItemsError } = await supabase
       .from('bill_items')
@@ -1461,30 +1481,30 @@ export async function getBillDetailsAction(billId: string): Promise<{ success: b
 
     let payerName = "Tidak Diketahui";
     if (bill.payer_participant_id) {
-      const payer = participantsData?.find(p => p.id === bill.payer_participant_id);
-      if (payer) payerName = payer.name;
+      const payerRaw = participantsRawData.find(p => p.id === bill.payer_participant_id);
+      if (payerRaw) payerName = payerRaw.name;
     }
 
     const personalTotalSharesFromDB: RawBillSummary = {};
-    (participantsData || []).forEach(p => {
-      personalTotalSharesFromDB[p.name] = p.total_share_amount ?? 0;
+    participantsRawData.forEach(p_raw => {
+      personalTotalSharesFromDB[p_raw.name] = p_raw.total_share_amount ?? 0;
     });
 
     const detailedPersonalSharesData: PersonalShareDetail[] = [];
-    const numParticipants = participants.length;
+    const numParticipants = participantsRawData.length;
 
-    for (const participant of (participantsData || [])) {
+    for (const participantRaw of participantsRawData) {
       const personDetail: PersonalShareDetail = {
-          personId: participant.id,
-          personName: participant.name,
+          personId: participantRaw.id,
+          personName: participantRaw.name,
           items: [],
           taxShare: 0,
           tipShare: 0,
           subTotalFromItems: 0,
-          totalShare: participant.total_share_amount || 0,
+          totalShare: participantRaw.total_share_amount || 0,
       };
 
-      const assignmentsForPerson = (allItemAssignments || []).filter(as => as.participant_id === participant.id);
+      const assignmentsForPerson = (allItemAssignments || []).filter(as => as.participant_id === participantRaw.id);
       for (const assignment of assignmentsForPerson) {
           const billItemData = (allBillItems || []).find(bi => bi.id === assignment.bill_item_id);
           if (billItemData) {
@@ -1503,7 +1523,7 @@ export async function getBillDetailsAction(billId: string): Promise<{ success: b
           personDetail.taxShare = (bill.tax_amount || 0) / numParticipants;
           personDetail.tipShare = (bill.tip_amount || 0) / numParticipants;
       } else if (bill.tax_tip_split_strategy === "PAYER_PAYS_ALL") {
-          if (participant.id === bill.payer_participant_id) {
+          if (participantRaw.id === bill.payer_participant_id) {
               personDetail.taxShare = bill.tax_amount || 0;
               personDetail.tipShare = bill.tip_amount || 0;
           }
@@ -1515,8 +1535,8 @@ export async function getBillDetailsAction(billId: string): Promise<{ success: b
       .from('settlements')
       .select(`
         amount,
-        from_participant:bill_participants!settlements_from_participant_id_fkey ( name, profiles (avatar_url) ),
-        to_participant:bill_participants!settlements_to_participant_id_fkey ( name, profiles (avatar_url) )
+        from_participant:bill_participants!settlements_from_participant_id_fkey ( name ),
+        to_participant:bill_participants!settlements_to_participant_id_fkey ( name )
       `)
       .eq('bill_id', billId);
 
@@ -1547,7 +1567,7 @@ export async function getBillDetailsAction(billId: string): Promise<{ success: b
         billName: bill.name,
         createdAt: bill.created_at || new Date().toISOString(),
         summaryData,
-        participants
+        participants // This now contains Person objects with avatar_url
       }
     };
 
@@ -1871,3 +1891,4 @@ export async function removeFriendAction(friendshipId: string): Promise<{ succes
         return { success: false, error: e.message || "Gagal menghapus teman." };
     }
 }
+

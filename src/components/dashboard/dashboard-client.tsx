@@ -30,6 +30,8 @@ const PREDEFINED_CATEGORY_COLORS: { [key: string]: string } = {
   "Hiburan": "hsl(var(--chart-3))",
   "Penginapan": "hsl(var(--chart-4))",
   "Lainnya": "hsl(var(--chart-5))",
+  // Tambahkan warna lain jika ada kategori baru yang sering muncul dan tidak masuk "Lainnya"
+  "Belanja Online": "hsl(var(--chart-1))", // Contoh, bisa disesuaikan
 };
 
 const CATEGORY_ICONS: { [key: string]: React.ElementType } = {
@@ -37,26 +39,55 @@ const CATEGORY_ICONS: { [key: string]: React.ElementType } = {
   "Transportasi": Car,
   "Hiburan": Gamepad2,
   "Penginapan": BedDouble,
-  "Belanja Online": Shapes, // Example from dummy data
-  "Lainnya": Shapes, // Default for "Lainnya" and other unmapped categories
+  "Belanja Online": Shapes,
+  "Lainnya": Shapes,
 };
+
+const DEFAULT_DASHBOARD_CATEGORIES = ["Makanan", "Transportasi", "Hiburan", "Penginapan", "Lainnya"];
 
 const getDummyDashboardData = (): DashboardData => {
   const now = new Date();
+  
+  // Start with some dummy expenses
+  let initialMonthlyExpenses: MonthlyExpenseByCategory[] = [
+    { categoryName: "Makanan", totalAmount: 750000, icon: CATEGORY_ICONS["Makanan"], color: PREDEFINED_CATEGORY_COLORS["Makanan"] },
+    { categoryName: "Transportasi", totalAmount: 250000, icon: CATEGORY_ICONS["Transportasi"], color: PREDEFINED_CATEGORY_COLORS["Transportasi"] },
+    { categoryName: "Hiburan", totalAmount: 300000, icon: CATEGORY_ICONS["Hiburan"], color: PREDEFINED_CATEGORY_COLORS["Hiburan"] },
+    // "Penginapan" will be added if missing
+    { categoryName: "Belanja Online", totalAmount: 450000, icon: CATEGORY_ICONS["Belanja Online"], color: PREDEFINED_CATEGORY_COLORS["Belanja Online"] },
+  ];
+
+  // Ensure all default categories are present
+  const finalMonthlyExpenses: MonthlyExpenseByCategory[] = [...initialMonthlyExpenses];
+  const existingCategoryNames = finalMonthlyExpenses.map(e => e.categoryName.toLowerCase());
+
+  DEFAULT_DASHBOARD_CATEGORIES.forEach(defaultCatName => {
+    if (!existingCategoryNames.includes(defaultCatName.toLowerCase())) {
+      finalMonthlyExpenses.push({
+        categoryName: defaultCatName,
+        totalAmount: 0,
+        icon: CATEGORY_ICONS[defaultCatName] || Shapes,
+        color: PREDEFINED_CATEGORY_COLORS[defaultCatName] || PREDEFINED_CATEGORY_COLORS["Lainnya"],
+      });
+    }
+  });
+  
+  // Sort categories for consistent display, e.g., by default order or alphabetically
+  finalMonthlyExpenses.sort((a, b) => {
+    const aIndex = DEFAULT_DASHBOARD_CATEGORIES.indexOf(a.categoryName);
+    const bIndex = DEFAULT_DASHBOARD_CATEGORIES.indexOf(b.categoryName);
+    if (aIndex !== -1 && bIndex !== -1) return aIndex - bIndex;
+    if (aIndex !== -1) return -1;
+    if (bIndex !== -1) return 1;
+    return a.categoryName.localeCompare(b.categoryName);
+  });
+
+
   return {
-    monthlyExpenses: [
-      { categoryName: "Makanan", totalAmount: 750000, icon: Utensils, color: PREDEFINED_CATEGORY_COLORS["Makanan"] },
-      { categoryName: "Transportasi", totalAmount: 250000, icon: Car, color: PREDEFINED_CATEGORY_COLORS["Transportasi"] },
-      { categoryName: "Hiburan", totalAmount: 300000, icon: Gamepad2, color: PREDEFINED_CATEGORY_COLORS["Hiburan"] },
-      { categoryName: "Penginapan", totalAmount: 0, icon: BedDouble, color: PREDEFINED_CATEGORY_COLORS["Penginapan"] }, // Example of zero expense
-      { categoryName: "Belanja Online", totalAmount: 450000, icon: Shapes, color: PREDEFINED_CATEGORY_COLORS["Lainnya"] }, // Example "Lainnya" category
-    ],
-    expenseChartData: [ // Dummy data for Bar Chart (monthly expenses by category)
-      { name: "Makanan", total: 750000 },
-      { name: "Transportasi", total: 250000 },
-      { name: "Hiburan", total: 300000 },
-      { name: "Belanja Online", total: 450000 },
-    ],
+    monthlyExpenses: finalMonthlyExpenses,
+    expenseChartData: finalMonthlyExpenses
+        .filter(e => e.totalAmount > 0) // Chart usually better without zero values
+        .map(e => ({ name: e.categoryName, total: e.totalAmount })),
     recentBills: [
       { id: "rb1", name: "Makan Malam Tim", createdAt: subDays(now, 2).toISOString(), grandTotal: 680000, categoryName: "Makanan", participantCount: 5 },
       { id: "rb2", name: "Bensin Mingguan", createdAt: subDays(now, 5).toISOString(), grandTotal: 150000, categoryName: "Transportasi", participantCount: 2 },
@@ -78,41 +109,32 @@ export function DashboardClient({ authUser }: DashboardClientProps) {
   const { toast } = useToast();
 
   useEffect(() => {
-    // Simulate fetching data with dummy data
     setIsLoading(true);
     setError(null);
     setTimeout(() => {
       setDashboardData(getDummyDashboardData());
       setIsLoading(false);
-    }, 500); // Simulate network delay
+    }, 500); 
   }, [authUser]);
 
   const chartConfig = useMemo(() => {
     const config: ChartConfig = {};
     const defaultOtherIcon = Shapes;
+    
+    const categoriesToConsider = dashboardData?.monthlyExpenses || 
+      DEFAULT_DASHBOARD_CATEGORIES.map(name => ({
+        categoryName: name, 
+        totalAmount:0, 
+        icon: CATEGORY_ICONS[name] || defaultOtherIcon,
+        color: PREDEFINED_CATEGORY_COLORS[name] || PREDEFINED_CATEGORY_COLORS["Lainnya"]
+      }));
 
-    dashboardData?.monthlyExpenses.forEach(expense => {
+    categoriesToConsider.forEach(expense => {
       config[expense.categoryName] = {
         label: expense.categoryName,
         color: expense.color || PREDEFINED_CATEGORY_COLORS[expense.categoryName] || PREDEFINED_CATEGORY_COLORS["Lainnya"],
         icon: expense.icon || CATEGORY_ICONS[expense.categoryName] || defaultOtherIcon,
       };
-    });
-    
-    const allCategoriesForLegend = ["Makanan", "Transportasi", "Hiburan", "Penginapan", "Lainnya"];
-    // Add any category from actual expenses that might not be in the predefined list (e.g., "Belanja Online")
-    dashboardData?.monthlyExpenses.map(e => e.categoryName).forEach(cn => {
-        if (!allCategoriesForLegend.includes(cn)) allCategoriesForLegend.push(cn);
-    });
-
-    allCategoriesForLegend.forEach(catName => {
-        if (!config[catName]) {
-            config[catName] = {
-                label: catName,
-                color: PREDEFINED_CATEGORY_COLORS[catName] || PREDEFINED_CATEGORY_COLORS["Lainnya"],
-                icon: CATEGORY_ICONS[catName] || defaultOtherIcon,
-            };
-        }
     });
     return config;
   }, [dashboardData?.monthlyExpenses]);
@@ -166,7 +188,6 @@ export function DashboardClient({ authUser }: DashboardClientProps) {
     <div className="container mx-auto px-4 sm:px-6 py-8 space-y-8">
       <h1 className="text-3xl font-semibold tracking-tight text-foreground">Dashboard Keuangan Anda</h1>
 
-      {/* Monthly Expenses Summary Cards */}
       <section>
         <Card>
             <CardHeader>
@@ -176,7 +197,7 @@ export function DashboardClient({ authUser }: DashboardClientProps) {
             <CardContent>
                 <p className="text-3xl font-bold text-primary">{formatCurrency(totalMonthlySpending)}</p>
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mt-4">
-                    {monthlyExpenses.filter(e => e.totalAmount > 0).map((expense) => {
+                    {monthlyExpenses.map((expense) => { // Removed filter
                        const Icon = expense.icon || CATEGORY_ICONS[expense.categoryName] || Shapes;
                        return (
                         <div key={expense.categoryName} className="flex flex-col items-center p-3 bg-muted/50 rounded-lg shadow-sm">
@@ -186,7 +207,7 @@ export function DashboardClient({ authUser }: DashboardClientProps) {
                         </div>
                        );
                     })}
-                     {monthlyExpenses.filter(e => e.totalAmount > 0).length === 0 && (
+                     {monthlyExpenses.length === 0 && ( // Should not happen if defaults are always added
                         <p className="col-span-full text-center text-sm text-muted-foreground py-4">Belum ada pengeluaran bulan ini.</p>
                     )}
                 </div>
@@ -194,7 +215,6 @@ export function DashboardClient({ authUser }: DashboardClientProps) {
         </Card>
       </section>
 
-      {/* Expense Bar Chart */}
       {expenseChartData.length > 0 ? (
         <section>
           <Card>
@@ -233,10 +253,8 @@ export function DashboardClient({ authUser }: DashboardClientProps) {
         </Card>
       )}
 
-      {/* Recent Activity Section */}
       <section>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Scheduled Bills */}
           <Card className="flex flex-col">
             <CardHeader>
               <CardTitle className="flex items-center"><CalendarClock className="mr-2 h-5 w-5 text-primary"/>Tagihan Terjadwal</CardTitle>
@@ -277,7 +295,6 @@ export function DashboardClient({ authUser }: DashboardClientProps) {
             )}
           </Card>
 
-          {/* Recent Bills History */}
           <Card className="flex flex-col">
             <CardHeader>
               <CardTitle className="flex items-center"><ListChecks className="mr-2 h-5 w-5 text-primary"/>Riwayat Tagihan Terbaru</CardTitle>

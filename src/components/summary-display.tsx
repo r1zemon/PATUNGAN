@@ -206,7 +206,7 @@ export function SummaryDisplay({ summary, people }: SummaryDisplayProps) {
           </CardContent>
         </Card>
       )}
-       {settlements.length === 0 && grandTotal > 0 && summary.personalTotalShares[payerName] === grandTotal && (
+       {settlements.length === 0 && grandTotal > 0 && summary.payerName && summary.personalTotalShares[summary.payerName] === grandTotal && (
         <Card className="shadow-lg">
             <CardHeader>
                 <CardTitle className="flex items-center"><ArrowRight className="mr-2 h-6 w-6 text-primary"/> Penyelesaian Pembayaran</CardTitle>

@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useEffect, useCallback, ChangeEvent } from "react";
@@ -14,7 +13,8 @@ import {
   getFriendsAction,
   acceptFriendRequestAction,
   declineOrCancelFriendRequestAction,
-  removeFriendAction
+  removeFriendAction,
+  getFriendRequestDetailsById // Ensure this is imported if used for new requests, or use getFriendRequestsAction to refresh
 } from "@/lib/actions";
 
 import { Button } from "@/components/ui/button";
@@ -36,7 +36,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
-
+import { supabase } from '@/lib/supabaseClient'; // Import client-side Supabase
 
 export default function SocialPage() {
   const [authUser, setAuthUser] = useState<SupabaseUser | null>(null);
@@ -96,6 +96,72 @@ export default function SocialPage() {
     init();
   }, [router, toast, fetchInitialData]);
 
+  useEffect(() => {
+    if (!authUser) return;
+
+    const channel = supabase
+      .channel('friend-requests-channel')
+      .on(
+        'postgres_changes',
+        { 
+          event: '*', // Listen to INSERT, UPDATE, DELETE
+          schema: 'public', 
+          table: 'friend_requests',
+          // Filter for requests involving the current user might be too complex here,
+          // so we refetch if any friend_request changes.
+          // A more specific filter could be `filter: \`receiver_id=eq.${authUser.id}\`` for new requests
+          // or `filter: \`requester_id=eq.${authUser.id}\`` for updates to sent requests.
+          // For simplicity and robustness for now, any change triggers a refresh.
+        },
+        async (payload) => {
+          console.log('Realtime friend_requests change received!', payload);
+          
+          // Check if the change is relevant to the current user
+          let relevantChange = false;
+          if (payload.eventType === 'INSERT' && payload.new.receiver_id === authUser.id) {
+            relevantChange = true;
+            // Fetch details for the new request to show a specific toast
+            const detailsResult = await getFriendRequestDetailsById(payload.new.id);
+            if (detailsResult.success && detailsResult.request) {
+                 toast({ 
+                    title: "Permintaan Pertemanan Baru!", 
+                    description: `${detailsResult.request.fullName || detailsResult.request.username} mengirimi Anda permintaan.`,
+                    duration: 5000 
+                });
+            } else {
+                 toast({ title: "Permintaan Pertemanan Baru!", description: "Anda menerima permintaan pertemanan baru.", duration: 5000 });
+            }
+          } else if (payload.eventType === 'UPDATE' || payload.eventType === 'DELETE') {
+            // Check if the old or new record involves the current user
+            const record = payload.new || payload.old;
+            if (record && (record.requester_id === authUser.id || record.receiver_id === authUser.id)) {
+              relevantChange = true;
+            }
+          }
+
+          if (relevantChange) {
+            // Refetch all data to ensure UI consistency
+            // This is simpler than trying to merge partial updates
+            fetchInitialData(authUser);
+          }
+        }
+      )
+      .subscribe((status, err) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('Subscribed to friend_requests changes!');
+        }
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          console.error('Realtime subscription error or timeout:', err);
+          toast({variant: "destructive", title: "Koneksi Realtime Gagal", description: "Gagal terhubung untuk pembaruan langsung. Coba segarkan halaman."})
+        }
+      });
+
+    return () => {
+      supabase.removeChannel(channel);
+      console.log('Unsubscribed from friend_requests changes.');
+    };
+  }, [authUser, fetchInitialData, toast]);
+
 
   const handleSearchUsers = async (query: string) => {
     if (!query.trim()) {
@@ -117,7 +183,6 @@ export default function SocialPage() {
     const result = await sendFriendRequestAction(receiverId);
     if (result.success) {
       toast({ title: "Permintaan Terkirim", description: "Permintaan pertemanan telah dikirim." });
-      // Optionally remove user from search results or update their status
       setSearchResults(prev => prev.filter(u => u.id !== receiverId));
     } else {
       toast({ variant: "destructive", title: "Gagal Mengirim Permintaan", description: result.error });
@@ -193,7 +258,7 @@ export default function SocialPage() {
               </TabsTrigger>
               <TabsTrigger value="requests" className="flex items-center gap-2">
                 <MailWarning className="h-4 w-4"/> Permintaan
-                {!isLoadingRequests && friendRequests.length > 0 && <Badge variant="destructive" className="ml-1 hidden sm:inline-flex">{friendRequests.length}</Badge>}
+                {!isLoadingRequests && friendRequests.length > 0 && <Badge variant="destructive" className="ml-1 hidden sm:inline-flex">{friendRequests.filter(r => r.status === 'pending').length}</Badge>}
               </TabsTrigger>
               <TabsTrigger value="add" className="flex items-center gap-2">
                 <UserSearch className="h-4 w-4"/> Tambah Teman
@@ -226,7 +291,6 @@ export default function SocialPage() {
                               <div className="flex-grow min-w-0">
                                 <p className="font-semibold text-foreground truncate">{friend.fullName || friend.username}</p>
                                 <p className="text-xs text-muted-foreground truncate">@{friend.username}</p>
-                                {/* isOnline status for later */}
                               </div>
                                <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
@@ -253,7 +317,7 @@ export default function SocialPage() {
             <TabsContent value="requests" className="mt-6">
               <Card>
                 <CardHeader>
-                  <CardTitle>Permintaan Pertemanan ({isLoadingRequests ? "Memuat..." : friendRequests.length})</CardTitle>
+                  <CardTitle>Permintaan Pertemanan ({isLoadingRequests ? "Memuat..." : friendRequests.filter(r => r.status === 'pending').length})</CardTitle>
                   <CardDescription>Permintaan pertemanan yang menunggu persetujuan Anda.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -261,12 +325,12 @@ export default function SocialPage() {
                      <div className="space-y-3">
                         {[...Array(2)].map((_, i) => <Skeleton key={i} className="h-24 rounded-lg" />)}
                     </div>
-                  ) : friendRequests.length === 0 ? (
+                  ) : friendRequests.filter(r => r.status === 'pending').length === 0 ? (
                      <p className="text-muted-foreground text-center py-4">Tidak ada permintaan pertemanan saat ini.</p>
                   ) : (
                     <ScrollArea className="h-[400px]">
                         <div className="space-y-4 pr-3">
-                        {friendRequests.map(request => (
+                        {friendRequests.filter(r => r.status === 'pending').map(request => (
                         <Card key={request.requestId} className="shadow-sm">
                             <CardContent className="p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                                 <div className="flex items-center space-x-3 flex-grow min-w-0">

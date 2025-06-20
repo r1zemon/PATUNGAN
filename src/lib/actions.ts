@@ -92,9 +92,9 @@ export async function signupUserAction(formData: FormData) {
       const { error: deleteUserError } = await supabase.auth.admin.deleteUser(authData.user.id);
       if (deleteUserError) {
           console.error("Error deleting auth user after profile creation failure:", deleteUserError);
-           return { success: false, error: `Pengguna berhasil dibuat di auth, tetapi gagal membuat profil: ${profileError.message}. Gagal menghapus pengguna auth setelahnya: ${deleteUserError.message}` };
+           return { success: false, error: "Pengguna berhasil dibuat di auth, tetapi gagal membuat profil: " + profileError.message + ". Gagal menghapus pengguna auth setelahnya: " + deleteUserError.message };
       }
-      return { success: false, error: `Pengguna berhasil dibuat di auth, tetapi gagal membuat profil: ${profileError.message}. Pengguna auth telah dihapus.` };
+      return { success: false, error: "Pengguna berhasil dibuat di auth, tetapi gagal membuat profil: " + profileError.message + ". Pengguna auth telah dihapus." };
     }
   } catch (e: any) {
       console.error("Exception during profile creation or auth user deletion:", e);
@@ -103,7 +103,7 @@ export async function signupUserAction(formData: FormData) {
       if (deleteUserError) {
           console.error("Error deleting auth user after profile creation exception:", deleteUserError);
       }
-      return { success: false, error: `Terjadi kesalahan server saat membuat profil: ${e.message}. Pengguna auth mungkin telah dihapus.` };
+      return { success: false, error: "Terjadi kesalahan server saat membuat profil: " + e.message + ". Pengguna auth mungkin telah dihapus." };
   }
 
 
@@ -142,7 +142,7 @@ export async function getCurrentUserAction(): Promise<{ user: SupabaseUser | nul
 
   if (authError) {
     console.error("Error getting user in getCurrentUserAction:", authError.message);
-    return { user: null, profile: null, error: `Gagal memuat sesi pengguna: ${authError.message}` };
+    return { user: null, profile: null, error: "Gagal memuat sesi pengguna: " + authError.message };
   }
   if (!user) {
     return { user: null, profile: null };
@@ -157,12 +157,12 @@ export async function getCurrentUserAction(): Promise<{ user: SupabaseUser | nul
 
     if (profileError && profileError.code !== 'PGRST116') { // PGRST116: No rows found
       console.error("Error fetching profile for user:", user.id, profileError.message);
-      return { user: user, profile: null, error: `Gagal mengambil profil: ${profileError.message}` };
+      return { user: user, profile: null, error: "Gagal mengambil profil: " + profileError.message };
     }
     return { user: user, profile: profileData as UserProfileBasic | null };
   } catch (e: any) {
     console.error("Exception fetching profile in getCurrentUserAction:", e);
-    return { user: user, profile: null, error: `Terjadi kesalahan server saat mengambil profil: ${e.message}` };
+    return { user: user, profile: null, error: "Terjadi kesalahan server saat mengambil profil: " + e.message };
   }
 }
 
@@ -203,7 +203,7 @@ export async function createBillCategoryAction(name: string): Promise<{ success:
 
     if (selectError && selectError.code !== 'PGRST116') {
       console.error("Error checking existing category:", selectError);
-      return { success: false, error: `Gagal memeriksa kategori yang ada: ${selectError.message}` };
+      return { success: false, error: "Gagal memeriksa kategori yang ada: " + selectError.message };
     }
 
     if (existingCategory) {
@@ -218,7 +218,7 @@ export async function createBillCategoryAction(name: string): Promise<{ success:
 
     if (insertError) {
       console.error("Error creating new category:", insertError);
-      return { success: false, error: `Gagal membuat kategori baru: ${insertError.message}` };
+      return { success: false, error: "Gagal membuat kategori baru: " + insertError.message };
     }
 
     if (!newCategoryData) {
@@ -258,7 +258,7 @@ export async function getUserCategoriesAction(): Promise<{ success: boolean; cat
 
     if (fetchError) {
       console.error("Error fetching user categories:", fetchError);
-      return { success: false, error: `Gagal mengambil kategori: ${fetchError.message}` };
+      return { success: false, error: "Gagal mengambil kategori: " + fetchError.message };
     }
 
     return { success: true, categories: categoriesData as BillCategory[] };
@@ -281,7 +281,7 @@ export async function createBillAction(
 
     if (authError) {
       console.error("createBillAction - authError:", authError.message);
-      return { success: false, error: `Gagal mendapatkan sesi pengguna (authError): ${authError.message}` };
+      return { success: false, error: "Gagal mendapatkan sesi pengguna (authError): " + authError.message };
     }
 
     if (!user) {
@@ -304,7 +304,7 @@ export async function createBillAction(
 
     if (billInsertError) {
       console.error("Error creating bill:", billInsertError);
-      return { success: false, error: `Gagal membuat tagihan di database: ${billInsertError.message}` };
+      return { success: false, error: "Gagal membuat tagihan di database: " + billInsertError.message };
     }
     if (!billData || !billData.id) {
       return { success: false, error: "Gagal membuat tagihan atau mengambil ID tagihan setelah insert." };
@@ -408,7 +408,7 @@ export async function handleScanReceiptAction(
 
       if (insertError) {
         console.error("handleScanReceiptAction (server): Error inserting scanned items to DB:", insertError);
-        return { success: false, error: `Gagal menyimpan item struk ke database: ${insertError.message}` };
+        return { success: false, error: "Gagal menyimpan item struk ke database: " + insertError.message };
       }
 
       if (!insertedDbItems) {
@@ -423,7 +423,7 @@ export async function handleScanReceiptAction(
         quantity: dbItem.quantity,
       }));
 
-      console.log(`handleScanReceiptAction (server): Scan successful, ${appItems.length} items mapped and saved to DB.`);
+      console.log("handleScanReceiptAction (server): Scan successful, " + appItems.length + " items mapped and saved to DB.");
       return { success: true, data: { items: appItems } };
     } else {
       console.error("handleScanReceiptAction (server): scanReceipt returned an unexpected structure:", aiResult);
@@ -433,13 +433,13 @@ export async function handleScanReceiptAction(
     console.error("handleScanReceiptAction (server): Critical error during scanReceipt call or DB operation:", error);
     let errorMessage = "Gagal memindai struk karena kesalahan server tak terduga. Silakan coba lagi.";
     if (error instanceof Error) {
-        errorMessage = `Pemindaian gagal: ${error.message}`;
+        errorMessage = "Pemindaian gagal: " + error.message;
         if (error.cause) {
           try {
             const causeString = String(error.cause);
-            errorMessage += ` (Penyebab: ${causeString.substring(0, 200)}${causeString.length > 200 ? '...' : ''})`;
+            errorMessage += " (Penyebab: " + causeString.substring(0, 200) + (causeString.length > 200 ? '...' : '') + ")";
           } catch (e) {
-              errorMessage += ` (Penyebab: Tidak dapat di-string-kan)`;
+              errorMessage += " (Penyebab: Tidak dapat di-string-kan)";
           }
         }
     }
@@ -473,7 +473,7 @@ export async function addBillItemToDbAction(
 
     if (error) {
       console.error("Error adding bill item to DB:", error);
-      return { success: false, error: `Failed to add item to database: ${error.message}` };
+      return { success: false, error: "Failed to add item to database: " + error.message };
     }
     if (!insertedItem) {
       return { success: false, error: "Failed to retrieve item data after insert." };
@@ -519,7 +519,7 @@ export async function updateBillItemInDbAction(
 
     if (error) {
       console.error("Error updating bill item in DB:", error);
-      return { success: false, error: `Failed to update item in database: ${error.message}` };
+      return { success: false, error: "Failed to update item in database: " + error.message };
     }
      if (!updatedItem) {
       return { success: false, error: "Failed to retrieve updated item data." };
@@ -556,7 +556,7 @@ export async function deleteBillItemFromDbAction(
 
     if (deleteAssignmentsError) {
       console.error("Error deleting item assignments for item ID:", itemId, deleteAssignmentsError);
-      return { success: false, error: `Failed to delete related item assignments: ${deleteAssignmentsError.message}` };
+      return { success: false, error: "Failed to delete related item assignments: " + deleteAssignmentsError.message };
     }
 
     // Then, delete the item itself
@@ -567,7 +567,7 @@ export async function deleteBillItemFromDbAction(
 
     if (deleteItemError) {
       console.error("Error deleting bill item from DB:", deleteItemError);
-      return { success: false, error: `Failed to delete item from database: ${deleteItemError.message}` };
+      return { success: false, error: "Failed to delete item from database: " + deleteItemError.message };
     }
 
     return { success: true };
@@ -603,7 +603,7 @@ export async function handleSummarizeBillAction(
 
     for (const person of people) {
         const { error: updateError } = await supabase.from('bill_participants').update({ total_share_amount: 0 }).eq('id', person.id);
-        if (updateError) console.warn(`Error setting share to 0 for ${person.name}: ${updateError.message}`);
+        if (updateError) console.warn("Error setting share to 0 for " + person.name + ": " + updateError.message);
     }
 
     await supabase.from('bills').update({
@@ -633,7 +633,7 @@ export async function handleSummarizeBillAction(
 
     if (fetchBillItemsError) {
       console.error("Error fetching bill_items for assignment processing:", fetchBillItemsError);
-      return { success: false, error: `Gagal mengambil item tagihan untuk alokasi: ${fetchBillItemsError.message}` };
+      return { success: false, error: "Gagal mengambil item tagihan untuk alokasi: " + fetchBillItemsError.message };
     }
 
     const billItemIdsForThisBill = (billItemsForThisBill || []).map(bi => bi.id);
@@ -646,21 +646,21 @@ export async function handleSummarizeBillAction(
 
       if (deleteAssignmentsError) {
         console.error("Error deleting old item assignments:", deleteAssignmentsError);
-        return { success: false, error: `Gagal menghapus alokasi item lama: ${deleteAssignmentsError.message}` };
+        return { success: false, error: "Gagal menghapus alokasi item lama: " + deleteAssignmentsError.message };
       }
     }
 
     const newAssignments: ItemAssignmentInsert[] = [];
     for (const item of splitItems) {
       if (!billItemIdsForThisBill.includes(item.id)) {
-          console.warn(`Item with id ${item.id} (name: ${item.name}) from client-side splitItems is not found in the database's bill_items for bill ${billId}. Skipping assignments for this item.`);
+          console.warn("Item with id " + item.id + " (name: " + item.name + ") from client-side splitItems is not found in the database's bill_items for bill " + billId + ". Skipping assignments for this item.");
           continue;
       }
       for (const assignment of item.assignedTo) {
         if (assignment.count > 0) {
           const participantExists = people.some(p => p.id === assignment.personId);
           if (!participantExists) {
-              console.warn(`Participant with id ${assignment.personId} for item ${item.name} assignment is not found in the current bill's participants. Skipping this assignment.`);
+              console.warn("Participant with id " + assignment.personId + " for item " + item.name + " assignment is not found in the current bill's participants. Skipping this assignment.");
               continue;
           }
           newAssignments.push({
@@ -679,12 +679,12 @@ export async function handleSummarizeBillAction(
 
       if (insertAssignmentsError) {
         console.error("Error inserting new item assignments:", insertAssignmentsError);
-        return { success: false, error: `Gagal menyimpan alokasi item baru: ${insertAssignmentsError.message}` };
+        return { success: false, error: "Gagal menyimpan alokasi item baru: " + insertAssignmentsError.message };
       }
     }
   } catch (e: any) {
     console.error("Exception during item assignment persistence:", e);
-    return { success: false, error: `Kesalahan server saat menyimpan alokasi item: ${e.message}` };
+    return { success: false, error: "Kesalahan server saat menyimpan alokasi item: " + e.message };
   }
   // --- End: Persist Item Assignments ---
 
@@ -734,8 +734,8 @@ export async function handleSummarizeBillAction(
     for (const result of participantUpdateResults) {
       if (!result.success && result.error) {
         const personNameFound = people.find(p=>p.id === result.personId)?.name || result.personId;
-        console.error(`Error updating participant share for ${personNameFound} in DB:`, result.error.message);
-        return { success: false, error: `Gagal memperbarui bagian untuk partisipan ${personNameFound} di database: ${result.error.message}` };
+        console.error("Error updating participant share for " + personNameFound + " in DB:", result.error.message);
+        return { success: false, error: "Gagal memperbarui bagian untuk partisipan " + personNameFound + " di database: " + result.error.message };
       }
     }
 
@@ -752,13 +752,13 @@ export async function handleSummarizeBillAction(
 
     if (billUpdateError) {
         console.error("Error updating bill details in DB:", billUpdateError);
-        return { success: false, error: `Gagal memperbarui detail tagihan (grand_total, etc.) di database: ${billUpdateError.message}` };
+        return { success: false, error: "Gagal memperbarui detail tagihan (grand_total, etc.) di database: " + billUpdateError.message };
     }
 
     const { error: deleteSettlementsError } = await supabase.from('settlements').delete().eq('bill_id', billId);
     if (deleteSettlementsError) {
         console.error("Error deleting old settlements from DB:", deleteSettlementsError);
-        return { success: false, error: `Gagal menghapus penyelesaian lama dari database: ${deleteSettlementsError.message}` };
+        return { success: false, error: "Gagal menghapus penyelesaian lama dari database: " + deleteSettlementsError.message };
     }
 
     const settlementPromises: Promise<PostgrestSingleResponse<any>>[] = [];
@@ -781,7 +781,7 @@ export async function handleSummarizeBillAction(
         for (const result of settlementInsertResults) {
           if (result.error) {
             console.error("Error inserting settlement to DB:", result.error);
-            return { success: false, error: `Gagal menyimpan penyelesaian ke database: ${result.error.message}` };
+            return { success: false, error: "Gagal menyimpan penyelesaian ke database: " + result.error.message };
           }
         }
     }
@@ -793,16 +793,16 @@ export async function handleSummarizeBillAction(
     console.error("Error summarizing bill with AI or saving summary:", error);
     let errorMessage = "Gagal meringkas tagihan. Silakan coba lagi.";
      if (error instanceof Error) {
-        errorMessage = `Ringkasan tagihan gagal: ${error.message}`;
+        errorMessage = "Ringkasan tagihan gagal: " + error.message;
          if (error.cause) {
             try {
                 if (typeof error.cause === 'object' && error.cause !== null && 'message' in error.cause) {
-                     errorMessage += ` (Penyebab: ${(error.cause as Error).message})`;
+                     errorMessage += " (Penyebab: " + (error.cause as Error).message + ")";
                 } else {
-                    errorMessage += ` (Penyebab: ${String(error.cause)})`;
+                    errorMessage += " (Penyebab: " + String(error.cause) + ")";
                 }
             } catch (e) {
-                errorMessage += ` (Penyebab: ${String(error.cause)})`;
+                errorMessage += " (Penyebab: " + String(error.cause) + ")";
             }
         }
     }
@@ -834,7 +834,7 @@ export async function updateUserProfileAction(
 
     if (fetchError && fetchError.code !== 'PGRST116') {
       console.error("Error fetching current profile:", fetchError);
-      return { success: false, error: `Gagal mengambil profil saat ini: ${fetchError.message}` };
+      return { success: false, error: "Gagal mengambil profil saat ini: " + fetchError.message };
     }
     if (!currentProfileData && fetchError?.code === 'PGRST116') {
         console.error("Profile not found for user ID:", userId);
@@ -901,14 +901,14 @@ export async function updateUserProfileAction(
 
     if (avatarFile) {
         const fileExt = avatarFile.name.split('.').pop();
-        const filePath = `public/avatars/${userId}/avatar.${fileExt}`;
+        const filePath = "public/avatars/" + userId + "/avatar." + fileExt;
         const { error: uploadError } = await supabase.storage
             .from('avatars')
             .upload(filePath, avatarFile, { cacheControl: '3600', upsert: true });
 
         if (uploadError) {
             console.error("Error uploading avatar:", uploadError);
-            errorMessages.push(`Gagal mengunggah avatar: ${uploadError.message}`);
+            errorMessages.push("Gagal mengunggah avatar: " + uploadError.message);
         } else {
             const { data: publicUrlData } = supabase.storage.from('avatars').getPublicUrl(filePath);
             if (publicUrlData && publicUrlData.publicUrl) {
@@ -945,7 +945,7 @@ export async function updateUserProfileAction(
 
       if (dbUpdateError) {
         console.error("Error updating profile in DB:", dbUpdateError);
-        return { success: false, data: currentProfileData, error: [`Gagal memperbarui profil di database: ${dbUpdateError.message}`] };
+        return { success: false, data: currentProfileData, error: ["Gagal memperbarui profil di database: " + dbUpdateError.message] };
       }
 
       revalidatePath('/app', 'layout');
@@ -961,7 +961,7 @@ export async function updateUserProfileAction(
 
   } catch (e: any) {
     console.error("Unhandled exception in updateUserProfileAction:", e);
-    return { success: false, error: `Kesalahan server tidak terduga: ${e.message || "Unknown error"}` };
+    return { success: false, error: "Kesalahan server tidak terduga: " + (e.message || "Unknown error") };
   }
 }
 
@@ -984,14 +984,14 @@ export async function removeAvatarAction(userId: string): Promise<{ success: boo
 
         if (fetchProfileError) {
             console.error("Error fetching profile for avatar removal:", fetchProfileError);
-            return { success: false, error: `Gagal mengambil profil: ${fetchProfileError.message}` };
+            return { success: false, error: "Gagal mengambil profil: " + fetchProfileError.message };
         }
 
         if (!currentProfile?.avatar_url) {
             return { success: true, data: { avatar_url: null }, error: "Tidak ada foto profil untuk dihapus." };
         }
 
-        const storagePathPrefix = `/storage/v1/object/public/avatars/`;
+        const storagePathPrefix = "/storage/v1/object/public/avatars/";
         let filePathInBucket = "";
 
         if (currentProfile.avatar_url.includes(storagePathPrefix)) {
@@ -1003,7 +1003,7 @@ export async function removeAvatarAction(userId: string): Promise<{ success: boo
                 .update({ avatar_url: null })
                 .eq('id', userId);
             if (dbOnlyError) {
-                return { success: false, error: `Format URL avatar tidak dikenali dan gagal menghapus dari database: ${dbOnlyError.message}` };
+                return { success: false, error: "Format URL avatar tidak dikenali dan gagal menghapus dari database: " + dbOnlyError.message };
             }
             revalidatePath('/app/profile', 'page');
             revalidatePath('/', 'layout');
@@ -1018,7 +1018,7 @@ export async function removeAvatarAction(userId: string): Promise<{ success: boo
                 .update({ avatar_url: null })
                 .eq('id', userId);
             if (dbOnlyError) {
-                return { success: false, error: `Path file avatar kosong setelah parsing dan gagal menghapus dari database: ${dbOnlyError.message}` };
+                return { success: false, error: "Path file avatar kosong setelah parsing dan gagal menghapus dari database: " + dbOnlyError.message };
             }
             revalidatePath('/app/profile', 'page');
             revalidatePath('/', 'layout');
@@ -1033,10 +1033,10 @@ export async function removeAvatarAction(userId: string): Promise<{ success: boo
 
         if (storageError) {
             if (storageError.message.toLowerCase().includes('not found')) {
-                console.warn(`Avatar file not found in storage at path ${filePathInBucket}, but proceeding to clear DB link.`);
+                console.warn("Avatar file not found in storage at path " + filePathInBucket + ", but proceeding to clear DB link.");
             } else {
                 console.error("Error deleting avatar from storage:", storageError);
-                return { success: false, error: `Gagal menghapus file avatar dari storage: ${storageError.message}` };
+                return { success: false, error: "Gagal menghapus file avatar dari storage: " + storageError.message };
             }
         }
 
@@ -1049,7 +1049,7 @@ export async function removeAvatarAction(userId: string): Promise<{ success: boo
 
         if (!updateSuccess) {
             console.error("Error clearing avatar_url in DB via updateUserProfileAction:", dbUpdateError);
-            return { success: false, error: `Gagal mengosongkan URL avatar di database: ${Array.isArray(dbUpdateError) ? dbUpdateError.join(", ") : dbUpdateError}` };
+            return { success: false, error: "Gagal mengosongkan URL avatar di database: " + (Array.isArray(dbUpdateError) ? dbUpdateError.join(", ") : dbUpdateError) };
         }
 
         revalidatePath('/app/profile', 'page');
@@ -1061,7 +1061,7 @@ export async function removeAvatarAction(userId: string): Promise<{ success: boo
         return { success: true, data: { avatar_url: null } };
     } catch (e: any) {
         console.error("Unhandled exception in removeAvatarAction:", e);
-        return { success: false, error: `Kesalahan server tidak terduga saat menghapus avatar: ${e.message || "Unknown error"}` };
+        return { success: false, error: "Kesalahan server tidak terduga saat menghapus avatar: " + (e.message || "Unknown error") };
     }
 }
 
@@ -1077,14 +1077,14 @@ export async function getBillsHistoryAction(): Promise<{ success: boolean; data?
   try {
     const { data: bills, error: billsError } = await supabase
       .from('bills')
-      .select(`id, name, created_at, grand_total, payer_participant_id, scheduled_at, category_id, bill_categories(name)`)
+      .select('id, name, created_at, grand_total, payer_participant_id, scheduled_at, category_id, bill_categories(name)')
       .eq('user_id', user.id)
       .or('grand_total.not.is.null,scheduled_at.not.is.null')
       .order('created_at', { ascending: false });
 
     if (billsError) {
       console.error("Error fetching bills history:", billsError);
-      return { success: false, error: `Gagal mengambil riwayat tagihan: ${billsError.message}` };
+      return { success: false, error: "Gagal mengambil riwayat tagihan: " + billsError.message };
     }
 
     if (!bills) {
@@ -1102,7 +1102,7 @@ export async function getBillsHistoryAction(): Promise<{ success: boolean; data?
           .eq('id', bill.payer_participant_id)
           .single();
         if (payerError) {
-          console.warn(`Could not fetch payer name for bill ${bill.id}: ${payerError.message}`);
+          console.warn("Could not fetch payer name for bill " + bill.id + ": " + payerError.message);
         } else {
           payerName = payerData?.name || null;
         }
@@ -1114,7 +1114,7 @@ export async function getBillsHistoryAction(): Promise<{ success: boolean; data?
         .eq('bill_id', bill.id);
 
       if (countError) {
-        console.warn(`Could not fetch participant count for bill ${bill.id}: ${countError.message}`);
+        console.warn("Could not fetch participant count for bill " + bill.id + ": " + countError.message);
       }
 
       const categoryName = (bill.bill_categories as any)?.name || null;
@@ -1178,7 +1178,7 @@ export async function getDashboardDataAction(): Promise<{ success: boolean; data
 
     if (categoriesError) {
       console.error("Error fetching user categories for dashboard:", categoriesError);
-      return { success: false, error: `Gagal mengambil kategori pengguna: ${categoriesError.message}` };
+      return { success: false, error: "Gagal mengambil kategori pengguna: " + categoriesError.message };
     }
 
     const now = new Date();
@@ -1196,7 +1196,7 @@ export async function getDashboardDataAction(): Promise<{ success: boolean; data
 
     if (billsError) {
       console.error("Error fetching monthly bills for dashboard:", billsError);
-      return { success: false, error: `Gagal mengambil data tagihan bulanan: ${billsError.message}` };
+      return { success: false, error: "Gagal mengambil data tagihan bulanan: " + billsError.message };
     }
 
     const spendingPerCategory: Record<string, number> = {};
@@ -1275,13 +1275,7 @@ export async function getDashboardDataAction(): Promise<{ success: boolean; data
 
     const { data: dbRecentBills, error: recentBillsError } = await supabase
         .from('bills')
-        .select(`
-            id,
-            name,
-            created_at,
-            grand_total,
-            bill_categories ( name )
-        `)
+        .select('id, name, created_at, grand_total, bill_categories ( name )')
         .eq('user_id', user.id)
         .not('grand_total', 'is', null)
         .not('payer_participant_id', 'is', null)
@@ -1290,7 +1284,7 @@ export async function getDashboardDataAction(): Promise<{ success: boolean; data
 
     if (recentBillsError) {
         console.error("Error fetching recent bills for dashboard:", recentBillsError);
-        return { success: false, error: `Gagal mengambil tagihan terbaru: ${recentBillsError.message}` };
+        return { success: false, error: "Gagal mengambil tagihan terbaru: " + recentBillsError.message };
     }
 
     const recentBills: RecentBillDisplayItem[] = [];
@@ -1314,12 +1308,7 @@ export async function getDashboardDataAction(): Promise<{ success: boolean; data
 
     const { data: dbScheduledBills, error: scheduledBillsError } = await supabase
         .from('bills')
-        .select(`
-            id,
-            name,
-            scheduled_at,
-            bill_categories ( name )
-        `)
+        .select('id, name, scheduled_at, bill_categories ( name )')
         .eq('user_id', user.id)
         .is('grand_total', null)
         .not('scheduled_at', 'is', null)
@@ -1329,7 +1318,7 @@ export async function getDashboardDataAction(): Promise<{ success: boolean; data
 
     if (scheduledBillsError) {
         console.error("Error fetching scheduled bills for dashboard:", scheduledBillsError);
-        return { success: false, error: `Gagal mengambil tagihan terjadwal: ${scheduledBillsError.message}` };
+        return { success: false, error: "Gagal mengambil tagihan terjadwal: " + scheduledBillsError.message };
     }
 
     const scheduledBills: ScheduledBillDisplayItem[] = [];
@@ -1387,7 +1376,7 @@ export async function getBillDetailsAction(billId: string): Promise<{ success: b
 
     if (billError) {
       console.error("Error fetching bill details:", billError);
-      return { success: false, error: `Gagal mengambil detail tagihan: ${billError.message}` };
+      return { success: false, error: "Gagal mengambil detail tagihan: " + billError.message };
     }
     if (!bill) {
       return { success: false, error: "Tagihan tidak ditemukan atau Anda tidak memiliki akses." };
@@ -1414,26 +1403,23 @@ export async function getBillDetailsAction(billId: string): Promise<{ success: b
         };
     }
 
-    // Step 1: Fetch participants with their profile_id
     const { data: participantsRawData, error: participantsFetchError } = await supabase
       .from('bill_participants')
-      .select('id, name, total_share_amount, profile_id') // Assuming profile_id exists on bill_participants
+      .select('id, name, total_share_amount, profile_id') 
       .eq('bill_id', billId);
 
     if (participantsFetchError) {
       console.error("Error fetching participants for bill (raw):", participantsFetchError);
-      return { success: false, error: `Gagal mengambil partisipan (raw): ${participantsFetchError.message}` };
+      return { success: false, error: "Gagal mengambil partisipan (raw): " + participantsFetchError.message };
     }
     if (!participantsRawData) {
         return { success: false, error: "Tidak ada data partisipan yang ditemukan." };
     }
 
-    // Step 2: Collect profile_ids
     const profileIds = participantsRawData
         .map(p => p.profile_id)
         .filter(id => id !== null) as string[];
 
-    // Step 3: Fetch profiles if there are any profile_ids
     let profilesMap = new Map<string, { avatar_url: string | null }>();
     if (profileIds.length > 0) {
         const { data: profilesData, error: profilesFetchError } = await supabase
@@ -1443,7 +1429,6 @@ export async function getBillDetailsAction(billId: string): Promise<{ success: b
 
         if (profilesFetchError) {
             console.warn("Warning: Could not fetch profiles for participants:", profilesFetchError.message);
-            // Continue, avatars will be null for these participants
         } else if (profilesData) {
             profilesData.forEach(profile => {
                 profilesMap.set(profile.id, { avatar_url: profile.avatar_url });
@@ -1451,7 +1436,6 @@ export async function getBillDetailsAction(billId: string): Promise<{ success: b
         }
     }
 
-    // Step 4 & 5: Construct Person array with avatar_url
     const participants: Person[] = participantsRawData.map(p_raw => ({
         id: p_raw.id,
         name: p_raw.name,
@@ -1466,7 +1450,7 @@ export async function getBillDetailsAction(billId: string): Promise<{ success: b
 
     if (billItemsError) {
       console.error("Error fetching bill items:", billItemsError);
-      return { success: false, error: `Gagal mengambil item tagihan: ${billItemsError.message}` };
+      return { success: false, error: "Gagal mengambil item tagihan: " + billItemsError.message };
     }
 
     const { data: allItemAssignments, error: assignmentsError } = await supabase
@@ -1476,7 +1460,7 @@ export async function getBillDetailsAction(billId: string): Promise<{ success: b
 
     if (assignmentsError) {
       console.error("Error fetching item assignments:", assignmentsError);
-      return { success: false, error: `Gagal mengambil alokasi item: ${assignmentsError.message}` };
+      return { success: false, error: "Gagal mengambil alokasi item: " + assignmentsError.message };
     }
 
     let payerName = "Tidak Diketahui";
@@ -1533,16 +1517,12 @@ export async function getBillDetailsAction(billId: string): Promise<{ success: b
 
     const { data: settlementsData, error: settlementsError } = await supabase
       .from('settlements')
-      .select(`
-        amount,
-        from_participant:bill_participants!settlements_from_participant_id_fkey ( name ),
-        to_participant:bill_participants!settlements_to_participant_id_fkey ( name )
-      `)
+      .select('amount, from_participant:bill_participants!settlements_from_participant_id_fkey ( name ), to_participant:bill_participants!settlements_to_participant_id_fkey ( name )')
       .eq('bill_id', billId);
 
     if (settlementsError) {
       console.error("Error fetching settlements for bill:", settlementsError);
-      return { success: false, error: `Gagal mengambil penyelesaian: ${settlementsError.message}` };
+      return { success: false, error: "Gagal mengambil penyelesaian: " + settlementsError.message };
     }
 
     const settlements: Settlement[] = (settlementsData || []).map(s => ({
@@ -1567,7 +1547,7 @@ export async function getBillDetailsAction(billId: string): Promise<{ success: b
         billName: bill.name,
         createdAt: bill.created_at || new Date().toISOString(),
         summaryData,
-        participants // This now contains Person objects with avatar_url
+        participants
       }
     };
 
@@ -1595,7 +1575,7 @@ export async function searchUsersAction(query: string): Promise<{ success: boole
     const { data, error } = await supabase
       .from('profiles')
       .select('id, username, full_name, avatar_url')
-      .or(`username.ilike.%${query}%,full_name.ilike.%${query}%`)
+      .or("username.ilike.%" + query + "%,full_name.ilike.%" + query +"%")
       .neq('id', currentUser.id) // Exclude current user
       .limit(10);
 
@@ -1619,26 +1599,24 @@ export async function sendFriendRequestAction(receiverId: string): Promise<{ suc
   }
 
   try {
-    // Check if already friends
     const { data: existingFriendship, error: friendshipCheckError } = await supabase
       .from('friendships')
       .select('id')
-      .or(`user1_id.eq.${requester.id},user2_id.eq.${requester.id}`)
-      .or(`user1_id.eq.${receiverId},user2_id.eq.${receiverId}`)
-      .eq('user1_id', requester.id < receiverId ? requester.id : receiverId) // Simplified check
-      .eq('user2_id', requester.id < receiverId ? receiverId : requester.id)
+      .or("user1_id.eq." + requester.id + ",user2_id.eq." + requester.id)
+      .or("user1_id.eq." + receiverId + ",user2_id.eq." + receiverId)
+      .filter('user1_id', 'in', "(" + requester.id + "," + receiverId + ")")
+      .filter('user2_id', 'in', "(" + requester.id + "," + receiverId + ")")
       .maybeSingle();
 
     if (friendshipCheckError) throw friendshipCheckError;
     if (existingFriendship) return { success: false, error: "Anda sudah berteman dengan pengguna ini." };
 
 
-    // Check for existing pending request (either way)
     const { data: existingRequest, error: requestCheckError } = await supabase
         .from('friend_requests')
         .select('id, status, requester_id')
-        .or(`and(requester_id.eq.${requester.id},receiver_id.eq.${receiverId}),and(requester_id.eq.${receiverId},receiver_id.eq.${requester.id})`)
-        .in('status', ['pending', 'accepted']) // 'accepted' means friendship should exist, but check as safeguard
+        .or("and(requester_id.eq." + requester.id + ",receiver_id.eq." + receiverId + "),and(requester_id.eq." + receiverId + ",receiver_id.eq." + requester.id + ")")
+        .in('status', ['pending', 'accepted']) 
         .maybeSingle();
 
 
@@ -1663,7 +1641,7 @@ export async function sendFriendRequestAction(receiverId: string): Promise<{ suc
       .insert({ requester_id: requester.id, receiver_id: receiverId, status: 'pending' });
 
     if (insertError) {
-        if (insertError.code === '23505') { // Unique violation
+        if (insertError.code === '23505') { 
             return { success: false, error: "Permintaan pertemanan sudah ada atau Anda sudah berteman." };
         }
         throw insertError;
@@ -1687,22 +1665,16 @@ export async function getFriendRequestsAction(): Promise<{ success: boolean; req
   try {
     const { data, error } = await supabase
       .from('friend_requests')
-      .select(`
-        id,
-        requester_id,
-        created_at,
-        status,
-        profile:profiles!friend_requests_requester_id_fkey (id, username, full_name, avatar_url)
-      `)
+      .select("id, requester_id, created_at, status, profile:profiles!friend_requests_requester_id_fkey (id, username, full_name, avatar_url)")
       .eq('receiver_id', user.id)
-      .eq('status', 'pending')
+      .eq('status', 'pending') // Only fetch pending requests for the "incoming" list
       .order('created_at', { ascending: false });
 
     if (error) throw error;
 
     const requests: FriendRequestDisplay[] = data.map(req => ({
       requestId: req.id,
-      id: (req.profile as UserProfileBasic).id,
+      id: (req.profile as UserProfileBasic).id, // Requester's ID
       username: (req.profile as UserProfileBasic).username,
       fullName: (req.profile as UserProfileBasic).full_name,
       avatarUrl: (req.profile as UserProfileBasic).avatar_url,
@@ -1713,6 +1685,49 @@ export async function getFriendRequestsAction(): Promise<{ success: boolean; req
   } catch (e: any) {
     console.error("Error fetching friend requests:", e);
     return { success: false, error: e.message || "Gagal mengambil permintaan pertemanan." };
+  }
+}
+
+// New helper action to get details for a single friend request (e.g., for toast notifications)
+export async function getFriendRequestDetailsById(requestId: string): Promise<{ success: boolean; request?: FriendRequestDisplay; error?: string }> {
+  const supabase = createSupabaseServerClient();
+  const { data: { user: currentUser }, error: authError } = await supabase.auth.getUser();
+
+  if (authError || !currentUser) {
+    return { success: false, error: "Pengguna tidak terautentikasi." };
+  }
+
+  try {
+    const { data: req, error } = await supabase
+      .from('friend_requests')
+      .select("id, requester_id, receiver_id, created_at, status, profile:profiles!friend_requests_requester_id_fkey (id, username, full_name, avatar_url)")
+      .eq('id', requestId)
+      .single();
+    
+    if (error || !req) {
+        console.error("Error fetching single friend request details:", error);
+        return { success: false, error: error?.message || "Permintaan tidak ditemukan." };
+    }
+    
+    // Ensure the current user is part of this request for security/relevance
+    if (req.receiver_id !== currentUser.id && req.requester_id !== currentUser.id) {
+        return { success: false, error: "Tidak berhak melihat detail permintaan ini." };
+    }
+
+    const requestDetails: FriendRequestDisplay = {
+      requestId: req.id,
+      id: (req.profile as UserProfileBasic).id,
+      username: (req.profile as UserProfileBasic).username,
+      fullName: (req.profile as UserProfileBasic).full_name,
+      avatarUrl: (req.profile as UserProfileBasic).avatar_url,
+      requestedAt: req.created_at,
+      status: req.status as FriendRequestDisplay['status'],
+    };
+    return { success: true, request: requestDetails };
+
+  } catch (e: any) {
+    console.error("Exception in getFriendRequestDetailsById:", e);
+    return { success: false, error: e.message || "Gagal mengambil detail permintaan." };
   }
 }
 
@@ -1742,14 +1757,12 @@ export async function acceptFriendRequestAction(requestId: string): Promise<{ su
       return { success: false, error: "Permintaan ini sudah tidak pending." };
     }
 
-    // Update request status
     const { error: updateError } = await supabase
       .from('friend_requests')
       .update({ status: 'accepted', updated_at: new Date().toISOString() })
       .eq('id', requestId);
     if (updateError) throw updateError;
 
-    // Create friendship
     const user1_id = request.requester_id < request.receiver_id ? request.requester_id : request.receiver_id;
     const user2_id = request.requester_id < request.receiver_id ? request.receiver_id : request.requester_id;
 
@@ -1757,15 +1770,12 @@ export async function acceptFriendRequestAction(requestId: string): Promise<{ su
       .from('friendships')
       .insert({ user1_id: user1_id, user2_id: user2_id });
     if (friendshipError) {
-        if (friendshipError.code === '23505') { // unique_violation for uq_friendship_pair
+        if (friendshipError.code === '23505') { 
              console.warn("Friendship already exists, but request was pending. Proceeding.");
         } else {
-            // Rollback request status update if friendship creation fails for other reasons? Complex.
-            // For now, log and report.
             console.error("Error creating friendship after accepting request:", friendshipError);
-            // Attempt to revert request status for consistency, though this might also fail.
             await supabase.from('friend_requests').update({ status: 'pending' }).eq('id', requestId);
-            return { success: false, error: `Gagal membuat pertemanan: ${friendshipError.message}` };
+            return { success: false, error: "Gagal membuat pertemanan: " + friendshipError.message };
         }
     }
     revalidatePath('/app/social', 'page');
@@ -1812,83 +1822,104 @@ export async function declineOrCancelFriendRequestAction(requestId: string, acti
     revalidatePath('/app/social', 'page');
     return { success: true };
   } catch (e: any) {
-    console.error(`Error ${actionType === 'decline' ? 'declining' : 'cancelling'} friend request:`, e);
+    console.error(`Error ${actionType}ing friend request:`, e);
     return { success: false, error: e.message || `Gagal ${actionType === 'decline' ? 'menolak' : 'membatalkan'} permintaan.` };
   }
 }
 
 export async function getFriendsAction(): Promise<{ success: boolean; friends?: FriendDisplay[]; error?: string }> {
-    const supabase = createSupabaseServerClient();
-    const { data: { user: currentUser }, error: authError } = await supabase.auth.getUser();
+  const supabase = createSupabaseServerClient();
+  const { data: { user: currentUser }, error: authError } = await supabase.auth.getUser();
 
-    if (authError || !currentUser) {
-        return { success: false, error: "Pengguna tidak terautentikasi." };
-    }
+  if (authError || !currentUser) {
+    return { success: false, error: "Pengguna tidak terautentikasi." };
+  }
+  try {
+    const { data, error } = await supabase
+        .from('friendships')
+        .select(`
+            id, 
+            created_at,
+            user1:profiles!friendships_user1_id_fkey(id, username, full_name, avatar_url),
+            user2:profiles!friendships_user2_id_fkey(id, username, full_name, avatar_url)
+        `)
+        .or(`user1_id.eq.${currentUser.id},user2_id.eq.${currentUser.id}`)
+        .order('created_at', { ascending: false });
 
-    try {
-        const { data, error } = await supabase
-            .from('friendships')
-            .select(`
-                id,
-                created_at,
-                user1:profiles!friendships_user1_id_fkey (id, username, full_name, avatar_url),
-                user2:profiles!friendships_user2_id_fkey (id, username, full_name, avatar_url)
-            `)
-            .or(`user1_id.eq.${currentUser.id},user2_id.eq.${currentUser.id}`);
+    if (error) throw error;
 
-        if (error) throw error;
-
-        const friends: FriendDisplay[] = data.map(f => {
-            const friendProfile = f.user1_id === currentUser.id ? f.user2 as UserProfileBasic : f.user1 as UserProfileBasic;
-            return {
-                friendshipId: f.id,
-                id: friendProfile.id,
-                username: friendProfile.username,
-                fullName: friendProfile.full_name,
-                avatarUrl: friendProfile.avatar_url,
-                since: f.created_at,
-            };
-        }).sort((a,b) => (a.fullName || a.username || "").localeCompare(b.fullName || b.username || ""));
-
-        return { success: true, friends };
-    } catch (e: any) {
-        console.error("Error fetching friends:", e);
-        return { success: false, error: e.message || "Gagal mengambil daftar teman." };
-    }
+    const friends: FriendDisplay[] = data.map(f => {
+        const friendProfile = (f.user1 as UserProfileBasic).id === currentUser.id ? f.user2 as UserProfileBasic : f.user1 as UserProfileBasic;
+        return {
+            friendshipId: f.id,
+            id: friendProfile.id,
+            username: friendProfile.username,
+            fullName: friendProfile.full_name,
+            avatarUrl: friendProfile.avatar_url,
+            since: f.created_at,
+        };
+    });
+    return { success: true, friends };
+  } catch (e: any) {
+    console.error("Error fetching friends:", e);
+    return { success: false, error: e.message || "Gagal mengambil daftar teman." };
+  }
 }
 
 export async function removeFriendAction(friendshipId: string): Promise<{ success: boolean; error?: string }> {
-    const supabase = createSupabaseServerClient();
-    const { data: { user: currentUser }, error: authError } = await supabase.auth.getUser();
+  const supabase = createSupabaseServerClient();
+  const { data: { user: currentUser }, error: authError } = await supabase.auth.getUser();
 
-    if (authError || !currentUser) {
-        return { success: false, error: "Pengguna tidak terautentikasi." };
+  if (authError || !currentUser) {
+    return { success: false, error: "Pengguna tidak terautentikasi." };
+  }
+  try {
+    const { data: friendship, error: fetchError } = await supabase
+        .from('friendships')
+        .select('user1_id, user2_id')
+        .eq('id', friendshipId)
+        .or(`user1_id.eq.${currentUser.id},user2_id.eq.${currentUser.id}`)
+        .single();
+    
+    if (fetchError || !friendship) {
+        throw new Error(fetchError?.message || "Pertemanan tidak ditemukan atau Anda tidak berhak menghapusnya.");
     }
+    
+    const { error: deleteError } = await supabase
+      .from('friendships')
+      .delete()
+      .eq('id', friendshipId);
 
-    try {
-        // Optional: Verify the current user is part of this friendship before deleting
-        const { data: friendship, error: fetchError } = await supabase
-            .from('friendships')
-            .select('user1_id, user2_id')
-            .eq('id', friendshipId)
-            .or(`user1_id.eq.${currentUser.id},user2_id.eq.${currentUser.id}`)
-            .single();
+    if (deleteError) throw deleteError;
+    
+    // Also, set related friend_requests to 'declined' or 'cancelled' if they were 'accepted'
+    // This prevents re-friending automatically if one user sends a new request.
+    // Find the original request that led to this friendship
+    const { data: requestToUpdate, error: findRequestError } = await supabase
+        .from('friend_requests')
+        .select('id')
+        .or(
+            `and(requester_id.eq.${friendship.user1_id},receiver_id.eq.${friendship.user2_id},status.eq.accepted),` +
+            `and(requester_id.eq.${friendship.user2_id},receiver_id.eq.${friendship.user1_id},status.eq.accepted)`
+        )
+        .maybeSingle(); // It's possible no request exists if friendship was added manually or if request was cleaned up
 
-        if (fetchError || !friendship) {
-            return { success: false, error: "Pertemanan tidak ditemukan atau Anda tidak berhak menghapusnya." };
+    if (findRequestError) {
+        console.warn("Error finding associated friend request for cleanup after removing friend:", findRequestError.message);
+    } else if (requestToUpdate) {
+        const { error: updateRequestError } = await supabase
+            .from('friend_requests')
+            .update({ status: 'cancelled', updated_at: new Date().toISOString() }) // Or 'declined'
+            .eq('id', requestToUpdate.id);
+        if (updateRequestError) {
+            console.warn("Error updating associated friend request status after removing friend:", updateRequestError.message);
         }
-
-        const { error: deleteError } = await supabase
-            .from('friendships')
-            .delete()
-            .eq('id', friendshipId);
-
-        if (deleteError) throw deleteError;
-        revalidatePath('/app/social', 'page');
-        return { success: true };
-    } catch (e: any) {
-        console.error("Error removing friend:", e);
-        return { success: false, error: e.message || "Gagal menghapus teman." };
     }
-}
 
+    revalidatePath('/app/social', 'page');
+    return { success: true };
+  } catch (e: any) {
+    console.error("Error removing friend:", e);
+    return { success: false, error: e.message || "Gagal menghapus teman." };
+  }
+}

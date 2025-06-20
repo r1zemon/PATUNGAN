@@ -164,7 +164,7 @@ export async function logoutUserAction() {
 
 export async function createBillCategoryAction(name: string): Promise<{ success: boolean; category?: BillCategory; error?: string }> {
   try {
-    const supabase = createSupabaseServerClient();
+    const supabase = createSupabaseServerClient(); // Keep for user auth check
     const { data: { user }, error: authError } = await supabase.auth.getUser();
 
     if (authError || !user) {
@@ -178,61 +178,34 @@ export async function createBillCategoryAction(name: string): Promise<{ success:
       return { success: false, error: "Nama kategori maksimal 20 karakter." };
     }
 
-    // Check if category with the same name already exists for this user
-    const { data: existingCategory, error: fetchError } = await supabase
-      .from('bill_categories')
-      .select('id')
-      .eq('user_id', user.id)
-      .eq('name', trimmedName)
-      .single();
+    // Skip database check and insert for dummy implementation
+    // console.log("Dummy createBillCategoryAction: Simulating category creation for:", trimmedName);
 
-    if (fetchError && fetchError.code !== 'PGRST116') { // PGRST116 means no rows found
-      console.error("Error checking existing category:", fetchError);
-      return { success: false, error: "Gagal memeriksa kategori yang ada." };
-    }
-    if (existingCategory) {
-      return { success: false, error: "Kategori dengan nama tersebut sudah ada." };
-    }
+    const dummyCategory: BillCategory = {
+      id: `dummy_cat_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+      user_id: user.id,
+      name: trimmedName,
+      created_at: new Date().toISOString(),
+    };
 
-    const { data: newCategoryData, error: insertError } = await supabase
-      .from('bill_categories')
-      .insert({ user_id: user.id, name: trimmedName })
-      .select()
-      .single();
+    return { success: true, category: dummyCategory };
 
-    if (insertError) {
-      console.error("Error creating bill category:", insertError);
-      return { success: false, error: `Gagal membuat kategori: ${insertError.message}` };
-    }
-    if (!newCategoryData) {
-        return { success: false, error: "Gagal membuat kategori atau data tidak kembali." };
-    }
-    return { success: true, category: newCategoryData as BillCategory };
   } catch (e: any) {
-    console.error("Exception in createBillCategoryAction:", e);
-    return { success: false, error: e.message || "Terjadi kesalahan server saat membuat kategori." };
+    console.error("Exception in DUMMY createBillCategoryAction (should not happen if DB calls removed):", e);
+    return { success: false, error: e.message || "Terjadi kesalahan server saat membuat kategori (dummy mode)." };
   }
 }
 
 export async function getUserCategoriesAction(): Promise<{ success: boolean; categories?: BillCategory[]; error?: string }> {
-  const supabase = createSupabaseServerClient();
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  // const supabase = createSupabaseServerClient(); // Keep for user auth check
+  // const { data: { user }, error: authError } = await supabase.auth.getUser();
 
-  if (authError || !user) {
-    return { success: false, error: "Pengguna tidak terautentikasi." };
-  }
-
-  const { data: categories, error } = await supabase
-    .from('bill_categories')
-    .select('*')
-    .eq('user_id', user.id)
-    .order('name', { ascending: true });
-
-  if (error) {
-    console.error("Error fetching user categories:", error);
-    return { success: false, error: `Gagal mengambil daftar kategori: ${error.message}` };
-  }
-  return { success: true, categories: categories as BillCategory[] };
+  // if (authError || !user) {
+  // return { success: false, error: "Pengguna tidak terautentikasi." };
+  // }
+  // console.log("Dummy getUserCategoriesAction: Returning empty list.");
+  // Skip database fetch for dummy implementation
+  return { success: true, categories: [] };
 }
 
 
@@ -258,7 +231,7 @@ export async function createBillAction(
     const billInsertData: Database['public']['Tables']['bills']['Insert'] = {
       name: billName || "Tagihan Baru",
       user_id: user.id,
-      category_id: categoryId,
+      category_id: categoryId, // This will be the dummy_cat_... ID or null
       scheduled_at: scheduledAt || null,
     };
 

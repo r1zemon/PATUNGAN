@@ -4,14 +4,14 @@
 import { useEffect, useState, useMemo } from 'react';
 import type { User as SupabaseUser } from "@supabase/supabase-js";
 import type { DashboardData, MonthlyExpenseByCategory, ExpenseChartDataPoint, RecentBillDisplayItem, ScheduledBillDisplayItem } from '@/lib/types';
-// import { getDashboardDataAction } from '@/lib/actions'; // Comment out for now
+import { getDashboardDataAction } from '@/lib/actions';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { BarChart, CalendarClock, ChevronRight, ChevronsUpDown, Info, ListChecks, Loader2, PieChart, TrendingUp, Users, Wallet, XCircle, Tag, Clock, Utensils, Car, Gamepad2, BedDouble, Shapes } from 'lucide-react';
+import { BarChart, CalendarClock, ChevronRight, Info, ListChecks, Loader2, PieChart, TrendingUp, Users, Wallet, XCircle, Tag, Clock, Shapes } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils';
-import { format, parseISO, addDays, subDays } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { id as IndonesianLocale } from 'date-fns/locale';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -24,83 +24,6 @@ interface DashboardClientProps {
   authUser: SupabaseUser;
 }
 
-const PREDEFINED_CATEGORY_COLORS: { [key: string]: string } = {
-  "Makanan": "hsl(var(--chart-1))",
-  "Transportasi": "hsl(var(--chart-2))",
-  "Hiburan": "hsl(var(--chart-3))",
-  "Penginapan": "hsl(var(--chart-4))",
-  "Lainnya": "hsl(var(--chart-5))",
-  // Tambahkan warna lain jika ada kategori baru yang sering muncul dan tidak masuk "Lainnya"
-  "Belanja Online": "hsl(var(--chart-1))", // Contoh, bisa disesuaikan
-};
-
-const CATEGORY_ICONS: { [key: string]: React.ElementType } = {
-  "Makanan": Utensils,
-  "Transportasi": Car,
-  "Hiburan": Gamepad2,
-  "Penginapan": BedDouble,
-  "Belanja Online": Shapes,
-  "Lainnya": Shapes,
-};
-
-const DEFAULT_DASHBOARD_CATEGORIES = ["Makanan", "Transportasi", "Hiburan", "Penginapan", "Lainnya"];
-
-const getDummyDashboardData = (): DashboardData => {
-  const now = new Date();
-  
-  // Start with some dummy expenses
-  let initialMonthlyExpenses: MonthlyExpenseByCategory[] = [
-    { categoryName: "Makanan", totalAmount: 750000, icon: CATEGORY_ICONS["Makanan"], color: PREDEFINED_CATEGORY_COLORS["Makanan"] },
-    { categoryName: "Transportasi", totalAmount: 250000, icon: CATEGORY_ICONS["Transportasi"], color: PREDEFINED_CATEGORY_COLORS["Transportasi"] },
-    { categoryName: "Hiburan", totalAmount: 300000, icon: CATEGORY_ICONS["Hiburan"], color: PREDEFINED_CATEGORY_COLORS["Hiburan"] },
-    // "Penginapan" will be added if missing
-    { categoryName: "Belanja Online", totalAmount: 450000, icon: CATEGORY_ICONS["Belanja Online"], color: PREDEFINED_CATEGORY_COLORS["Belanja Online"] },
-  ];
-
-  // Ensure all default categories are present
-  const finalMonthlyExpenses: MonthlyExpenseByCategory[] = [...initialMonthlyExpenses];
-  const existingCategoryNames = finalMonthlyExpenses.map(e => e.categoryName.toLowerCase());
-
-  DEFAULT_DASHBOARD_CATEGORIES.forEach(defaultCatName => {
-    if (!existingCategoryNames.includes(defaultCatName.toLowerCase())) {
-      finalMonthlyExpenses.push({
-        categoryName: defaultCatName,
-        totalAmount: 0,
-        icon: CATEGORY_ICONS[defaultCatName] || Shapes,
-        color: PREDEFINED_CATEGORY_COLORS[defaultCatName] || PREDEFINED_CATEGORY_COLORS["Lainnya"],
-      });
-    }
-  });
-  
-  // Sort categories for consistent display, e.g., by default order or alphabetically
-  finalMonthlyExpenses.sort((a, b) => {
-    const aIndex = DEFAULT_DASHBOARD_CATEGORIES.indexOf(a.categoryName);
-    const bIndex = DEFAULT_DASHBOARD_CATEGORIES.indexOf(b.categoryName);
-    if (aIndex !== -1 && bIndex !== -1) return aIndex - bIndex;
-    if (aIndex !== -1) return -1;
-    if (bIndex !== -1) return 1;
-    return a.categoryName.localeCompare(b.categoryName);
-  });
-
-
-  return {
-    monthlyExpenses: finalMonthlyExpenses,
-    expenseChartData: finalMonthlyExpenses
-        .filter(e => e.totalAmount > 0) // Chart usually better without zero values
-        .map(e => ({ name: e.categoryName, total: e.totalAmount })),
-    recentBills: [
-      { id: "rb1", name: "Makan Malam Tim", createdAt: subDays(now, 2).toISOString(), grandTotal: 680000, categoryName: "Makanan", participantCount: 5 },
-      { id: "rb2", name: "Bensin Mingguan", createdAt: subDays(now, 5).toISOString(), grandTotal: 150000, categoryName: "Transportasi", participantCount: 2 },
-      { id: "rb3", name: "Nonton Bioskop", createdAt: subDays(now, 7).toISOString(), grandTotal: 220000, categoryName: "Hiburan", participantCount: 4 },
-    ],
-    scheduledBills: [
-      { id: "sb1", name: "Trip ke Puncak", scheduled_at: addDays(now, 7).toISOString(), categoryName: "Hiburan", participantCount: 3 },
-      { id: "sb2", name: "Sewa Villa Bulanan", scheduled_at: addDays(now, 15).toISOString(), categoryName: "Penginapan", participantCount: 6 },
-    ],
-  };
-};
-
-
 export function DashboardClient({ authUser }: DashboardClientProps) {
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -109,31 +32,33 @@ export function DashboardClient({ authUser }: DashboardClientProps) {
   const { toast } = useToast();
 
   useEffect(() => {
-    setIsLoading(true);
-    setError(null);
-    setTimeout(() => {
-      setDashboardData(getDummyDashboardData());
+    const fetchData = async () => {
+      if (!authUser) {
+        setIsLoading(false);
+        return;
+      }
+      setIsLoading(true);
+      setError(null);
+      const result = await getDashboardDataAction();
+      if (result.success && result.data) {
+        setDashboardData(result.data);
+      } else {
+        setError(result.error || "Gagal memuat data dashboard.");
+        toast({ variant: "destructive", title: "Gagal Memuat", description: result.error || "Tidak dapat mengambil data dashboard."});
+      }
       setIsLoading(false);
-    }, 500); 
-  }, [authUser]);
+    };
+    fetchData();
+  }, [authUser, toast]);
 
   const chartConfig = useMemo(() => {
     const config: ChartConfig = {};
-    const defaultOtherIcon = Shapes;
-    
-    const categoriesToConsider = dashboardData?.monthlyExpenses || 
-      DEFAULT_DASHBOARD_CATEGORIES.map(name => ({
-        categoryName: name, 
-        totalAmount:0, 
-        icon: CATEGORY_ICONS[name] || defaultOtherIcon,
-        color: PREDEFINED_CATEGORY_COLORS[name] || PREDEFINED_CATEGORY_COLORS["Lainnya"]
-      }));
-
-    categoriesToConsider.forEach(expense => {
+    // Icons and colors are now part of MonthlyExpenseByCategory fetched from the action
+    dashboardData?.monthlyExpenses?.forEach(expense => {
       config[expense.categoryName] = {
         label: expense.categoryName,
-        color: expense.color || PREDEFINED_CATEGORY_COLORS[expense.categoryName] || PREDEFINED_CATEGORY_COLORS["Lainnya"],
-        icon: expense.icon || CATEGORY_ICONS[expense.categoryName] || defaultOtherIcon,
+        color: expense.color || "hsl(var(--chart-1))", // Fallback color
+        icon: expense.icon || Shapes, // Fallback icon
       };
     });
     return config;
@@ -197,8 +122,8 @@ export function DashboardClient({ authUser }: DashboardClientProps) {
             <CardContent>
                 <p className="text-3xl font-bold text-primary">{formatCurrency(totalMonthlySpending)}</p>
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mt-4">
-                    {monthlyExpenses.map((expense) => { // Removed filter
-                       const Icon = expense.icon || CATEGORY_ICONS[expense.categoryName] || Shapes;
+                    {monthlyExpenses.map((expense) => {
+                       const Icon = expense.icon || Shapes; // Default icon
                        return (
                         <div key={expense.categoryName} className="flex flex-col items-center p-3 bg-muted/50 rounded-lg shadow-sm">
                             <Icon className="h-6 w-6 mb-1.5" style={{ color: expense.color }} />
@@ -207,8 +132,8 @@ export function DashboardClient({ authUser }: DashboardClientProps) {
                         </div>
                        );
                     })}
-                     {monthlyExpenses.length === 0 && ( // Should not happen if defaults are always added
-                        <p className="col-span-full text-center text-sm text-muted-foreground py-4">Belum ada pengeluaran bulan ini.</p>
+                     {monthlyExpenses.length === 0 && (
+                        <p className="col-span-full text-center text-sm text-muted-foreground py-4">Belum ada pengeluaran bulan ini atau tidak ada kategori.</p>
                     )}
                 </div>
             </CardContent>
@@ -220,7 +145,7 @@ export function DashboardClient({ authUser }: DashboardClientProps) {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center"><BarChart className="mr-2 h-5 w-5 text-primary"/>Diagram Pengeluaran</CardTitle>
-              <CardDescription>Visualisasi pengeluaran Anda per kategori untuk bulan ini. (Sortir per periode akan datang)</CardDescription>
+              <CardDescription>Visualisasi pengeluaran Anda per kategori untuk bulan ini.</CardDescription>
             </CardHeader>
             <CardContent>
               <ChartContainer config={chartConfig} className="mx-auto aspect-video max-h-[350px]">
@@ -232,12 +157,12 @@ export function DashboardClient({ authUser }: DashboardClientProps) {
                     tickLine={false} 
                     axisLine={false}
                     tickFormatter={(value) => chartConfig[value]?.label || value}
-                    width={100}
+                    width={100} // Adjust width based on label length
                     />
                   <ChartTooltip cursor={false} content={<ChartTooltipContent hideLabel />} />
                   <Bar dataKey="total" layout="vertical" radius={5}>
                      {expenseChartData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={chartConfig[entry.name]?.color || PREDEFINED_CATEGORY_COLORS["Lainnya"]} />
+                        <Cell key={`cell-${index}`} fill={chartConfig[entry.name]?.color || "hsl(var(--chart-1))"} />
                       ))}
                   </Bar>
                   <ChartLegend content={<ChartLegendContent />} />
@@ -258,7 +183,7 @@ export function DashboardClient({ authUser }: DashboardClientProps) {
           <Card className="flex flex-col">
             <CardHeader>
               <CardTitle className="flex items-center"><CalendarClock className="mr-2 h-5 w-5 text-primary"/>Tagihan Terjadwal</CardTitle>
-              <CardDescription>Tagihan yang akan datang dan perlu diisi detailnya.</CardDescription>
+              <CardDescription>Tagihan yang akan datang dan perlu diisi detailnya. (Data Dummy)</CardDescription>
             </CardHeader>
             <CardContent className="flex-grow space-y-3">
               {scheduledBills.length > 0 ? (
@@ -298,7 +223,7 @@ export function DashboardClient({ authUser }: DashboardClientProps) {
           <Card className="flex flex-col">
             <CardHeader>
               <CardTitle className="flex items-center"><ListChecks className="mr-2 h-5 w-5 text-primary"/>Riwayat Tagihan Terbaru</CardTitle>
-              <CardDescription>3 tagihan terakhir yang telah diselesaikan.</CardDescription>
+              <CardDescription>3 tagihan terakhir yang telah diselesaikan. (Data Dummy)</CardDescription>
             </CardHeader>
             <CardContent className="flex-grow space-y-3">
               {recentBills.length > 0 ? (
@@ -346,4 +271,3 @@ export function DashboardClient({ authUser }: DashboardClientProps) {
     </div>
   );
 }
-

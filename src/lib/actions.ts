@@ -8,8 +8,8 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
 import type { PostgrestSingleResponse, User as SupabaseUser } from "@supabase/supabase-js";
 import type { Database } from '@/lib/database.types';
-import { Utensils, Car, Gamepad2, BedDouble, Shapes } from "lucide-react";
-import { format, startOfMonth, endOfMonth, subMonths, parseISO, eachDayOfInterval, getDay, addDays, startOfWeek, endOfWeek, startOfYear, endOfYear, eachMonthOfInterval } from 'date-fns';
+import { Utensils, Car, Gamepad2, BedDouble, Shapes, ShoppingBag } from "lucide-react"; // Added ShoppingBag
+import { format, startOfMonth, endOfMonth, parseISO, addDays, subDays } from 'date-fns';
 import { id as IndonesianLocale } from 'date-fns/locale';
 
 
@@ -194,24 +194,22 @@ export async function createBillCategoryAction(name: string): Promise<{ success:
       return { success: false, error: "Nama kategori maksimal 20 karakter." };
     }
 
-    // Check if category with the same name already exists for this user
     const { data: existingCategory, error: selectError } = await supabase
       .from('bill_categories')
-      .select('id')
+      .select('id, name, user_id, created_at')
       .eq('user_id', user.id)
-      .eq('name', trimmedName)
+      .ilike('name', trimmedName) // case-insensitive check
       .single();
 
-    if (selectError && selectError.code !== 'PGRST116') { // PGRST116: No rows found
+    if (selectError && selectError.code !== 'PGRST116') { 
       console.error("Error checking existing category:", selectError);
-      return { success: false, error: "Gagal memeriksa kategori yang ada." };
+      return { success: false, error: `Gagal memeriksa kategori yang ada: ${selectError.message}` };
     }
 
     if (existingCategory) {
-      return { success: false, error: `Kategori "${trimmedName}" sudah ada.` };
+      return { success: true, category: existingCategory as BillCategory, error: `Kategori "${trimmedName}" sudah ada.` };
     }
 
-    // Create new category
     const { data: newCategoryData, error: insertError } = await supabase
       .from('bill_categories')
       .insert({ user_id: user.id, name: trimmedName })
@@ -227,7 +225,6 @@ export async function createBillCategoryAction(name: string): Promise<{ success:
         return { success: false, error: "Gagal membuat kategori baru atau data tidak kembali." };
     }
     
-    // Explicitly cast to BillCategory
     const finalCategory: BillCategory = {
         id: newCategoryData.id,
         user_id: newCategoryData.user_id,
@@ -294,7 +291,7 @@ export async function createBillAction(
     const billInsertData: Database['public']['Tables']['bills']['Insert'] = {
       name: billName || "Tagihan Baru",
       user_id: user.id,
-      category_id: categoryId, // Now included
+      category_id: categoryId, 
       scheduled_at: scheduledAt || null,
     };
 
@@ -858,10 +855,10 @@ export async function getBillsHistoryAction(): Promise<{ success: boolean; data?
         payer_participant_id, 
         scheduled_at,
         category_id,
-        bill_categories ( name ) 
+        bill_categories ( name )
       `)
       .eq('user_id', user.id)
-      .or('grand_total.not.is.null,scheduled_at.not.is.null')
+      .or('grand_total.not.is.null,scheduled_at.not.is.null') // Ensures either completed or scheduled bills are fetched
       .order('created_at', { ascending: false });
 
     if (billsError) {
@@ -899,14 +896,13 @@ export async function getBillsHistoryAction(): Promise<{ success: boolean; data?
         console.warn(`Could not fetch participant count for bill ${bill.id}: ${countError.message}`);
       }
       
-      // Safely access category name
       const categoryName = (bill.bill_categories as any)?.name || null;
 
       historyEntries.push({
         id: bill.id,
         name: bill.name,
-        createdAt: bill.created_at || new Date().toISOString(),
-        grandTotal: bill.grand_total,
+        createdAt: bill.created_at || new Date().toISOString(), // Fallback for createdAt
+        grand_total: bill.grand_total,
         payerName: payerName,
         participantCount: participantCount || 0,
         scheduled_at: bill.scheduled_at,
@@ -923,18 +919,125 @@ export async function getBillsHistoryAction(): Promise<{ success: boolean; data?
 
 // ===== DASHBOARD ACTIONS =====
 
-export async function getDashboardDataAction(): Promise<{ success: boolean; data?: DashboardData; error?: string }> {
-  // This is a placeholder. The actual implementation will fetch data from Supabase.
-  // For now, DashboardClient.tsx will use its own dummy data.
-  // We return a structure that the client might expect if it were calling this.
-  return {
-    success: true,
-    data: {
-      monthlyExpenses: [],
-      expenseChartData: [],
-      recentBills: [],
-      scheduledBills: [],
-    },
-  };
-}
+// Define these outside the function or pass them if they need to be dynamic
+const CATEGORY_ICONS: { [key: string]: React.ElementType } = {
+  "Makanan": Utensils,
+  "Transportasi": Car,
+  "Hiburan": Gamepad2,
+  "Penginapan": BedDouble,
+  "Belanja Online": ShoppingBag, // Added ShoppingBag here as well
+  "Lainnya": Shapes,
+};
 
+const PREDEFINED_CATEGORY_COLORS: { [key: string]: string } = {
+  "Makanan": "hsl(var(--chart-1))",
+  "Transportasi": "hsl(var(--chart-2))",
+  "Hiburan": "hsl(var(--chart-3))",
+  "Penginapan": "hsl(var(--chart-4))",
+  "Belanja Online": "hsl(var(--chart-5))", // Ensure color exists
+  "Lainnya": "hsl(var(--chart-5))", // Default or specific color
+};
+
+
+export async function getDashboardDataAction(): Promise<{ success: boolean; data?: DashboardData; error?: string }> {
+  const supabase = createSupabaseServerClient();
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+  if (authError || !user) {
+    return { success: false, error: "Pengguna tidak terautentikasi." };
+  }
+
+  try {
+    // 1. Fetch all user categories
+    const { categories, error: categoriesError } = await getUserCategoriesAction();
+    if (categoriesError || !categories) {
+      return { success: false, error: categoriesError || "Gagal mengambil kategori pengguna." };
+    }
+
+    // 2. Fetch bills for the current month
+    const now = new Date();
+    const startDate = format(startOfMonth(now), "yyyy-MM-dd'T'HH:mm:ss.SSSxxx");
+    const endDate = format(endOfMonth(now), "yyyy-MM-dd'T'HH:mm:ss.SSSxxx");
+
+    const { data: monthlyBillData, error: billsError } = await supabase
+      .from('bills')
+      .select('category_id, grand_total')
+      .eq('user_id', user.id)
+      .not('grand_total', 'is', null) // Completed bills
+      .not('payer_participant_id', 'is', null) // Ensure it's processed
+      .gte('created_at', startDate) // Use created_at or updated_at as appropriate for "completion"
+      .lte('created_at', endDate);
+
+    if (billsError) {
+      console.error("Error fetching monthly bills for dashboard:", billsError);
+      return { success: false, error: `Gagal mengambil data tagihan bulanan: ${billsError.message}` };
+    }
+
+    // 3. Calculate total spending per category
+    const spendingPerCategory: Record<string, number> = {};
+    if (monthlyBillData) {
+      for (const bill of monthlyBillData) {
+        if (bill.category_id && bill.grand_total !== null) {
+          spendingPerCategory[bill.category_id] = (spendingPerCategory[bill.category_id] || 0) + bill.grand_total;
+        }
+      }
+    }
+
+    // 4. Construct MonthlyExpenseByCategory for ALL user categories
+    const monthlyExpenses: MonthlyExpenseByCategory[] = categories.map(category => {
+      const totalAmount = spendingPerCategory[category.id] || 0;
+      const categoryNameLower = category.name.toLowerCase();
+      let icon = Shapes; // Default icon
+      let color = PREDEFINED_CATEGORY_COLORS["Lainnya"]; // Default color
+
+      // Find matching predefined icon and color
+      const predefinedCatName = Object.keys(CATEGORY_ICONS).find(key => key.toLowerCase() === categoryNameLower);
+      if (predefinedCatName) {
+        icon = CATEGORY_ICONS[predefinedCatName];
+        color = PREDEFINED_CATEGORY_COLORS[predefinedCatName] || color;
+      }
+      
+      return {
+        categoryName: category.name,
+        totalAmount: totalAmount,
+        icon: icon,
+        color: color,
+      };
+    });
+    
+    // Sort categories for consistent display
+     monthlyExpenses.sort((a, b) => a.categoryName.localeCompare(b.categoryName));
+
+
+    // 5. Prepare chart data (only for categories with spending > 0 for a cleaner chart)
+    const expenseChartData: ExpenseChartDataPoint[] = monthlyExpenses
+      .filter(e => e.totalAmount > 0)
+      .map(e => ({ name: e.categoryName, total: e.totalAmount }));
+
+    // 6. Dummy data for recent and scheduled bills (as per previous setup)
+    const dummyNow = new Date();
+    const recentBills: RecentBillDisplayItem[] = [
+      { id: "rb1", name: "Makan Malam Tim (Dummy)", createdAt: subDays(dummyNow, 2).toISOString(), grandTotal: 680000, categoryName: "Makanan", participantCount: 5 },
+      { id: "rb2", name: "Bensin Mingguan (Dummy)", createdAt: subDays(dummyNow, 5).toISOString(), grandTotal: 150000, categoryName: "Transportasi", participantCount: 2 },
+    ];
+    const scheduledBills: ScheduledBillDisplayItem[] = [
+      { id: "sb1", name: "Trip ke Puncak (Dummy)", scheduled_at: addDays(dummyNow, 7).toISOString(), categoryName: "Hiburan", participantCount: 3 },
+    ];
+    
+    revalidatePath('/', 'page'); // Revalidate dashboard page
+
+    return {
+      success: true,
+      data: {
+        monthlyExpenses,
+        expenseChartData,
+        recentBills,
+        scheduledBills,
+      },
+    };
+
+  } catch (e: any) {
+    console.error("Exception in getDashboardDataAction:", e);
+    return { success: false, error: e.message || "Terjadi kesalahan server saat mengambil data dashboard." };
+  }
+}

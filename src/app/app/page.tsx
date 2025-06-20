@@ -52,6 +52,8 @@ interface Profile {
   email?: string; 
 }
 
+const DEFAULT_CATEGORIES = ["Makanan", "Transportasi", "Hiburan", "Penginapan", "Lainnya"];
+
 export default function SplitBillAppPage() {
   const [currentBillId, setCurrentBillId] = useState<string | null>(null);
   const [billNameInput, setBillNameInput] = useState<string>("");
@@ -112,13 +114,39 @@ export default function SplitBillAppPage() {
         return;
     }
 
+    let fetchedCategories: BillCategory[] = [];
     const categoriesResult = await getUserCategoriesAction();
     if (categoriesResult.success && categoriesResult.categories) {
-      setCategories(categoriesResult.categories);
+      fetchedCategories = categoriesResult.categories;
     } else {
       toast({ variant: "destructive", title: "Gagal Memuat Kategori", description: categoriesResult.error });
     }
+
+    // Check and create default categories if missing
+    const existingCategoryNamesLower = fetchedCategories.map(cat => cat.name.toLowerCase());
+    let newCategoriesAdded = false;
+
+    for (const defaultCatName of DEFAULT_CATEGORIES) {
+      if (!existingCategoryNamesLower.includes(defaultCatName.toLowerCase())) {
+        console.log(`Default category "${defaultCatName}" not found. Attempting to create.`);
+        const creationResult = await createBillCategoryAction(defaultCatName);
+        if (creationResult.success && creationResult.category) {
+          fetchedCategories.push(creationResult.category);
+          newCategoriesAdded = true;
+          console.log(`Successfully created default category: "${defaultCatName}"`);
+        } else {
+          console.warn(`Failed to create default category "${defaultCatName}": ${creationResult.error}`);
+          // Optionally, show a less intrusive toast for default category creation failure
+          // toast({ variant: "default", title: "Info Kategori", description: `Gagal membuat kategori default "${defaultCatName}". Anda bisa membuatnya manual.` });
+        }
+      }
+    }
+    
+    // Sort categories alphabetically by name after potential additions
+    fetchedCategories.sort((a, b) => a.name.localeCompare(b.name));
+    setCategories(fetchedCategories);
     setIsLoadingCategories(false);
+
   }, [router, toast]);
 
   useEffect(() => {
@@ -151,7 +179,12 @@ export default function SplitBillAppPage() {
         const categoryResult = await createBillCategoryAction(newCategoryInput.trim());
         if (categoryResult.success && categoryResult.category) {
             finalCategoryId = categoryResult.category.id;
-            setCategories(prev => [...prev, categoryResult.category!]);
+            // Optimistically update categories list locally or re-fetch
+            setCategories(prev => {
+                const newCats = [...prev, categoryResult.category!];
+                newCats.sort((a,b) => a.name.localeCompare(b.name));
+                return newCats;
+            });
             setSelectedCategoryId(finalCategoryId); 
             setShowNewCategoryInput(false);
             setNewCategoryInput("");
@@ -226,7 +259,7 @@ export default function SplitBillAppPage() {
       }
     }
     setIsInitializingBill(false);
-  }, [authUser, billNameInput, billTimingOption, scheduledAt, router, toast, selectedCategoryId, newCategoryInput, showNewCategoryInput]); 
+  }, [authUser, billNameInput, billTimingOption, scheduledAt, router, toast, selectedCategoryId, newCategoryInput, showNewCategoryInput, categories]); // Added categories to dependency array
   
   const resetAppToStart = () => {
      setCurrentBillId(null);
@@ -249,9 +282,8 @@ export default function SplitBillAppPage() {
         router.push("/login");
      }
      if (authUser) {
-        getUserCategoriesAction().then(res => {
-            if (res.success && res.categories) setCategories(res.categories);
-        });
+        // Re-fetch categories, which will also ensure defaults are present
+        fetchUserAndCategories(); 
      }
   }
 
@@ -981,3 +1013,4 @@ export default function SplitBillAppPage() {
     </div>
   );
 }
+

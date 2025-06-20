@@ -13,6 +13,7 @@ import { id as IndonesianLocale } from 'date-fns/locale';
 
 
 type SettlementInsert = Database['public']['Tables']['settlements']['Insert'];
+type ItemAssignmentInsert = Database['public']['Tables']['item_assignments']['Insert'];
 
 
 export async function signupUserAction(formData: FormData) {
@@ -491,6 +492,70 @@ export async function handleSummarizeBillAction(
     return { success: false, error: "Data pembayar tidak valid atau tidak ditemukan dalam daftar partisipan." };
   }
   const payerName = payer.name;
+
+  // --- Start: Persist Item Assignments ---
+  try {
+    // Step 1: Get IDs of all bill_items associated with this bill_id
+    const { data: billItemsForThisBill, error: fetchBillItemsError } = await supabase
+      .from('bill_items')
+      .select('id')
+      .eq('bill_id', billId);
+
+    if (fetchBillItemsError) {
+      console.error("Error fetching bill_items for deletion:", fetchBillItemsError);
+      return { success: false, error: `Gagal mengambil item tagihan untuk pembersihan alokasi: ${fetchBillItemsError.message}` };
+    }
+
+    const billItemIdsForThisBill = (billItemsForThisBill || []).map(bi => bi.id);
+
+    // Step 2: Delete existing item_assignments for these bill_items
+    if (billItemIdsForThisBill.length > 0) {
+      const { error: deleteAssignmentsError } = await supabase
+        .from('item_assignments')
+        .delete()
+        .in('bill_item_id', billItemIdsForThisBill);
+
+      if (deleteAssignmentsError) {
+        console.error("Error deleting old item assignments:", deleteAssignmentsError);
+        return { success: false, error: `Gagal menghapus alokasi item lama: ${deleteAssignmentsError.message}` };
+      }
+    }
+
+    // Step 3: Insert new item_assignments
+    const newAssignments: ItemAssignmentInsert[] = [];
+    for (const item of splitItems) {
+      // Ensure item.id (bill_item_id) is actually part of this bill
+      if (!billItemIdsForThisBill.includes(item.id)) {
+          console.warn(`Item with id ${item.id} (name: ${item.name}) is in splitItems but not found in bill_items for bill ${billId}. Skipping assignments for this item.`);
+          continue; 
+      }
+      for (const assignment of item.assignedTo) {
+        if (assignment.count > 0) { // Only save assignments with a count > 0
+          newAssignments.push({
+            bill_item_id: item.id,
+            participant_id: assignment.personId,
+            assigned_quantity: assignment.count,
+          });
+        }
+      }
+    }
+
+    if (newAssignments.length > 0) {
+      const { error: insertAssignmentsError } = await supabase
+        .from('item_assignments')
+        .insert(newAssignments);
+
+      if (insertAssignmentsError) {
+        console.error("Error inserting new item assignments:", insertAssignmentsError);
+        return { success: false, error: `Gagal menyimpan alokasi item baru: ${insertAssignmentsError.message}` };
+      }
+    }
+  } catch (e: any) {
+    console.error("Exception during item assignment persistence:", e);
+    return { success: false, error: `Kesalahan server saat menyimpan alokasi item: ${e.message}` };
+  }
+  // --- End: Persist Item Assignments ---
+
 
   const itemsForAI: SummarizeBillInput["items"] = splitItems.map(item => ({
     name: item.name,
@@ -1189,7 +1254,7 @@ export async function getBillDetailsAction(billId: string): Promise<{ success: b
   try {
     const { data: bill, error: billError } = await supabase
       .from('bills')
-      .select('id, name, created_at, grand_total, tax_amount, tip_amount, payer_participant_id, tax_tip_split_strategy')
+      .select('id, name, created_at, grand_total, tax_amount, tip_amount, payer_participant_id, tax_tip_split_strategy, scheduled_at')
       .eq('id', billId)
       .eq('user_id', user.id)
       .single();

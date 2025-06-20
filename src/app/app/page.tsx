@@ -53,6 +53,9 @@ interface Profile {
 }
 
 const DEFAULT_CATEGORIES = ["Makanan", "Transportasi", "Hiburan", "Penginapan", "Lainnya"];
+const ORDERED_DEFAULT_CATEGORY_NAMES_FOR_PAGE = ["Makanan", "Transportasi", "Hiburan", "Penginapan"];
+const OTHERS_CATEGORY_NAME_FOR_PAGE = "Lainnya";
+
 
 export default function SplitBillAppPage() {
   const [currentBillId, setCurrentBillId] = useState<string | null>(null);
@@ -122,24 +125,43 @@ export default function SplitBillAppPage() {
       toast({ variant: "destructive", title: "Gagal Memuat Kategori", description: categoriesResult.error });
     }
 
-    // Check and create default categories if missing
     const existingCategoryNamesLower = fetchedCategories.map(cat => cat.name.toLowerCase());
     
     for (const defaultCatName of DEFAULT_CATEGORIES) {
       if (!existingCategoryNamesLower.includes(defaultCatName.toLowerCase())) {
-        console.log(`Default category "${defaultCatName}" not found. Attempting to create.`);
         const creationResult = await createBillCategoryAction(defaultCatName);
         if (creationResult.success && creationResult.category) {
           fetchedCategories.push(creationResult.category);
-          console.log(`Successfully created default category: "${defaultCatName}"`);
         } else {
           console.warn(`Failed to create default category "${defaultCatName}": ${creationResult.error}`);
         }
       }
     }
     
-    fetchedCategories.sort((a, b) => a.name.localeCompare(b.name));
-    setCategories(fetchedCategories);
+    // Custom sorting for categories
+    let orderedDefaults: BillCategory[] = [];
+    let customCats: BillCategory[] = [];
+    let othersCat: BillCategory | null = null;
+
+    fetchedCategories.forEach(cat => {
+      if (cat.name === OTHERS_CATEGORY_NAME_FOR_PAGE) {
+        othersCat = cat;
+      } else if (ORDERED_DEFAULT_CATEGORY_NAMES_FOR_PAGE.includes(cat.name)) {
+        orderedDefaults.push(cat);
+      } else {
+        customCats.push(cat);
+      }
+    });
+
+    orderedDefaults.sort((a, b) => ORDERED_DEFAULT_CATEGORY_NAMES_FOR_PAGE.indexOf(a.name) - ORDERED_DEFAULT_CATEGORY_NAMES_FOR_PAGE.indexOf(b.name));
+    customCats.sort((a, b) => a.name.localeCompare(b.name));
+
+    const finalSortedCategories = [...orderedDefaults, ...customCats];
+    if (othersCat) {
+      finalSortedCategories.push(othersCat);
+    }
+    
+    setCategories(finalSortedCategories);
     setIsLoadingCategories(false);
 
   }, [router, toast]);
@@ -174,11 +196,8 @@ export default function SplitBillAppPage() {
         const categoryResult = await createBillCategoryAction(newCategoryInput.trim());
         if (categoryResult.success && categoryResult.category) {
             finalCategoryId = categoryResult.category.id;
-            setCategories(prev => {
-                const newCats = [...prev, categoryResult.category!];
-                newCats.sort((a,b) => a.name.localeCompare(b.name));
-                return newCats;
-            });
+            // After creating a new category, re-fetch and re-sort categories
+            await fetchUserAndCategories(); // This will re-sort and update the `categories` state
             setSelectedCategoryId(finalCategoryId); 
             setShowNewCategoryInput(false);
             setNewCategoryInput("");
@@ -253,7 +272,7 @@ export default function SplitBillAppPage() {
       }
     }
     setIsInitializingBill(false);
-  }, [authUser, billNameInput, billTimingOption, scheduledAt, router, toast, selectedCategoryId, newCategoryInput, showNewCategoryInput, categories]);
+  }, [authUser, billNameInput, billTimingOption, scheduledAt, router, toast, selectedCategoryId, newCategoryInput, showNewCategoryInput, fetchUserAndCategories]);
   
   const resetAppToStart = () => {
      setCurrentBillId(null);

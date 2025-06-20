@@ -495,20 +495,18 @@ export async function handleSummarizeBillAction(
 
   // --- Start: Persist Item Assignments ---
   try {
-    // Step 1: Get IDs of all bill_items associated with this bill_id
     const { data: billItemsForThisBill, error: fetchBillItemsError } = await supabase
       .from('bill_items')
       .select('id')
       .eq('bill_id', billId);
 
     if (fetchBillItemsError) {
-      console.error("Error fetching bill_items for deletion:", fetchBillItemsError);
-      return { success: false, error: `Gagal mengambil item tagihan untuk pembersihan alokasi: ${fetchBillItemsError.message}` };
+      console.error("Error fetching bill_items for assignment processing:", fetchBillItemsError);
+      return { success: false, error: `Gagal mengambil item tagihan untuk alokasi: ${fetchBillItemsError.message}` };
     }
 
     const billItemIdsForThisBill = (billItemsForThisBill || []).map(bi => bi.id);
 
-    // Step 2: Delete existing item_assignments for these bill_items
     if (billItemIdsForThisBill.length > 0) {
       const { error: deleteAssignmentsError } = await supabase
         .from('item_assignments')
@@ -521,16 +519,14 @@ export async function handleSummarizeBillAction(
       }
     }
 
-    // Step 3: Insert new item_assignments
     const newAssignments: ItemAssignmentInsert[] = [];
     for (const item of splitItems) {
-      // Ensure item.id (bill_item_id) is actually part of this bill
       if (!billItemIdsForThisBill.includes(item.id)) {
-          console.warn(`Item with id ${item.id} (name: ${item.name}) is in splitItems but not found in bill_items for bill ${billId}. Skipping assignments for this item.`);
+          console.warn(`Item with id ${item.id} (name: ${item.name}) is in splitItems but not found in current bill_items for bill ${billId}. Skipping assignments for this item as it might be stale or from a different context.`);
           continue; 
       }
       for (const assignment of item.assignedTo) {
-        if (assignment.count > 0) { // Only save assignments with a count > 0
+        if (assignment.count > 0) {
           newAssignments.push({
             bill_item_id: item.id,
             participant_id: assignment.personId,
@@ -1067,7 +1063,7 @@ export async function getDashboardDataAction(): Promise<{ success: boolean; data
       .select('category_id, grand_total')
       .eq('user_id', user.id)
       .not('grand_total', 'is', null)
-      .not('payer_participant_id', 'is', null) // Only count completed bills
+      .not('payer_participant_id', 'is', null) 
       .gte('created_at', startDate)
       .lte('created_at', endDate);
 
@@ -1094,18 +1090,17 @@ export async function getDashboardDataAction(): Promise<{ success: boolean; data
         color: PREDEFINED_CATEGORY_COLORS[category.name] || PREDEFINED_CATEGORY_COLORS["Lainnya"] || "hsl(var(--chart-1))",
       };
     });
-
-    // Ensure "Lainnya" category exists if not already present from user's custom categories
+   
     if (!allMonthlyExpensesRaw.find(cat => cat.categoryName === OTHERS_CATEGORY_NAME_FOR_DASHBOARD)) {
         const lainnyaDefault = (userCategories || []).find(cat => cat.name === OTHERS_CATEGORY_NAME_FOR_DASHBOARD);
-        if (lainnyaDefault){ // if "Lainnya" was one of user's default created categories
+        if (lainnyaDefault){ 
              allMonthlyExpensesRaw.push({
                 categoryName: OTHERS_CATEGORY_NAME_FOR_DASHBOARD,
                 totalAmount: spendingPerCategory[lainnyaDefault.id] || 0,
                 icon: CATEGORY_ICON_KEYS[OTHERS_CATEGORY_NAME_FOR_DASHBOARD] || "Shapes",
                 color: PREDEFINED_CATEGORY_COLORS[OTHERS_CATEGORY_NAME_FOR_DASHBOARD] || "hsl(var(--chart-1))",
             });
-        } else { // if "Lainnya" was not created by user at all, add it with 0 amount
+        } else { 
             allMonthlyExpensesRaw.push({
                 categoryName: OTHERS_CATEGORY_NAME_FOR_DASHBOARD,
                 totalAmount: 0,
@@ -1119,7 +1114,6 @@ export async function getDashboardDataAction(): Promise<{ success: boolean; data
             t.categoryName === value.categoryName
         ))
     );
-
 
     const predefinedExpenses: MonthlyExpenseByCategory[] = [];
     const customExpenses: MonthlyExpenseByCategory[] = [];
@@ -1312,7 +1306,7 @@ export async function getBillDetailsAction(billId: string): Promise<{ success: b
     const { data: allItemAssignments, error: assignmentsError } = await supabase
       .from('item_assignments')
       .select('bill_item_id, participant_id, assigned_quantity')
-      .in('bill_item_id', (allBillItems || []).map(item => item.id)); // Filter assignments by items of this bill
+      .in('bill_item_id', (allBillItems || []).map(item => item.id)); 
 
     if (assignmentsError) {
       console.error("Error fetching item assignments:", assignmentsError);

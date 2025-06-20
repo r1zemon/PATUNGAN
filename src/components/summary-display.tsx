@@ -97,7 +97,7 @@ export function SummaryDisplay({ summary, people }: SummaryDisplayProps) {
                       <div className="flex items-center justify-between w-full">
                         <div className="flex items-center gap-3">
                           <Avatar className="h-9 w-9">
-                            <AvatarImage src={`https://placehold.co/40x40.png?text=${shareDetail.personName.substring(0,1)}`} alt={shareDetail.personName} data-ai-hint="profile avatar" />
+                            <AvatarImage src={personData?.avatar_url || `https://placehold.co/40x40.png?text=${shareDetail.personName.substring(0,1)}`} alt={shareDetail.personName} data-ai-hint="profile avatar" />
                             <AvatarFallback>{shareDetail.personName.substring(0, 2).toUpperCase()}</AvatarFallback>
                           </Avatar>
                           <span className="truncate font-medium">{shareDetail.personName}</span>
@@ -125,7 +125,7 @@ export function SummaryDisplay({ summary, people }: SummaryDisplayProps) {
                             </div>
                           </div>
                         )}
-                        {(shareDetail.taxShare > 0 || shareDetail.tipShare > 0) && <Separator className="my-2"/>}
+                        {(shareDetail.taxShare > 0 || shareDetail.tipShare > 0 || shareDetail.items.length > 0) && <Separator className="my-2"/>}
                         {shareDetail.taxShare > 0 && (
                           <div className="flex justify-between items-center text-xs">
                             <span className="text-muted-foreground flex items-center"><Landmark className="mr-1.5 h-3 w-3"/>Bagian Pajak:</span>
@@ -138,7 +138,7 @@ export function SummaryDisplay({ summary, people }: SummaryDisplayProps) {
                             <span className="text-foreground">{formatCurrency(shareDetail.tipShare)}</span>
                           </div>
                         )}
-                         <Separator className="my-2"/>
+                         {(shareDetail.taxShare > 0 || shareDetail.tipShare > 0 || shareDetail.items.length > 0) && <Separator className="my-2"/>}
                         <div className="flex justify-between items-center font-semibold text-sm">
                             <span>Total Tanggungan:</span>
                             <span>{formatCurrency(shareDetail.totalShare)}</span>
@@ -197,7 +197,7 @@ export function SummaryDisplay({ summary, people }: SummaryDisplayProps) {
                           {settlement.to}
                         </div>
                       </TableCell>
-                      <TableCell className="text-right font-semibold text-primary-foreground">{formatCurrency(settlement.amount, "IDR")}</TableCell>
+                      <TableCell className="text-right font-semibold text-primary">{formatCurrency(settlement.amount, "IDR")}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -206,7 +206,7 @@ export function SummaryDisplay({ summary, people }: SummaryDisplayProps) {
           </CardContent>
         </Card>
       )}
-       {settlements.length === 0 && grandTotal > 0 && summary.payerName && summary.personalTotalShares[summary.payerName] === grandTotal && (
+       {settlements.length === 0 && grandTotal > 0 && summary.payerName && Object.keys(summary.personalTotalShares).length > 0 && summary.personalTotalShares[summary.payerName] === grandTotal && (
         <Card className="shadow-lg">
             <CardHeader>
                 <CardTitle className="flex items-center"><ArrowRight className="mr-2 h-6 w-6 text-primary"/> Penyelesaian Pembayaran</CardTitle>
@@ -219,3 +219,4 @@ export function SummaryDisplay({ summary, people }: SummaryDisplayProps) {
     </div>
   );
 }
+

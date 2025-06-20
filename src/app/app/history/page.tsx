@@ -5,12 +5,12 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { id as IndonesianLocale } from 'date-fns/locale';
 
-import type { BillHistoryEntry, DetailedBillSummaryData, Person } from "@/lib/types";
+import type { BillHistoryEntry, DetailedBillSummaryData, Person, FetchedBillDetails } from "@/lib/types";
 import type { User as SupabaseUser } from "@supabase/supabase-js";
-import { getCurrentUserAction, logoutUserAction, getBillsHistoryAction, getBillDetailsAction, type BillDetailsForHistory } from "@/lib/actions";
+import { getCurrentUserAction, logoutUserAction, getBillsHistoryAction, getBillDetailsAction } from "@/lib/actions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -59,7 +59,7 @@ export default function HistoryPage() {
   const [isLoadingUser, setIsLoadingUser] = useState(true);
   const [isPremiumUser, setIsPremiumUser] = useState(false); 
 
-  const [selectedBillForDetail, setSelectedBillForDetail] = useState<BillDetailsForHistory | null>(null);
+  const [selectedBillForDetail, setSelectedBillForDetail] = useState<FetchedBillDetails | null>(null);
   const [isLoadingBillDetail, setIsLoadingBillDetail] = useState(false);
   const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
@@ -262,8 +262,8 @@ export default function HistoryPage() {
                   <CardDescription className="flex items-center text-sm">
                     <CalendarDays className="mr-2 h-4 w-4 text-muted-foreground" />
                     {bill.scheduled_at ? 
-                        `Dijadwalkan: ${format(new Date(bill.scheduled_at), "dd MMMM yyyy, HH:mm", { locale: IndonesianLocale })}` :
-                        format(new Date(bill.createdAt), "dd MMMM yyyy, HH:mm", { locale: IndonesianLocale })
+                        `Dijadwalkan: ${format(parseISO(bill.scheduled_at), "dd MMMM yyyy, HH:mm", { locale: IndonesianLocale })}` :
+                        format(parseISO(bill.createdAt), "dd MMMM yyyy, HH:mm", { locale: IndonesianLocale })
                     }
                   </CardDescription>
                   {bill.categoryName && (
@@ -361,11 +361,11 @@ export default function HistoryPage() {
             </DialogTitle>
             {selectedBillForDetail && (
                  <DialogDescription>
-                    Dibuat pada: {format(new Date(selectedBillForDetail.createdAt), "dd MMMM yyyy, HH:mm", { locale: IndonesianLocale })}
+                    Dibuat pada: {format(parseISO(selectedBillForDetail.createdAt), "dd MMMM yyyy, HH:mm", { locale: IndonesianLocale })}
                 </DialogDescription>
             )}
           </DialogHeader>
-          <ScrollArea className="max-h-[calc(90vh-12rem)] pr-2"> {/* Adjust max-height as needed */}
+          <ScrollArea className="max-h-[calc(90vh-12rem)] pr-2">
             {isLoadingBillDetail ? (
               <div className="flex flex-col items-center justify-center py-10">
                 <Loader2 className="h-10 w-10 animate-spin text-primary mb-3" />
@@ -378,7 +378,7 @@ export default function HistoryPage() {
                 <AlertDescription>{detailError}</AlertDescription>
               </Alert>
             ) : selectedBillForDetail ? (
-              <div className="py-2 pr-4"> {/* Added padding for ScrollArea content */}
+              <div className="py-2 pr-4">
                 <SummaryDisplay 
                   summary={selectedBillForDetail.summaryData} 
                   people={selectedBillForDetail.participants} 
@@ -404,4 +404,3 @@ export default function HistoryPage() {
     </div>
   );
 }
-

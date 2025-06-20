@@ -3,7 +3,7 @@
 
 import { scanReceipt, ScanReceiptOutput, ReceiptItem as AiReceiptItem } from "@/ai/flows/scan-receipt";
 import { summarizeBill, SummarizeBillInput } from "@/ai/flows/summarize-bill";
-import type { SplitItem, Person, RawBillSummary, TaxTipSplitStrategy, ScannedItem, BillHistoryEntry, BillCategory, DashboardData, MonthlyExpenseByCategory, ExpenseChartDataPoint, RecentBillDisplayItem, ScheduledBillDisplayItem, DetailedBillSummaryData, Settlement } from "./types";
+import type { SplitItem, Person, RawBillSummary, TaxTipSplitStrategy, ScannedItem, BillHistoryEntry, BillCategory, DashboardData, MonthlyExpenseByCategory, ExpenseChartDataPoint, RecentBillDisplayItem, ScheduledBillDisplayItem, DetailedBillSummaryData, Settlement, FetchedBillDetails, PersonalShareDetail, PersonalItemDetail } from "./types";
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
 import type { PostgrestSingleResponse, User as SupabaseUser } from "@supabase/supabase-js";
@@ -369,7 +369,7 @@ export async function removeParticipantAction(participantId: string): Promise<{ 
 
 
 export async function handleScanReceiptAction(
-  billId: string, // Added billId parameter
+  billId: string, 
   receiptDataUri: string
 ): Promise<{ success: boolean; data?: { items: ScannedItem[] }; error?: string }> {
   const supabase = createSupabaseServerClient();
@@ -397,7 +397,7 @@ export async function handleScanReceiptAction(
       }));
 
       if (itemsToInsert.length === 0) {
-        return { success: true, data: { items: [] } }; // No items found by AI, but operation is successful.
+        return { success: true, data: { items: [] } }; 
       }
 
       const { data: insertedDbItems, error: insertError } = await supabase
@@ -416,7 +416,7 @@ export async function handleScanReceiptAction(
       }
 
       const appItems: ScannedItem[] = insertedDbItems.map(dbItem => ({
-        id: dbItem.id, // This is now the database ID
+        id: dbItem.id, 
         name: dbItem.name,
         unitPrice: dbItem.unit_price,
         quantity: dbItem.quantity,
@@ -970,8 +970,8 @@ const PREDEFINED_CATEGORY_COLORS: { [key: string]: string } = {
   "Lainnya": "hsl(var(--chart-5))", 
 };
 
-const DEFAULT_CATEGORY_ORDER = ["Makanan", "Transportasi", "Hiburan", "Penginapan"];
-const OTHERS_CATEGORY_NAME = "Lainnya";
+const DEFAULT_CATEGORY_ORDER_FOR_DASHBOARD = ["Makanan", "Transportasi", "Hiburan", "Penginapan"];
+const OTHERS_CATEGORY_NAME_FOR_DASHBOARD = "Lainnya";
 
 
 export async function getDashboardDataAction(): Promise<{ success: boolean; data?: DashboardData; error?: string }> {
@@ -1002,7 +1002,7 @@ export async function getDashboardDataAction(): Promise<{ success: boolean; data
       .select('category_id, grand_total')
       .eq('user_id', user.id)
       .not('grand_total', 'is', null)
-      .not('payer_participant_id', 'is', null)
+      .not('payer_participant_id', 'is', null) // Only count completed bills
       .gte('created_at', startDate)
       .lte('created_at', endDate);
 
@@ -1025,48 +1025,63 @@ export async function getDashboardDataAction(): Promise<{ success: boolean; data
       return {
         categoryName: category.name,
         totalAmount: totalAmount,
-        icon: CATEGORY_ICON_KEYS[category.name] || CATEGORY_ICON_KEYS[OTHERS_CATEGORY_NAME] || "Shapes",
-        color: PREDEFINED_CATEGORY_COLORS[category.name] || PREDEFINED_CATEGORY_COLORS[OTHERS_CATEGORY_NAME] || "hsl(var(--chart-1))",
+        icon: CATEGORY_ICON_KEYS[category.name] || CATEGORY_ICON_KEYS["Lainnya"] || "Shapes",
+        color: PREDEFINED_CATEGORY_COLORS[category.name] || PREDEFINED_CATEGORY_COLORS["Lainnya"] || "hsl(var(--chart-1))",
       };
     });
+
+    // Ensure "Lainnya" category exists if not already present from user's custom categories
+    if (!allMonthlyExpensesRaw.find(cat => cat.categoryName === OTHERS_CATEGORY_NAME_FOR_DASHBOARD)) {
+        const lainnyaDefault = (userCategories || []).find(cat => cat.name === OTHERS_CATEGORY_NAME_FOR_DASHBOARD);
+        if (lainnyaDefault){ // if "Lainnya" was one of user's default created categories
+             allMonthlyExpensesRaw.push({
+                categoryName: OTHERS_CATEGORY_NAME_FOR_DASHBOARD,
+                totalAmount: spendingPerCategory[lainnyaDefault.id] || 0,
+                icon: CATEGORY_ICON_KEYS[OTHERS_CATEGORY_NAME_FOR_DASHBOARD] || "Shapes",
+                color: PREDEFINED_CATEGORY_COLORS[OTHERS_CATEGORY_NAME_FOR_DASHBOARD] || "hsl(var(--chart-1))",
+            });
+        } else { // if "Lainnya" was not created by user at all, add it with 0 amount
+            allMonthlyExpensesRaw.push({
+                categoryName: OTHERS_CATEGORY_NAME_FOR_DASHBOARD,
+                totalAmount: 0,
+                icon: CATEGORY_ICON_KEYS[OTHERS_CATEGORY_NAME_FOR_DASHBOARD] || "Shapes",
+                color: PREDEFINED_CATEGORY_COLORS[OTHERS_CATEGORY_NAME_FOR_DASHBOARD] || "hsl(var(--chart-1))",
+            });
+        }
+    }
+    allMonthlyExpensesRaw = allMonthlyExpensesRaw.filter((value, index, self) =>
+        index === self.findIndex((t) => (
+            t.categoryName === value.categoryName
+        ))
+    );
+
 
     const predefinedExpenses: MonthlyExpenseByCategory[] = [];
     const customExpenses: MonthlyExpenseByCategory[] = [];
     let othersExpense: MonthlyExpenseByCategory | null = null;
 
     allMonthlyExpensesRaw.forEach(expense => {
-      if (expense.categoryName === OTHERS_CATEGORY_NAME) {
+      if (expense.categoryName === OTHERS_CATEGORY_NAME_FOR_DASHBOARD) {
         othersExpense = expense;
-      } else if (DEFAULT_CATEGORY_ORDER.includes(expense.categoryName)) {
+      } else if (DEFAULT_CATEGORY_ORDER_FOR_DASHBOARD.includes(expense.categoryName)) {
         predefinedExpenses.push(expense);
       } else {
         customExpenses.push(expense);
       }
     });
 
-    predefinedExpenses.sort((a, b) => DEFAULT_CATEGORY_ORDER.indexOf(a.categoryName) - DEFAULT_CATEGORY_ORDER.indexOf(b.categoryName));
+    predefinedExpenses.sort((a, b) => DEFAULT_CATEGORY_ORDER_FOR_DASHBOARD.indexOf(a.categoryName) - DEFAULT_CATEGORY_ORDER_FOR_DASHBOARD.indexOf(b.categoryName));
     customExpenses.sort((a, b) => a.categoryName.localeCompare(b.categoryName));
 
     let monthlyExpenses: MonthlyExpenseByCategory[] = [...predefinedExpenses, ...customExpenses];
     if (othersExpense) {
       monthlyExpenses.push(othersExpense);
-    } else {
-      const lainnyaCatExistsForUser = (userCategories || []).some(cat => cat.name === OTHERS_CATEGORY_NAME);
-      if (!lainnyaCatExistsForUser) {
-         monthlyExpenses.push({
-            categoryName: OTHERS_CATEGORY_NAME,
-            totalAmount: 0,
-            icon: CATEGORY_ICON_KEYS[OTHERS_CATEGORY_NAME] || "Shapes",
-            color: PREDEFINED_CATEGORY_COLORS[OTHERS_CATEGORY_NAME] || "hsl(var(--chart-1))",
-         });
-      }
     }
     
     const expenseChartData: ExpenseChartDataPoint[] = monthlyExpenses
       .filter(e => e.totalAmount > 0)
       .map(e => ({ name: e.categoryName, total: e.totalAmount }));
 
-    // Fetch Recent Bills (Completed)
     const { data: dbRecentBills, error: recentBillsError } = await supabase
         .from('bills')
         .select(`
@@ -1106,7 +1121,6 @@ export async function getDashboardDataAction(): Promise<{ success: boolean; data
         }
     }
 
-    // Fetch Scheduled Bills
     const { data: dbScheduledBills, error: scheduledBillsError } = await supabase
         .from('bills')
         .select(`
@@ -1138,7 +1152,7 @@ export async function getDashboardDataAction(): Promise<{ success: boolean; data
             scheduledBills.push({
                 id: bill.id,
                 name: bill.name,
-                scheduled_at: bill.scheduled_at || new Date().toISOString(), // Should always have a value based on query
+                scheduled_at: bill.scheduled_at || new Date().toISOString(),
                 categoryName: (bill.bill_categories as any)?.name || null,
                 participantCount: countError ? 0 : participantCount || 0,
             });
@@ -1163,14 +1177,8 @@ export async function getDashboardDataAction(): Promise<{ success: boolean; data
   }
 }
 
-export interface BillDetailsForHistory {
-  billName: string | null;
-  createdAt: string;
-  summaryData: DetailedBillSummaryData;
-  participants: Person[];
-}
 
-export async function getBillDetailsAction(billId: string): Promise<{ success: boolean; data?: BillDetailsForHistory; error?: string }> {
+export async function getBillDetailsAction(billId: string): Promise<{ success: boolean; data?: FetchedBillDetails; error?: string }> {
   const supabase = createSupabaseServerClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
 
@@ -1194,13 +1202,13 @@ export async function getBillDetailsAction(billId: string): Promise<{ success: b
       return { success: false, error: "Tagihan tidak ditemukan atau Anda tidak memiliki akses." };
     }
     
-    // Handle case where bill is scheduled but not yet filled (grand_total is null)
     if (bill.grand_total === null && bill.scheduled_at && isFuture(parseISO(bill.scheduled_at))) {
         const emptySummary: DetailedBillSummaryData = {
             payerName: "Belum Ditentukan",
             taxAmount: 0,
             tipAmount: 0,
             personalTotalShares: {},
+            detailedPersonalShares: [],
             settlements: [],
             grandTotal: 0,
         };
@@ -1215,7 +1223,6 @@ export async function getBillDetailsAction(billId: string): Promise<{ success: b
         };
     }
 
-
     const { data: participantsData, error: participantsError } = await supabase
       .from('bill_participants')
       .select('id, name, total_share_amount')
@@ -1226,26 +1233,78 @@ export async function getBillDetailsAction(billId: string): Promise<{ success: b
       return { success: false, error: `Gagal mengambil partisipan: ${participantsError.message}` };
     }
     const participants: Person[] = participantsData?.map(p => ({ id: p.id, name: p.name })) || [];
+    
+    const { data: allBillItems, error: billItemsError } = await supabase
+      .from('bill_items')
+      .select('id, name, unit_price')
+      .eq('bill_id', billId);
+
+    if (billItemsError) {
+      console.error("Error fetching bill items:", billItemsError);
+      return { success: false, error: `Gagal mengambil item tagihan: ${billItemsError.message}` };
+    }
+
+    const { data: allItemAssignments, error: assignmentsError } = await supabase
+      .from('item_assignments')
+      .select('bill_item_id, participant_id, assigned_quantity')
+      .in('bill_item_id', (allBillItems || []).map(item => item.id)); // Filter assignments by items of this bill
+
+    if (assignmentsError) {
+      console.error("Error fetching item assignments:", assignmentsError);
+      return { success: false, error: `Gagal mengambil alokasi item: ${assignmentsError.message}` };
+    }
 
     let payerName = "Tidak Diketahui";
     if (bill.payer_participant_id) {
       const payer = participantsData?.find(p => p.id === bill.payer_participant_id);
-      if (payer) {
-        payerName = payer.name;
-      } else {
-         const { data: specificPayerData, error: specificPayerError } = await supabase
-          .from('bill_participants')
-          .select('name')
-          .eq('id', bill.payer_participant_id)
-          .single();
-        if (!specificPayerError && specificPayerData) payerName = specificPayerData.name;
-      }
+      if (payer) payerName = payer.name;
     }
 
-    const personalTotalShares: RawBillSummary = {};
+    const personalTotalSharesFromDB: RawBillSummary = {};
     (participantsData || []).forEach(p => {
-      personalTotalShares[p.name] = p.total_share_amount ?? 0;
+      personalTotalSharesFromDB[p.name] = p.total_share_amount ?? 0;
     });
+
+    const detailedPersonalSharesData: PersonalShareDetail[] = [];
+    const numParticipants = participants.length;
+
+    for (const participant of (participantsData || [])) {
+      const personDetail: PersonalShareDetail = {
+          personId: participant.id,
+          personName: participant.name,
+          items: [],
+          taxShare: 0,
+          tipShare: 0,
+          subTotalFromItems: 0,
+          totalShare: participant.total_share_amount || 0,
+      };
+
+      const assignmentsForPerson = (allItemAssignments || []).filter(as => as.participant_id === participant.id);
+      for (const assignment of assignmentsForPerson) {
+          const billItemData = (allBillItems || []).find(bi => bi.id === assignment.bill_item_id);
+          if (billItemData) {
+              const itemCost = (billItemData.unit_price || 0) * (assignment.assigned_quantity || 0);
+              personDetail.items.push({
+                  itemName: billItemData.name,
+                  quantityConsumed: assignment.assigned_quantity || 0,
+                  unitPrice: billItemData.unit_price || 0,
+                  totalItemCost: itemCost,
+              });
+              personDetail.subTotalFromItems += itemCost;
+          }
+      }
+
+      if (bill.tax_tip_split_strategy === "SPLIT_EQUALLY" && numParticipants > 0) {
+          personDetail.taxShare = (bill.tax_amount || 0) / numParticipants;
+          personDetail.tipShare = (bill.tip_amount || 0) / numParticipants;
+      } else if (bill.tax_tip_split_strategy === "PAYER_PAYS_ALL") {
+          if (participant.id === bill.payer_participant_id) {
+              personDetail.taxShare = bill.tax_amount || 0;
+              personDetail.tipShare = bill.tip_amount || 0;
+          }
+      }
+      detailedPersonalSharesData.push(personDetail);
+    }
 
     const { data: settlementsData, error: settlementsError } = await supabase
       .from('settlements')
@@ -1271,7 +1330,8 @@ export async function getBillDetailsAction(billId: string): Promise<{ success: b
       payerName: payerName,
       taxAmount: bill.tax_amount || 0,
       tipAmount: bill.tip_amount || 0,
-      personalTotalShares: personalTotalShares,
+      personalTotalShares: personalTotalSharesFromDB,
+      detailedPersonalShares: detailedPersonalSharesData,
       settlements: settlements,
       grandTotal: bill.grand_total || 0,
     };

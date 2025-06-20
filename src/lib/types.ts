@@ -1,5 +1,4 @@
 
-
 export interface Person {
   id: string;
   name: string;
@@ -34,11 +33,29 @@ export interface Settlement {
   amount: number;
 }
 
+export interface PersonalItemDetail {
+  itemName: string;
+  quantityConsumed: number;
+  unitPrice: number;
+  totalItemCost: number;
+}
+
+export interface PersonalShareDetail {
+  personId: string;
+  personName: string;
+  items: PersonalItemDetail[];
+  taxShare: number;
+  tipShare: number;
+  subTotalFromItems: number;
+  totalShare: number; // Final share from bill_participants.total_share_amount
+}
+
 export interface DetailedBillSummaryData {
   payerName: string;
-  taxAmount: number;
-  tipAmount: number;
-  personalTotalShares: RawBillSummary; // Each person's calculated total share
+  taxAmount: number; // Overall bill tax
+  tipAmount: number; // Overall bill tip
+  personalTotalShares: RawBillSummary; // Kept for potential simple overview
+  detailedPersonalShares?: PersonalShareDetail[]; // New detailed breakdown
   settlements: Settlement[];
   grandTotal: number;
 }
@@ -68,7 +85,7 @@ export interface Notification {
   description?: string;
   createdAt: string; // ISO string date
   read: boolean;
-  icon?: React.ElementType; 
+  icon?: string; // Changed from React.ElementType to string
   link?: string;
   sender?: {
     name: string;
@@ -97,7 +114,7 @@ export interface RecentBillDisplayItem {
 export interface MonthlyExpenseByCategory {
   categoryName: string; 
   totalAmount: number;
-  icon?: string; // Changed from React.ElementType to string
+  icon?: string; 
   color?: string; 
 }
 
@@ -113,3 +130,10 @@ export interface DashboardData {
   scheduledBills: ScheduledBillDisplayItem[];
 }
 
+// Renamed from BillDetailsForHistory to be more general
+export interface FetchedBillDetails {
+  billName: string | null;
+  createdAt: string;
+  summaryData: DetailedBillSummaryData; // This will now contain detailedPersonalShares
+  participants: Person[]; // List of participants involved in this bill
+}

@@ -3,7 +3,7 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import type { User as SupabaseUser } from "@supabase/supabase-js";
-import type { DashboardData, MonthlyExpenseByCategory, ExpenseChartDataPoint, RecentBillDisplayItem, ScheduledBillDisplayItem, DetailedBillSummaryData, Person, BillDetailsForHistory } from '@/lib/types';
+import type { DashboardData, MonthlyExpenseByCategory, ExpenseChartDataPoint, RecentBillDisplayItem, ScheduledBillDisplayItem, DetailedBillSummaryData, Person, FetchedBillDetails } from '@/lib/types';
 import { getDashboardDataAction, getBillDetailsAction } from '@/lib/actions';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -35,7 +35,6 @@ interface DashboardClientProps {
   authUser: SupabaseUser;
 }
 
-// Client-side map for icon string keys to actual components
 const ICON_COMPONENTS_MAP: { [key: string]: React.ElementType } = {
   "Utensils": Utensils,
   "Car": Car,
@@ -53,8 +52,7 @@ export function DashboardClient({ authUser }: DashboardClientProps) {
   const router = useRouter();
   const { toast } = useToast();
 
-  // State for bill details dialog
-  const [selectedBillForDetail, setSelectedBillForDetail] = useState<BillDetailsForHistory | null>(null);
+  const [selectedBillForDetail, setSelectedBillForDetail] = useState<FetchedBillDetails | null>(null);
   const [isLoadingBillDetail, setIsLoadingBillDetail] = useState(false);
   const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
@@ -255,7 +253,7 @@ export function DashboardClient({ authUser }: DashboardClientProps) {
                 <p className="text-sm text-muted-foreground text-center py-4">Tidak ada tagihan yang dijadwalkan.</p>
               )}
             </CardContent>
-            {dashboardData.recentBills.length > 0 && ( // Check against dashboardData as recentBills might be empty
+            {dashboardData.recentBills.length > 0 && ( 
                 <CardFooter>
                     <Button variant="ghost" className="w-full text-primary" onClick={() => router.push('/app/history?tab=scheduled')}>
                         Lihat Semua Terjadwal <ChevronRight className="ml-1 h-4 w-4"/>
@@ -296,7 +294,7 @@ export function DashboardClient({ authUser }: DashboardClientProps) {
                 <p className="text-sm text-muted-foreground text-center py-4">Belum ada riwayat tagihan.</p>
               )}
             </CardContent>
-             {dashboardData.recentBills.length > 0 && ( // Check against dashboardData
+             {dashboardData.recentBills.length > 0 && ( 
                 <CardFooter>
                      <Button variant="ghost" className="w-full text-primary" onClick={() => router.push('/app/history')}>
                         Lihat Semua Riwayat <ChevronRight className="ml-1 h-4 w-4"/>
@@ -362,5 +360,3 @@ export function DashboardClient({ authUser }: DashboardClientProps) {
     </div>
   );
 }
-
-    

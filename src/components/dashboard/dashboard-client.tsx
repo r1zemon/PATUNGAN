@@ -312,7 +312,7 @@ export function DashboardClient({ authUser }: DashboardClientProps) {
       </div>
 
       <Dialog open={isDetailDialogOpen} onOpenChange={setIsDetailDialogOpen}>
-        <DialogContent className="sm:max-w-lg md:max-w-xl max-h-[90vh]">
+        <DialogContent className="sm:max-w-2xl md:max-w-3xl max-h-[90vh]">
           <DialogHeader>
             <DialogTitle className="flex items-center">
               <ListChecks className="mr-3 h-6 w-6 text-primary flex-shrink-0"/>

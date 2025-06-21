@@ -29,14 +29,30 @@ export async function signupUserAction(formData: FormData) {
   }
 
   const trimmedUsername = username.trim();
+  const trimmedEmail = email.trim().toLowerCase();
+  const trimmedFullName = fullName.trim();
+  
   if (!trimmedUsername) {
     return { success: false, error: "Username tidak boleh kosong." };
   }
-  const trimmedFullName = fullName.trim();
-   if (!trimmedFullName) {
+  if (!trimmedFullName) {
     return { success: false, error: "Nama lengkap tidak boleh kosong." };
   }
 
+  // Check for email uniqueness in the profiles table first
+  const { data: existingUserWithEmail, error: emailCheckError } = await supabase
+    .from('profiles')
+    .select('email')
+    .eq('email', trimmedEmail)
+    .single();
+  
+  if (emailCheckError && emailCheckError.code !== 'PGRST116') {
+      console.error("Error checking email uniqueness:", emailCheckError);
+      return { success: false, error: "Gagal memverifikasi email. Silakan coba lagi." };
+  }
+  if (existingUserWithEmail) {
+      return { success: false, error: "Email sudah terdaftar. Silakan gunakan email lain atau masuk." };
+  }
 
   // Check for username uniqueness
   const { data: existingUserWithUsername, error: usernameCheckError } = await supabase
@@ -54,8 +70,9 @@ export async function signupUserAction(formData: FormData) {
     return { success: false, error: "Username sudah digunakan. Silakan pilih username lain." };
   }
 
+  // Now, attempt to sign up the user with Supabase Auth
   const { data: authData, error: authError } = await supabase.auth.signUp({
-    email,
+    email: trimmedEmail,
     password,
     options: {
       data: {
@@ -67,6 +84,9 @@ export async function signupUserAction(formData: FormData) {
 
   if (authError) {
     console.error("Error signing up (auth):", authError);
+    if (authError.message.includes("User already registered")) {
+        return { success: false, error: "Email ini sudah terdaftar. Silakan masuk atau gunakan email lain." };
+    }
     return { success: false, error: authError.message };
   }
 
@@ -82,7 +102,7 @@ export async function signupUserAction(formData: FormData) {
         id: authData.user.id,
         full_name: trimmedFullName,
         username: trimmedUsername,
-        email: email,
+        email: trimmedEmail,
         phone_number: phoneNumber ? phoneNumber.trim() : null
       });
 
@@ -1412,10 +1432,21 @@ export async function getBillDetailsAction(billId: string): Promise<{ success: b
         return { success: false, error: "Tidak ada data partisipan yang ditemukan." };
     }
     
-    const participants: Person[] = participantsRawData.map(p_raw => ({
-        id: p_raw.id,
-        name: p_raw.name,
-    }));
+    // Fetch profiles for participants to get avatar_url
+    const participantUserIds = participantsRawData.map(p => p.id); // Assuming participant id is user id for now.
+    const { data: profiles, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id, avatar_url')
+        .in('id', participantUserIds);
+
+    const participants: Person[] = participantsRawData.map(p_raw => {
+        const profile = profiles?.find(prof => prof.id === p_raw.id);
+        return {
+            id: p_raw.id,
+            name: p_raw.name,
+            avatar_url: profile?.avatar_url
+        }
+    });
 
 
     const { data: allBillItems, error: billItemsError } = await supabase
@@ -1492,7 +1523,7 @@ export async function getBillDetailsAction(billId: string): Promise<{ success: b
 
     const { data: settlementsData, error: settlementsError } = await supabase
       .from('settlements')
-      .select('amount, status, from_participant:bill_participants!settlements_from_participant_id_fkey(id, name), to_participant:bill_participants!settlements_to_participant_id_fkey(id, name)')
+      .select('amount, status, from_participant:bill_participants!settlements_from_participant_id_fkey(id, name, profile_id:profiles(avatar_url)), to_participant:bill_participants!settlements_to_participant_id_fkey(id, name, profile_id:profiles(avatar_url))')
       .eq('bill_id', billId);
 
     if (settlementsError) {
@@ -1708,8 +1739,8 @@ export async function acceptFriendRequestAction(requestId: string): Promise<{ su
     const { error: friendshipError } = await supabase
       .from('friendships')
       .insert({ 
-        user1_id: Math.min(request.requester_id, request.receiver_id),
-        user2_id: Math.max(request.requester_id, request.receiver_id)
+        user1_id: request.requester_id,
+        user2_id: request.receiver_id
       });
     if (friendshipError) {
         if (friendshipError.code === '23505') { 
@@ -1870,3 +1901,5 @@ export async function removeFriendAction(friendshipId: string): Promise<{ succes
     return { success: false, error: e.message || "Gagal menghapus teman." };
   }
 }
+
+    

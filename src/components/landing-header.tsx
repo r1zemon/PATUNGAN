@@ -1,4 +1,3 @@
-
 "use client";
 
 import Link from 'next/link';
@@ -60,7 +59,7 @@ export function LandingHeader() {
       setAuthUser(null);
       setUserProfile(null);
       setIsMobileMenuOpen(false);
-      router.push("/");
+      router.refresh(); // This forces a server-side data re-fetch for the current route.
     } else {
       toast({ variant: "destructive", title: "Logout Gagal", description: error });
     }

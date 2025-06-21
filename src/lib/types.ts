@@ -160,5 +160,4 @@ export interface FriendRequestDisplay extends UserProfileBasic {
 export interface FriendDisplay extends UserProfileBasic {
   friendshipId: string;
   since: string; // ISO string date
-  // isOnline?: boolean; // Future enhancement
 }

@@ -33,8 +33,6 @@ export function SummaryDisplay({ summary, people }: SummaryDisplayProps) {
 
   const { payerName, taxAmount, tipAmount, detailedPersonalShares, settlements, grandTotal } = summary;
 
-  const peopleMap = new Map(people.map(p => [p.id, p]));
-
   if (grandTotal === 0 && (!detailedPersonalShares || detailedPersonalShares.every(shareDetail => shareDetail.totalShare === 0))) {
      return (
       <Card className="shadow-lg">
@@ -95,7 +93,7 @@ export function SummaryDisplay({ summary, people }: SummaryDisplayProps) {
           {detailedPersonalShares && detailedPersonalShares.length > 0 ? (
             <Accordion type="single" collapsible className="w-full">
               {detailedPersonalShares.map((shareDetail) => {
-                const personData = peopleMap.get(shareDetail.personId);
+                const personData = people.find(p => p.id === shareDetail.personId);
                 return (
                   <AccordionItem value={shareDetail.personId} key={shareDetail.personId}>
                     <AccordionTrigger>

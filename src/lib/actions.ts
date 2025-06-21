@@ -151,7 +151,7 @@ export async function getCurrentUserAction(): Promise<{ user: SupabaseUser | nul
   try {
     const { data: profileData, error: profileError } = await supabase
       .from('profiles')
-      .select('id, username, full_name, avatar_url, email, phone_number')
+      .select('id, username, full_name, avatar_url')
       .eq('id', user.id)
       .single();
 
@@ -1415,7 +1415,6 @@ export async function getBillDetailsAction(billId: string): Promise<{ success: b
     const participants: Person[] = participantsRawData.map(p_raw => ({
         id: p_raw.id,
         name: p_raw.name,
-        avatar_url: null // We don't have a direct link to profiles here yet
     }));
 
 
@@ -1675,54 +1674,6 @@ export async function getFriendRequestsAction(): Promise<{ success: boolean; req
   }
 }
 
-// New helper action to get details for a single friend request (e.g., for toast notifications)
-export async function getFriendRequestDetailsById(requestId: string): Promise<{ success: boolean; request?: FriendRequestDisplay; error?: string }> {
-  const supabase = createSupabaseServerClient();
-  const { data: { user: currentUser }, error: authError } = await supabase.auth.getUser();
-
-  if (authError || !currentUser) {
-    return { success: false, error: "Pengguna tidak terautentikasi." };
-  }
-
-  try {
-    const { data: req, error } = await supabase
-      .from('friend_requests')
-      .select("id, requester_id, receiver_id, created_at, status, profile:requester_id(id, username, full_name, avatar_url)")
-      .eq('id', requestId)
-      .single();
-    
-    if (error || !req) {
-        console.error("Error fetching single friend request details:", error);
-        return { success: false, error: error?.message || "Permintaan tidak ditemukan." };
-    }
-    
-    if (!req.profile) {
-        return { success: false, error: "Profil pengirim tidak ditemukan." };
-    }
-
-    // Ensure the current user is part of this request for security/relevance
-    if (req.receiver_id !== currentUser.id && req.requester_id !== currentUser.id) {
-        return { success: false, error: "Tidak berhak melihat detail permintaan ini." };
-    }
-    const profile = req.profile as UserProfileBasic;
-    const requestDetails: FriendRequestDisplay = {
-      requestId: req.id,
-      id: profile.id,
-      username: profile.username,
-      full_name: profile.full_name,
-      avatar_url: profile.avatar_url,
-      requestedAt: req.created_at,
-      status: req.status as FriendRequestDisplay['status'],
-    };
-    return { success: true, request: requestDetails };
-
-  } catch (e: any) {
-    console.error("Exception in getFriendRequestDetailsById:", e);
-    return { success: false, error: e.message || "Gagal mengambil detail permintaan." };
-  }
-}
-
-
 export async function acceptFriendRequestAction(requestId: string): Promise<{ success: boolean; error?: string }> {
   const supabase = createSupabaseServerClient();
   const { data: { user: currentUser }, error: authError } = await supabase.auth.getUser();
@@ -1754,12 +1705,12 @@ export async function acceptFriendRequestAction(requestId: string): Promise<{ su
       .eq('id', requestId);
     if (updateError) throw updateError;
 
-    const user1_id = request.requester_id < request.receiver_id ? request.requester_id : request.receiver_id;
-    const user2_id = request.requester_id < request.receiver_id ? request.receiver_id : request.requester_id;
-
     const { error: friendshipError } = await supabase
       .from('friendships')
-      .insert({ user1_id: user1_id, user2_id: user2_id });
+      .insert({ 
+        user1_id: Math.min(request.requester_id, request.receiver_id),
+        user2_id: Math.max(request.requester_id, request.receiver_id)
+      });
     if (friendshipError) {
         if (friendshipError.code === '23505') { 
              console.warn("Friendship already exists, but request was pending. Proceeding.");

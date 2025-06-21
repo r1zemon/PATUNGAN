@@ -28,10 +28,15 @@ export interface BillDetails {
   taxTipSplitStrategy: TaxTipSplitStrategy;
 }
 
+export type SettlementStatus = 'unpaid' | 'paid' | 'pending' | 'failed';
+
 export interface Settlement {
+  fromId: string;
   from: string; // Person name
+  toId: string;
   to: string;   // Person name (usually the payer)
   amount: number;
+  status: SettlementStatus;
 }
 
 export interface PersonalItemDetail {
@@ -90,7 +95,7 @@ export interface Notification {
   link?: string;
   sender?: {
     name: string;
-    avatarUrl?: string;
+    avatar_url?: string;
   };
 }
 

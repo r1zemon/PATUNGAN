@@ -3,7 +3,7 @@
 
 import { scanReceipt, ScanReceiptOutput, ReceiptItem as AiReceiptItem } from "@/ai/flows/scan-receipt";
 import { summarizeBill, SummarizeBillInput } from "@/ai/flows/summarize-bill";
-import type { SplitItem, Person, RawBillSummary, TaxTipSplitStrategy, ScannedItem, BillHistoryEntry, BillCategory, DashboardData, MonthlyExpenseByCategory, ExpenseChartDataPoint, RecentBillDisplayItem, ScheduledBillDisplayItem, DetailedBillSummaryData, Settlement, FetchedBillDetails, PersonalShareDetail, UserProfileBasic, FriendRequestDisplay, FriendDisplay } from "./types";
+import type { SplitItem, Person, RawBillSummary, TaxTipSplitStrategy, ScannedItem, BillHistoryEntry, BillCategory, DashboardData, MonthlyExpenseByCategory, ExpenseChartDataPoint, RecentBillDisplayItem, ScheduledBillDisplayItem, DetailedBillSummaryData, Settlement, FetchedBillDetails, PersonalShareDetail, UserProfileBasic, FriendRequestDisplay, FriendDisplay, SettlementStatus } from "./types";
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
 import type { PostgrestSingleResponse, User as SupabaseUser } from "@supabase/supabase-js";
@@ -769,7 +769,8 @@ export async function handleSummarizeBillAction(
           bill_id: billId,
           from_participant_id: person.id,
           to_participant_id: payerParticipantId,
-          amount: share
+          amount: share,
+          status: 'unpaid' // Default status
         };
         settlementPromises.push(
           supabase.from('settlements').insert(settlementData).select().single()
@@ -1414,7 +1415,7 @@ export async function getBillDetailsAction(billId: string): Promise<{ success: b
     const participants: Person[] = participantsRawData.map(p_raw => ({
         id: p_raw.id,
         name: p_raw.name,
-        avatar_url: null
+        avatar_url: null // We don't have a direct link to profiles here yet
     }));
 
 
@@ -1492,7 +1493,7 @@ export async function getBillDetailsAction(billId: string): Promise<{ success: b
 
     const { data: settlementsData, error: settlementsError } = await supabase
       .from('settlements')
-      .select('amount, from_participant:bill_participants!settlements_from_participant_id_fkey ( name ), to_participant:bill_participants!settlements_to_participant_id_fkey ( name )')
+      .select('amount, status, from_participant:bill_participants!settlements_from_participant_id_fkey(id, name), to_participant:bill_participants!settlements_to_participant_id_fkey(id, name)')
       .eq('bill_id', billId);
 
     if (settlementsError) {
@@ -1501,9 +1502,12 @@ export async function getBillDetailsAction(billId: string): Promise<{ success: b
     }
 
     const settlements: Settlement[] = (settlementsData || []).map(s => ({
+      fromId: (s.from_participant as any)?.id || "unknown",
       from: (s.from_participant as any)?.name || "Tidak Diketahui",
+      toId: (s.to_participant as any)?.id || "unknown",
       to: (s.to_participant as any)?.name || "Tidak Diketahui",
       amount: s.amount,
+      status: s.status as SettlementStatus
     }));
 
     const summaryData: DetailedBillSummaryData = {

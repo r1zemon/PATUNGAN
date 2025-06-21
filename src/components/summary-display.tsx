@@ -8,13 +8,16 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { formatCurrency } from "@/lib/utils";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { Users, Landmark, Percent, ArrowRight, Wallet, ShoppingBasket, FileText, Hash, Tag } from "lucide-react";
+import { Users, Landmark, Percent, ArrowRight, Wallet, ShoppingBasket, FileText, Hash, Tag, CheckCircle, CreditCard, ShieldCheck } from "lucide-react";
 import {
   Accordion,
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
+import { Badge } from "./ui/badge";
+import { Button } from "./ui/button";
+import { useToast } from "@/hooks/use-toast";
 
 interface SummaryDisplayProps {
   summary: DetailedBillSummaryData | null;
@@ -22,6 +25,8 @@ interface SummaryDisplayProps {
 }
 
 export function SummaryDisplay({ summary, people }: SummaryDisplayProps) {
+  const { toast } = useToast();
+
   if (!summary) {
     return <p className="text-muted-foreground">Ringkasan tagihan akan ditampilkan di sini setelah dihitung.</p>;
   }
@@ -97,7 +102,7 @@ export function SummaryDisplay({ summary, people }: SummaryDisplayProps) {
                       <div className="flex items-center justify-between w-full">
                         <div className="flex items-center gap-3">
                           <Avatar className="h-9 w-9">
-                            <AvatarImage src={personData?.avatar_url || `https://placehold.co/40x40.png?text=${shareDetail.personName.substring(0,1)}`} alt={shareDetail.personName} data-ai-hint="profile avatar" />
+                            <AvatarImage src={personData?.avatar_url || undefined} alt={shareDetail.personName} data-ai-hint="profile avatar" />
                             <AvatarFallback>{shareDetail.personName.substring(0, 2).toUpperCase()}</AvatarFallback>
                           </Avatar>
                           <span className="truncate font-medium">{shareDetail.personName}</span>
@@ -164,7 +169,7 @@ export function SummaryDisplay({ summary, people }: SummaryDisplayProps) {
         <Card className="shadow-lg">
           <CardHeader>
             <CardTitle className="flex items-center"><ArrowRight className="mr-2 h-6 w-6 text-primary"/> Penyelesaian Pembayaran</CardTitle>
-            <CardDescription>Berikut adalah siapa yang perlu membayar ke siapa.</CardDescription>
+            <CardDescription>Berikut adalah siapa yang perlu membayar ke siapa untuk menyelesaikan tagihan ini.</CardDescription>
           </CardHeader>
           <CardContent>
             <ScrollArea className="max-h-[300px] overflow-x-auto">
@@ -173,37 +178,66 @@ export function SummaryDisplay({ summary, people }: SummaryDisplayProps) {
                   <TableRow>
                     <TableHead className="min-w-[120px]">Dari</TableHead>
                     <TableHead className="min-w-[120px]">Ke</TableHead>
-                    <TableHead className="text-right min-w-[100px]">Jumlah (Rp)</TableHead>
+                    <TableHead>Jumlah</TableHead>
+                    <TableHead className="text-center">Status</TableHead>
+                    <TableHead className="text-right">Aksi</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {settlements.map((settlement, index) => (
-                    <TableRow key={index}>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                           <Avatar className="h-8 w-8">
-                            <AvatarImage src={`https://placehold.co/40x40.png?text=${settlement.from.substring(0,1)}`} alt={settlement.from} data-ai-hint="profile avatar small" />
-                            <AvatarFallback>{settlement.from.substring(0,1)}</AvatarFallback>
-                          </Avatar>
-                          {settlement.from}
-                        </div>
-                      </TableCell>
-                       <TableCell>
-                         <div className="flex items-center gap-2">
-                           <Avatar className="h-8 w-8">
-                            <AvatarImage src={`https://placehold.co/40x40.png?text=${settlement.to.substring(0,1)}`} alt={settlement.to} data-ai-hint="profile avatar small" />
-                            <AvatarFallback>{settlement.to.substring(0,1)}</AvatarFallback>
-                          </Avatar>
-                          {settlement.to}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right font-semibold text-primary">{formatCurrency(settlement.amount, "IDR")}</TableCell>
-                    </TableRow>
-                  ))}
+                  {settlements.map((settlement, index) => {
+                    const fromPerson = people.find(p => p.id === settlement.fromId);
+                    const toPerson = people.find(p => p.id === settlement.toId);
+                    
+                    return (
+                      <TableRow key={index}>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                             <Avatar className="h-8 w-8">
+                              <AvatarImage src={fromPerson?.avatar_url || undefined} alt={settlement.from} data-ai-hint="profile avatar small" />
+                              <AvatarFallback>{settlement.from.substring(0,1)}</AvatarFallback>
+                            </Avatar>
+                            {settlement.from}
+                          </div>
+                        </TableCell>
+                         <TableCell>
+                           <div className="flex items-center gap-2">
+                             <Avatar className="h-8 w-8">
+                              <AvatarImage src={toPerson?.avatar_url || undefined} alt={settlement.to} data-ai-hint="profile avatar small" />
+                              <AvatarFallback>{settlement.to.substring(0,1)}</AvatarFallback>
+                            </Avatar>
+                            {settlement.to}
+                          </div>
+                        </TableCell>
+                        <TableCell className="font-semibold text-primary">{formatCurrency(settlement.amount, "IDR")}</TableCell>
+                        <TableCell className="text-center">
+                          {settlement.status === 'paid' ? (
+                            <Badge variant="secondary" className="bg-green-100 text-green-800 border-green-200">
+                              <CheckCircle className="mr-1 h-3 w-3"/>Lunas
+                            </Badge>
+                          ) : (
+                             <Badge variant="outline" className="text-amber-700 border-amber-300">
+                              Belum Lunas
+                            </Badge>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {settlement.status === 'unpaid' && (
+                            <Button size="sm" onClick={() => toast({ title: "Fitur Dalam Pengembangan", description: "Pembayaran melalui Midtrans akan segera hadir." })}>
+                              <CreditCard className="mr-2 h-4 w-4"/>Bayar Sekarang
+                            </Button>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </ScrollArea>
           </CardContent>
+           <CardFooter className="flex-col items-start text-xs text-muted-foreground p-4 border-t">
+              <p className="flex items-center gap-1.5"><ShieldCheck className="h-3.5 w-3.5 text-primary"/> Bayar lewat Patungan untuk pencatatan otomatis & notifikasi.</p>
+              <p className="pl-5">Dikenakan biaya layanan 1% untuk setiap transaksi pembayaran.</p>
+          </CardFooter>
         </Card>
       )}
        {settlements.length === 0 && grandTotal > 0 && summary.payerName && Object.keys(summary.personalTotalShares).length > 0 && summary.personalTotalShares[summary.payerName] === grandTotal && (
@@ -219,4 +253,3 @@ export function SummaryDisplay({ summary, people }: SummaryDisplayProps) {
     </div>
   );
 }
-

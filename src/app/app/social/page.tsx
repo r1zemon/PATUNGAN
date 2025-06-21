@@ -151,22 +151,28 @@ export default function SocialPage() {
     };
   }, [authUser, fetchInitialData, toast]);
 
-
-  const handleSearchUsers = async (query: string) => {
-    if (!query.trim()) {
+  useEffect(() => {
+    if (!searchUsername.trim()) {
       setSearchResults([]);
+      setIsSearching(false);
       return;
     }
+
     setIsSearching(true);
-    const result = await searchUsersAction(query);
-    if (result.success && result.users) {
-      setSearchResults(result.users);
-    } else {
-      toast({ variant: "destructive", title: "Pencarian Gagal", description: result.error });
-      setSearchResults([]);
-    }
-    setIsSearching(false);
-  };
+    const searchTimer = setTimeout(async () => {
+      const result = await searchUsersAction(searchUsername);
+      if (result.success && result.users) {
+        setSearchResults(result.users);
+      } else {
+        toast({ variant: "destructive", title: "Pencarian Gagal", description: result.error });
+        setSearchResults([]);
+      }
+      setIsSearching(false);
+    }, 300); // 300ms debounce
+
+    return () => clearTimeout(searchTimer);
+  }, [searchUsername, toast]);
+
 
   const handleSendFriendRequest = async (receiverId: string) => {
     const result = await sendFriendRequestAction(receiverId);
@@ -369,7 +375,6 @@ export default function SocialPage() {
                             value={searchUsername}
                             onChange={(e: ChangeEvent<HTMLInputElement>) => {
                                 setSearchUsername(e.target.value);
-                                handleSearchUsers(e.target.value);
                             }}
                             className="pl-10"
                         />

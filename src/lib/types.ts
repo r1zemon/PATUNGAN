@@ -86,7 +86,7 @@ export interface Notification {
   description?: string;
   createdAt: string; // ISO string date
   read: boolean;
-  icon?: string;
+  icon?: React.ElementType;
   link?: string;
   sender?: {
     name: string;
@@ -142,8 +142,8 @@ export interface FetchedBillDetails {
 export interface UserProfileBasic {
   id: string;
   username: string | null;
-  fullName: string | null;
-  avatarUrl: string | null;
+  full_name: string | null;
+  avatar_url: string | null;
 }
 
 export interface FriendRequestDisplay extends UserProfileBasic {

@@ -21,13 +21,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { NotificationBell } from './notification-bell';
+import type { UserProfileBasic } from '@/lib/types';
 
-interface Profile {
-  username?: string;
-  full_name?: string;
-  avatar_url?: string;
-  email?: string;
-}
 
 // Updated navLinks
 const navLinks = [
@@ -38,7 +33,7 @@ const navLinks = [
 
 export function LandingHeader() {
   const [authUser, setAuthUser] = useState<SupabaseUser | null>(null);
-  const [userProfile, setUserProfile] = useState<Profile | null>(null);
+  const [userProfile, setUserProfile] = useState<UserProfileBasic | null>(null);
   const [isLoadingUser, setIsLoadingUser] = useState(true);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -292,5 +287,3 @@ export function LandingHeader() {
     </header>
   );
 }
-
-    

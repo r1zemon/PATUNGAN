@@ -38,16 +38,11 @@ import {
 import ReactCrop, { type Crop, centerCrop, makeAspectCrop, PixelCrop } from 'react-image-crop';
 import { cn } from "@/lib/utils";
 import { LandingHeader } from "@/components/landing-header";
+import { Database } from "@/lib/database.types";
 
 
-interface Profile {
-  id: string;
-  username?: string | null;
-  full_name?: string | null;
-  avatar_url?: string | null;
-  email?: string | null;
-  phone_number?: string | null;
-}
+type Profile = Database['public']['Tables']['profiles']['Row'];
+
 
 function dataURLtoFile(dataurl: string, filename: string): File | null {
   const arr = dataurl.split(',');
@@ -117,17 +112,8 @@ export default function ProfilePage() {
       setFormData({
         fullName: typedProfile.full_name || "",
         username: typedProfile.username || "",
-        phoneNumber: typedProfile.phone_number || "",
+        phoneNumber: typedProfile.phone_number ? String(typedProfile.phone_number) : "",
       });
-      // setHeaderAvatarUrl(typedProfile.avatar_url || null); No longer needed
-      // const initialDisplayNameForHeader = typedProfile.username || typedProfile.full_name || user.email || "Pengguna"; No longer needed
-      // setHeaderDisplayName(initialDisplayNameForHeader); No longer needed
-      // setHeaderAvatarInitial(initialDisplayNameForHeader ? initialDisplayNameForHeader.substring(0,1).toUpperCase() : "P"); No longer needed
-
-    } else {
-      // const initialDisplayNameForHeader = user.email || "Pengguna"; No longer needed
-      // setHeaderDisplayName(initialDisplayNameForHeader); No longer needed
-      // setHeaderAvatarInitial(initialDisplayNameForHeader ? initialDisplayNameForHeader.substring(0,1).toUpperCase() : "P"); No longer needed
     }
     setIsLoadingUser(false);
   }, [router, toast]);
@@ -261,7 +247,7 @@ export default function ProfilePage() {
     setIsSaving(true);
 
     try {
-      const profileUpdates: Partial<Omit<Profile, 'id' | 'email'>> = {};
+      const profileUpdates: Partial<Omit<Profile, 'id' | 'email' | 'updated_at'>> = {};
       let hasChanges = false;
       const errorMessages: string[] = [];
 
@@ -294,7 +280,7 @@ export default function ProfilePage() {
           processedPhoneNumber = null; 
       }
 
-      if (processedPhoneNumber !== (userProfile.phone_number || null)) {
+      if (processedPhoneNumber !== (userProfile.phone_number ? String(userProfile.phone_number) : null)) {
         profileUpdates.phone_number = processedPhoneNumber;
         hasChanges = true;
       }
@@ -324,20 +310,14 @@ export default function ProfilePage() {
             ...prev,
             fullName: typedUpdatedProfile.full_name || "",
             username: typedUpdatedProfile.username || "",
-            phoneNumber: typedUpdatedProfile.phone_number || "",
+            phoneNumber: typedUpdatedProfile.phone_number ? String(typedUpdatedProfile.phone_number) : "",
         }));
         setCroppedAvatarPreview(null); 
         setAvatarFile(null); 
         if (avatarFileInputRef.current) avatarFileInputRef.current.value = "";
         
-        // setHeaderAvatarUrl(typedUpdatedProfile.avatar_url || null); No longer needed
-        // const newHeaderDisplayName = typedUpdatedProfile.username || typedUpdatedProfile.full_name || authUser.email || "Pengguna"; No longer needed
-        // setHeaderDisplayName(newHeaderDisplayName); No longer needed
-        // setHeaderAvatarInitial(newHeaderDisplayName ? newHeaderDisplayName.substring(0,1).toUpperCase() : "P"); No longer needed
-        
-        // Re-fetch user to update LandingHeader via its own logic
         await getCurrentUserAction(); 
-        router.refresh(); // To ensure LandingHeader re-renders with fresh data if it relies on path revalidation
+        router.refresh(); 
         
       } else {
         const errorMessagesToShow = Array.isArray(updateError) ? updateError.join('; ') : updateError;
@@ -368,11 +348,6 @@ export default function ProfilePage() {
             setAvatarFile(null);
             if (avatarFileInputRef.current) avatarFileInputRef.current.value = "";
 
-            // setHeaderAvatarUrl(null); No longer needed
-            // const newHeaderDisplayName = formData.fullName || formData.username || authUser.email || "Pengguna"; No longer needed
-            // setHeaderDisplayName(newHeaderDisplayName); No longer needed
-            // setHeaderAvatarInitial(newHeaderDisplayName ? newHeaderDisplayName.substring(0,1).toUpperCase() : "P"); No longer needed
-             // Re-fetch user to update LandingHeader via its own logic
             await getCurrentUserAction();
             router.refresh();
         } else {
@@ -626,5 +601,3 @@ export default function ProfilePage() {
     </div>
   );
 }
-
-    

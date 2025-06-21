@@ -151,7 +151,7 @@ export async function getCurrentUserAction(): Promise<{ user: SupabaseUser | nul
   try {
     const { data: profileData, error: profileError } = await supabase
       .from('profiles')
-      .select('id, username, full_name, avatar_url, email')
+      .select('id, username, full_name, avatar_url, email, phone_number')
       .eq('id', user.id)
       .single();
 
@@ -812,12 +812,7 @@ export async function handleSummarizeBillAction(
 
 export async function updateUserProfileAction(
   userId: string,
-  profileUpdates: {
-    full_name?: string | null;
-    username?: string | null;
-    avatar_url?: string | null;
-    phone_number?: string | null;
-  },
+  profileUpdates: Partial<Database['public']['Tables']['profiles']['Update']>,
   avatarFile?: File | null
 ): Promise<{ success: boolean; data?: any; error?: string | string[] }> {
   const supabase = createSupabaseServerClient();
@@ -889,19 +884,19 @@ export async function updateUserProfileAction(
     }
 
     if (profileUpdates.phone_number !== undefined) {
-        const newPhoneNumber = profileUpdates.phone_number === null ? null : profileUpdates.phone_number.trim();
-        const currentPhoneNumber = currentProfileData.phone_number || null;
+        const newPhoneNumber = profileUpdates.phone_number === null ? null : String(profileUpdates.phone_number).trim();
+        const currentPhoneNumber = currentProfileData.phone_number ? String(currentProfileData.phone_number) : null;
         if (newPhoneNumber !== currentPhoneNumber) {
             updatesForDB.phone_number = newPhoneNumber === "" ? null : newPhoneNumber;
             hasProfileDetailChanges = true;
         }
     }
-
+    
     let avatarUrlToUpdate: string | null | undefined = undefined;
 
     if (avatarFile) {
         const fileExt = avatarFile.name.split('.').pop();
-        const filePath = "public/avatars/" + userId + "/avatar." + fileExt;
+        const filePath = `public/${userId}/avatar.${fileExt}`;
         const { error: uploadError } = await supabase.storage
             .from('avatars')
             .upload(filePath, avatarFile, { cacheControl: '3600', upsert: true });
@@ -1555,7 +1550,7 @@ export async function searchUsersAction(query: string): Promise<{ success: boole
     const { data, error } = await supabase
       .from('profiles')
       .select('id, username, full_name, avatar_url')
-      .or("username.ilike.%" + query + "%,full_name.ilike.%" + query +"%")
+      .or(`username.ilike.%${query}%,full_name.ilike.%${query}%`)
       .neq('id', currentUser.id) // Exclude current user
       .limit(10);
 
@@ -1582,10 +1577,7 @@ export async function sendFriendRequestAction(receiverId: string): Promise<{ suc
     const { data: existingFriendship, error: friendshipCheckError } = await supabase
       .from('friendships')
       .select('id')
-      .or("user1_id.eq." + requester.id + ",user2_id.eq." + requester.id)
-      .or("user1_id.eq." + receiverId + ",user2_id.eq." + receiverId)
-      .filter('user1_id', 'in', "(" + requester.id + "," + receiverId + ")")
-      .filter('user2_id', 'in', "(" + requester.id + "," + receiverId + ")")
+      .or(`and(user1_id.eq.${requester.id},user2_id.eq.${receiverId}),and(user1_id.eq.${receiverId},user2_id.eq.${requester.id})`)
       .maybeSingle();
 
     if (friendshipCheckError) throw friendshipCheckError;
@@ -1595,7 +1587,7 @@ export async function sendFriendRequestAction(receiverId: string): Promise<{ suc
     const { data: existingRequest, error: requestCheckError } = await supabase
         .from('friend_requests')
         .select('id, status, requester_id')
-        .or("and(requester_id.eq." + requester.id + ",receiver_id.eq." + receiverId + "),and(requester_id.eq." + receiverId + ",receiver_id.eq." + requester.id + ")")
+        .or(`and(requester_id.eq.${requester.id},receiver_id.eq.${receiverId}),and(requester_id.eq.${receiverId},receiver_id.eq.${requester.id})`)
         .in('status', ['pending', 'accepted']) 
         .maybeSingle();
 
@@ -1645,22 +1637,33 @@ export async function getFriendRequestsAction(): Promise<{ success: boolean; req
   try {
     const { data, error } = await supabase
       .from('friend_requests')
-      .select("id, requester_id, created_at, status, profile:profiles!friend_requests_requester_id_fkey (id, username, full_name, avatar_url)")
+      .select(`
+        id, 
+        created_at, 
+        status, 
+        profile:requester_id(id, username, full_name, avatar_url)
+      `)
       .eq('receiver_id', user.id)
       .eq('status', 'pending') // Only fetch pending requests for the "incoming" list
       .order('created_at', { ascending: false });
 
     if (error) throw error;
+    if (!data) return { success: true, requests: [] };
 
-    const requests: FriendRequestDisplay[] = data.map(req => ({
-      requestId: req.id,
-      id: (req.profile as UserProfileBasic).id, // Requester's ID
-      username: (req.profile as UserProfileBasic).username,
-      fullName: (req.profile as UserProfileBasic).full_name,
-      avatarUrl: (req.profile as UserProfileBasic).avatar_url,
-      requestedAt: req.created_at,
-      status: req.status as FriendRequestDisplay['status'],
-    }));
+    const requests: FriendRequestDisplay[] = data
+      .filter(req => req.profile) // Filter out requests where profile is null
+      .map(req => {
+        const profile = req.profile as UserProfileBasic;
+        return {
+            requestId: req.id,
+            id: profile.id, // Requester's ID
+            username: profile.username,
+            full_name: profile.full_name,
+            avatar_url: profile.avatar_url,
+            requestedAt: req.created_at,
+            status: req.status as FriendRequestDisplay['status'],
+        }
+    });
     return { success: true, requests };
   } catch (e: any) {
     console.error("Error fetching friend requests:", e);
@@ -1680,7 +1683,7 @@ export async function getFriendRequestDetailsById(requestId: string): Promise<{ 
   try {
     const { data: req, error } = await supabase
       .from('friend_requests')
-      .select("id, requester_id, receiver_id, created_at, status, profile:profiles!friend_requests_requester_id_fkey (id, username, full_name, avatar_url)")
+      .select("id, requester_id, receiver_id, created_at, status, profile:requester_id(id, username, full_name, avatar_url)")
       .eq('id', requestId)
       .single();
     
@@ -1689,17 +1692,21 @@ export async function getFriendRequestDetailsById(requestId: string): Promise<{ 
         return { success: false, error: error?.message || "Permintaan tidak ditemukan." };
     }
     
+    if (!req.profile) {
+        return { success: false, error: "Profil pengirim tidak ditemukan." };
+    }
+
     // Ensure the current user is part of this request for security/relevance
     if (req.receiver_id !== currentUser.id && req.requester_id !== currentUser.id) {
         return { success: false, error: "Tidak berhak melihat detail permintaan ini." };
     }
-
+    const profile = req.profile as UserProfileBasic;
     const requestDetails: FriendRequestDisplay = {
       requestId: req.id,
-      id: (req.profile as UserProfileBasic).id,
-      username: (req.profile as UserProfileBasic).username,
-      fullName: (req.profile as UserProfileBasic).full_name,
-      avatarUrl: (req.profile as UserProfileBasic).avatar_url,
+      id: profile.id,
+      username: profile.username,
+      full_name: profile.full_name,
+      avatar_url: profile.avatar_url,
       requestedAt: req.created_at,
       status: req.status as FriendRequestDisplay['status'],
     };
@@ -1820,24 +1827,29 @@ export async function getFriendsAction(): Promise<{ success: boolean; friends?: 
         .select(`
             id, 
             created_at,
-            user1:profiles!friendships_user1_id_fkey(id, username, full_name, avatar_url),
-            user2:profiles!friendships_user2_id_fkey(id, username, full_name, avatar_url)
+            user1:user1_id(id, username, full_name, avatar_url),
+            user2:user2_id(id, username, full_name, avatar_url)
         `)
         .or(`user1_id.eq.${currentUser.id},user2_id.eq.${currentUser.id}`)
         .order('created_at', { ascending: false });
 
     if (error) throw error;
+    if (!data) return { success: true, friends: [] };
 
-    const friends: FriendDisplay[] = data.map(f => {
-        const friendProfile = (f.user1 as UserProfileBasic).id === currentUser.id ? f.user2 as UserProfileBasic : f.user1 as UserProfileBasic;
-        return {
-            friendshipId: f.id,
-            id: friendProfile.id,
-            username: friendProfile.username,
-            fullName: friendProfile.full_name,
-            avatarUrl: friendProfile.avatar_url,
-            since: f.created_at,
-        };
+    const friends: FriendDisplay[] = data
+        .filter(f => f.user1 && f.user2) // Ensure both user profiles were fetched
+        .map(f => {
+            const friendProfile = (f.user1 as UserProfileBasic).id === currentUser.id 
+                ? f.user2 as UserProfileBasic 
+                : f.user1 as UserProfileBasic;
+            return {
+                friendshipId: f.id,
+                id: friendProfile.id,
+                username: friendProfile.username,
+                full_name: friendProfile.full_name,
+                avatar_url: friendProfile.avatar_url,
+                since: f.created_at,
+            };
     });
     return { success: true, friends };
   } catch (e: any) {
@@ -1903,5 +1915,3 @@ export async function removeFriendAction(friendshipId: string): Promise<{ succes
     return { success: false, error: e.message || "Gagal menghapus teman." };
   }
 }
-
-    

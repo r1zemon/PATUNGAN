@@ -126,7 +126,7 @@ export default function SocialPage() {
             if (detailsResult.success && detailsResult.request) {
                  toast({ 
                     title: "Permintaan Pertemanan Baru!", 
-                    description: `${detailsResult.request.fullName || detailsResult.request.username} mengirimi Anda permintaan.`,
+                    description: `${detailsResult.request.full_name || detailsResult.request.username} mengirimi Anda permintaan.`,
                     duration: 5000 
                 });
             } else {
@@ -286,11 +286,11 @@ export default function SocialPage() {
                           <Card key={friend.id} className="shadow-sm hover:shadow-md transition-shadow">
                             <CardContent className="p-4 flex items-center space-x-3">
                               <Avatar className="h-12 w-12">
-                                <AvatarImage src={friend.avatarUrl || undefined} alt={friend.username || friend.fullName || "F"} data-ai-hint="friend avatar"/>
-                                <AvatarFallback>{(friend.fullName || friend.username || "F").substring(0,2).toUpperCase()}</AvatarFallback>
+                                <AvatarImage src={friend.avatar_url || undefined} alt={friend.username || friend.full_name || "F"} data-ai-hint="friend avatar"/>
+                                <AvatarFallback>{(friend.full_name || friend.username || "F").substring(0,2).toUpperCase()}</AvatarFallback>
                               </Avatar>
                               <div className="flex-grow min-w-0">
-                                <p className="font-semibold text-foreground truncate">{friend.fullName || friend.username}</p>
+                                <p className="font-semibold text-foreground truncate">{friend.full_name || friend.username}</p>
                                 <p className="text-xs text-muted-foreground truncate">@{friend.username}</p>
                               </div>
                                <DropdownMenu>
@@ -336,11 +336,11 @@ export default function SocialPage() {
                             <CardContent className="p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                                 <div className="flex items-center space-x-3 flex-grow min-w-0">
                                     <Avatar className="h-12 w-12">
-                                    <AvatarImage src={request.avatarUrl || undefined} alt={request.username || "R"} data-ai-hint="request sender avatar"/>
-                                    <AvatarFallback>{(request.fullName || request.username || "R").substring(0,2).toUpperCase()}</AvatarFallback>
+                                    <AvatarImage src={request.avatar_url || undefined} alt={request.username || "R"} data-ai-hint="request sender avatar"/>
+                                    <AvatarFallback>{(request.full_name || request.username || "R").substring(0,2).toUpperCase()}</AvatarFallback>
                                     </Avatar>
                                     <div className="min-w-0">
-                                    <p className="font-semibold text-foreground truncate">{request.fullName || request.username}</p>
+                                    <p className="font-semibold text-foreground truncate">{request.full_name || request.username}</p>
                                     <p className="text-xs text-muted-foreground truncate">@{request.username}</p>
                                     <p className="text-xs text-muted-foreground mt-0.5">
                                         {formatDistanceToNow(new Date(request.requestedAt), { addSuffix: true, locale: IndonesianLocale })}
@@ -400,11 +400,11 @@ export default function SocialPage() {
                                 <CardContent className="p-3 flex items-center justify-between gap-2">
                                     <div className="flex items-center space-x-3 min-w-0">
                                         <Avatar className="h-10 w-10">
-                                        <AvatarImage src={user.avatarUrl || undefined} alt={user.username || "U"} data-ai-hint="user search result avatar"/>
-                                        <AvatarFallback>{(user.fullName || user.username || "U").substring(0,2).toUpperCase()}</AvatarFallback>
+                                        <AvatarImage src={user.avatar_url || undefined} alt={user.username || "U"} data-ai-hint="user search result avatar"/>
+                                        <AvatarFallback>{(user.full_name || user.username || "U").substring(0,2).toUpperCase()}</AvatarFallback>
                                         </Avatar>
                                         <div className="min-w-0">
-                                        <p className="font-semibold text-sm text-foreground truncate">{user.fullName || user.username}</p>
+                                        <p className="font-semibold text-sm text-foreground truncate">{user.full_name || user.username}</p>
                                         <p className="text-xs text-muted-foreground truncate">@{user.username}</p>
                                         </div>
                                     </div>
@@ -441,4 +441,3 @@ export default function SocialPage() {
     </div>
   );
 }
-

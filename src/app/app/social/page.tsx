@@ -15,7 +15,6 @@ import {
   acceptFriendRequestAction,
   declineOrCancelFriendRequestAction,
   removeFriendAction,
-  getFriendRequestDetailsById // Ensure this is imported if used for new requests, or use getFriendRequestsAction to refresh
 } from "@/lib/actions";
 
 import { Button } from "@/components/ui/button";
@@ -105,44 +104,33 @@ export default function SocialPage() {
       .on(
         'postgres_changes',
         { 
-          event: '*', // Listen to INSERT, UPDATE, DELETE
+          event: '*', 
           schema: 'public', 
           table: 'friend_requests',
-          // Filter for requests involving the current user might be too complex here,
-          // so we refetch if any friend_request changes.
-          // A more specific filter could be `filter: \`receiver_id=eq.${authUser.id}\`` for new requests
-          // or `filter: \`requester_id=eq.${authUser.id}\`` for updates to sent requests.
-          // For simplicity and robustness for now, any change triggers a refresh.
         },
-        async (payload) => {
+        (payload) => {
           console.log('Realtime friend_requests change received!', payload);
           
-          // Check if the change is relevant to the current user
-          let relevantChange = false;
-          if (payload.eventType === 'INSERT' && payload.new.receiver_id === authUser.id) {
-            relevantChange = true;
-            // Fetch details for the new request to show a specific toast
-            const detailsResult = await getFriendRequestDetailsById(payload.new.id);
-            if (detailsResult.success && detailsResult.request) {
-                 toast({ 
-                    title: "Permintaan Pertemanan Baru!", 
-                    description: `${detailsResult.request.full_name || detailsResult.request.username} mengirimi Anda permintaan.`,
-                    duration: 5000 
-                });
-            } else {
-                 toast({ title: "Permintaan Pertemanan Baru!", description: "Anda menerima permintaan pertemanan baru.", duration: 5000 });
-            }
-          } else if (payload.eventType === 'UPDATE' || payload.eventType === 'DELETE') {
-            // Check if the old or new record involves the current user
-            const record = payload.new || payload.old;
-            if (record && (record.requester_id === authUser.id || record.receiver_id === authUser.id)) {
-              relevantChange = true;
-            }
-          }
+          const record = payload.new || payload.old;
+          const isRelevant = record && (
+              ('requester_id' in record && record.requester_id === authUser.id) ||
+              ('receiver_id' in record && record.receiver_id === authUser.id)
+          );
 
-          if (relevantChange) {
-            // Refetch all data to ensure UI consistency
-            // This is simpler than trying to merge partial updates
+          if (isRelevant) {
+            console.log('Change is relevant, refetching data.');
+            if (payload.eventType === 'INSERT' && (payload.new as any).receiver_id === authUser.id) {
+              toast({ 
+                title: "Permintaan Pertemanan Baru", 
+                description: "Anda menerima permintaan pertemanan baru. Periksa tab permintaan.",
+                duration: 5000 
+              });
+            } else if (payload.eventType === 'UPDATE') {
+               const updatedRecord = payload.new as any;
+               if (updatedRecord.status === 'accepted' && updatedRecord.requester_id === authUser.id) {
+                 toast({ title: "Pertemanan Diterima", description: "Permintaan pertemanan Anda telah diterima."});
+               }
+            }
             fetchInitialData(authUser);
           }
         }

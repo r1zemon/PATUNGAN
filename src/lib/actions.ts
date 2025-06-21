@@ -1405,7 +1405,7 @@ export async function getBillDetailsAction(billId: string): Promise<{ success: b
 
     const { data: participantsRawData, error: participantsFetchError } = await supabase
       .from('bill_participants')
-      .select('id, name, total_share_amount, profile_id') 
+      .select('id, name, total_share_amount')
       .eq('bill_id', billId);
 
     if (participantsFetchError) {
@@ -1415,31 +1415,11 @@ export async function getBillDetailsAction(billId: string): Promise<{ success: b
     if (!participantsRawData) {
         return { success: false, error: "Tidak ada data partisipan yang ditemukan." };
     }
-
-    const profileIds = participantsRawData
-        .map(p => p.profile_id)
-        .filter(id => id !== null) as string[];
-
-    let profilesMap = new Map<string, { avatar_url: string | null }>();
-    if (profileIds.length > 0) {
-        const { data: profilesData, error: profilesFetchError } = await supabase
-            .from('profiles')
-            .select('id, avatar_url')
-            .in('id', profileIds);
-
-        if (profilesFetchError) {
-            console.warn("Warning: Could not fetch profiles for participants:", profilesFetchError.message);
-        } else if (profilesData) {
-            profilesData.forEach(profile => {
-                profilesMap.set(profile.id, { avatar_url: profile.avatar_url });
-            });
-        }
-    }
-
+    
     const participants: Person[] = participantsRawData.map(p_raw => ({
         id: p_raw.id,
         name: p_raw.name,
-        avatar_url: p_raw.profile_id ? (profilesMap.get(p_raw.profile_id)?.avatar_url || null) : null
+        avatar_url: null
     }));
 
 
@@ -1923,3 +1903,5 @@ export async function removeFriendAction(friendshipId: string): Promise<{ succes
     return { success: false, error: e.message || "Gagal menghapus teman." };
   }
 }
+
+    

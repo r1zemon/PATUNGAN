@@ -1,8 +1,10 @@
 
+
 export interface Person {
-  id: string; // Ini bisa jadi participant_id atau user_id (profile_id)
+  id: string; // This is the bill_participants.id
   name: string;
-  avatar_url?: string | null; // Tambahkan untuk avatar di summary jika partisipan adalah user
+  profile_id?: string | null; // This is the user/profile id, if they are a registered user
+  avatar_url?: string | null;
 }
 
 export interface ScannedItem {

@@ -1,8 +1,9 @@
 
+
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
-import type { SplitItem, Person, BillDetails, TaxTipSplitStrategy, DetailedBillSummaryData, BillCategory, ScannedItem } from "@/lib/types";
+import type { SplitItem, Person, BillDetails, TaxTipSplitStrategy, DetailedBillSummaryData, BillCategory, ScannedItem, FriendDisplay } from "@/lib/types";
 import type { User as SupabaseUser } from "@supabase/supabase-js";
 import { 
   handleScanReceiptAction, 
@@ -17,7 +18,8 @@ import {
   addBillItemToDbAction, 
   updateBillItemInDbAction, 
   deleteBillItemFromDbAction,
-  getBillDetailsAction // Added import
+  getBillDetailsAction,
+  getFriendsAction // Added import
 } from "@/lib/actions";
 import { ReceiptUploader } from "@/components/receipt-uploader";
 import { ItemEditor } from "@/components/item-editor";
@@ -31,12 +33,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useToast } from "@/hooks/use-toast";
 import { Separator } from "@/components/ui/separator";
-import { UserCheck, Loader2, UserPlus, ArrowRight, Trash2, Users, ScanLine, PlusCircle, Edit2, ListChecks, FilePlus, FileText, CalendarClock, FolderPlus, Tag, Percent, Landmark, Power } from "lucide-react"; 
+import { UserCheck, Loader2, UserPlus, ArrowRight, Trash2, Users, ScanLine, PlusCircle, Edit2, ListChecks, FilePlus, FileText, CalendarClock, FolderPlus, Tag, Percent, Landmark, Power, User, Users2 } from "lucide-react"; 
 import { useRouter } from "next/navigation";
 import { format } from 'date-fns';
 import { id as IndonesianLocale } from 'date-fns/locale';
 import { LandingHeader } from "@/components/landing-header";
-import { Badge } from "@/components/ui/badge"; // Added import for Badge
+import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { ScrollArea } from "@/components/ui/scroll-area";
+
 
 interface Profile {
   username?: string;
@@ -76,7 +82,6 @@ export default function SplitBillAppPage() {
   const [currentStep, setCurrentStep] = useState(0); 
 
   const [authUser, setAuthUser] = useState<SupabaseUser | null>(null);
-  // Profile state no longer needed here as LandingHeader handles its own profile display
   const [isLoadingUser, setIsLoadingUser] = useState(true);
   const [isInitializingBill, setIsInitializingBill] = useState(false);
 
@@ -85,6 +90,11 @@ export default function SplitBillAppPage() {
   const [newCategoryInput, setNewCategoryInput] = useState<string>("");
   const [isLoadingCategories, setIsLoadingCategories] = useState(true);
   const [showNewCategoryInput, setShowNewCategoryInput] = useState(false);
+
+  // State for friends and invite dialog
+  const [friends, setFriends] = useState<FriendDisplay[]>([]);
+  const [isLoadingFriends, setIsLoadingFriends] = useState(true);
+  const [isInviteDialogOpen, setIsInviteDialogOpen] = useState(false);
 
 
   const { toast } = useToast();
@@ -96,7 +106,7 @@ export default function SplitBillAppPage() {
   const fetchUserAndCategories = useCallback(async () => {
     setIsLoadingUser(true);
     setIsLoadingCategories(true);
-    const { user, error: userError } = await getCurrentUserAction(); // Removed profile from here
+    const { user, error: userError } = await getCurrentUserAction();
     if (userError) {
       console.error("Error fetching user data:", userError);
     }
@@ -160,18 +170,24 @@ export default function SplitBillAppPage() {
     
     setCategories(finalSortedCategories);
     setIsLoadingCategories(false);
-    if (newCategoriesAdded) { 
-        // revalidatePath('/app', 'page'); // This is client-side, revalidatePath is for server actions
-        // revalidatePath('/', 'page');
-        // To refresh categories on client-side, a re-fetch or state update is needed if a category is added mid-session elsewhere.
-        // The current `fetchUserAndCategories` already handles sorting.
-    }
-
   }, [router, toast]);
+
+  const fetchFriends = useCallback(async () => {
+    setIsLoadingFriends(true);
+    const result = await getFriendsAction();
+    if (result.success && result.friends) {
+      setFriends(result.friends);
+    } else {
+      toast({ variant: "destructive", title: "Gagal Memuat Teman", description: result.error });
+    }
+    setIsLoadingFriends(false);
+  }, [toast]);
+
 
   useEffect(() => {
     fetchUserAndCategories();
-  }, [fetchUserAndCategories]);
+    fetchFriends();
+  }, [fetchUserAndCategories, fetchFriends]);
 
   const startNewBillSession = useCallback(async () => {
     if (!authUser) { 
@@ -298,6 +314,7 @@ export default function SplitBillAppPage() {
      }
      if (authUser) {
         fetchUserAndCategories(); 
+        fetchFriends();
      }
   }
 
@@ -325,29 +342,54 @@ export default function SplitBillAppPage() {
   }, [splitItems]);
 
 
-  const handleAddPerson = async () => {
+  const handleAddGuest = async () => {
     if (!currentBillId) {
-      toast({ variant: "destructive", title: "Tagihan Belum Siap", description: "Sesi tagihan belum terinisialisasi. Mohon tunggu atau coba reset." });
+      toast({ variant: "destructive", title: "Tagihan Belum Siap", description: "Sesi tagihan belum terinisialisasi." });
       return;
     }
     if (personNameInput.trim() === "") {
-      toast({ variant: "destructive", title: "Nama Kosong", description: "Nama orang tidak boleh kosong." });
+      toast({ variant: "destructive", title: "Nama Tamu Kosong", description: "Nama tamu tidak boleh kosong." });
       return;
     }
     if (people.some(p => p.name.toLowerCase() === personNameInput.trim().toLowerCase())) {
-      toast({ variant: "destructive", title: "Nama Duplikat", description: "Nama orang tersebut sudah ada dalam daftar." });
+      toast({ variant: "destructive", title: "Nama Duplikat", description: "Nama tersebut sudah ada dalam daftar." });
       return;
     }
     
-    const result = await addParticipantAction(currentBillId, personNameInput.trim());
+    // Add as guest, so profileId is null
+    const result = await addParticipantAction(currentBillId, personNameInput.trim(), null);
     if (result.success && result.person) {
       setPeople(prev => [...prev, result.person!]);
       setPersonNameInput("");
-      toast({ title: "Orang Ditambahkan", description: `${result.person.name} telah ditambahkan.`});
+      toast({ title: "Tamu Ditambahkan", description: `${result.person.name} telah ditambahkan.`});
     } else {
-      toast({ variant: "destructive", title: "Gagal Menambah Orang", description: result.error || "Tidak dapat menyimpan orang ke database." });
+      toast({ variant: "destructive", title: "Gagal Menambah Tamu", description: result.error || "Tidak dapat menyimpan tamu ke database." });
     }
   };
+
+  const handleInviteFriend = async (friend: FriendDisplay) => {
+    if (!currentBillId) {
+      toast({ variant: "destructive", title: "Tagihan Belum Siap", description: "Sesi tagihan belum terinisialisasi." });
+      return;
+    }
+    if (people.some(p => p.profile_id === friend.id)) {
+      toast({ variant: "destructive", title: "Sudah Ditambahkan", description: `${friend.full_name || friend.username} sudah ada dalam daftar.` });
+      return;
+    }
+
+    const result = await addParticipantAction(currentBillId, friend.full_name || friend.username || 'Friend', friend.id);
+    if (result.success && result.person) {
+      const newPerson: Person = {
+        ...result.person,
+        avatar_url: friend.avatar_url,
+      };
+      setPeople(prev => [...prev, newPerson]);
+      toast({ title: "Teman Diundang", description: `${newPerson.name} telah ditambahkan ke tagihan.` });
+    } else {
+      toast({ variant: "destructive", title: "Gagal Mengundang Teman", description: result.error || "Tidak dapat menambahkan teman ke database." });
+    }
+  };
+
 
   const handleRemovePerson = async (personIdToRemove: string) => {
     if (!currentBillId) return;
@@ -359,12 +401,12 @@ export default function SplitBillAppPage() {
         ...item,
         assignedTo: item.assignedTo.filter(a => a.personId !== personIdToRemove)
       })));
-      toast({ title: "Orang Dihapus", description: `${personRemoved?.name || 'Orang tersebut'} telah dihapus.`});
+      toast({ title: "Partisipan Dihapus", description: `${personRemoved?.name || 'Partisipan tersebut'} telah dihapus.`});
       if (billDetails.payerId === personIdToRemove) {
         setBillDetails(prev => ({ ...prev, payerId: people.length > 1 ? people.find(p => p.id !== personIdToRemove)!.id : null }));
       }
     } else {
-       toast({ variant: "destructive", title: "Gagal Menghapus Orang", description: result.error || "Tidak dapat menghapus orang dari database." });
+       toast({ variant: "destructive", title: "Gagal Menghapus Partisipan", description: result.error || "Tidak dapat menghapus orang dari database." });
     }
   };
   
@@ -411,13 +453,9 @@ export default function SplitBillAppPage() {
       setSplitItems((prevItems) =>
         prevItems.map((item) => (item.id === result.item!.id ? { ...item, ...result.item, assignedTo: updatedItem.assignedTo } : item))
       );
-      // assignments are part of the updatedItem and are passed to the local state, 
-      // but they are saved to DB only during handleSummarizeBillAction
       toast({ title: "Item Diperbarui", description: `Item "${result.item.name}" berhasil diperbarui di database.` });
     } else {
       toast({ variant: "destructive", title: "Gagal Memperbarui Item", description: result.error || "Tidak dapat menyimpan perubahan item." });
-      // Revert UI optimistically if needed, or refresh state from DB
-      // For simplicity, we are not reverting UI here.
     }
   };
 
@@ -551,14 +589,19 @@ export default function SplitBillAppPage() {
     setIsCalculating(false);
   };
   
-  if (isLoadingUser || isLoadingCategories) {
+  const availableFriendsToInvite = useMemo(() => {
+    const participantProfileIds = new Set(people.map(p => p.profile_id).filter(Boolean));
+    return friends.filter(friend => !participantProfileIds.has(friend.id));
+  }, [friends, people]);
+
+  if (isLoadingUser || isLoadingCategories || isLoadingFriends) {
     return (
       <div className="relative flex flex-col min-h-screen bg-background bg-money-pattern bg-[length:120px_auto] before:content-[''] before:absolute before:inset-0 before:bg-white/[.90] before:dark:bg-black/[.90] before:z-0">
         <LandingHeader />
         <main className="relative z-10 flex flex-col items-center justify-center text-center flex-grow p-4">
             <Loader2 className="h-12 w-12 animate-spin text-primary" />
             <p className="mt-4 text-lg text-foreground">
-                {isLoadingUser ? "Memuat data pengguna..." : "Memuat kategori..."}
+                {isLoadingUser ? "Memuat data pengguna..." : isLoadingCategories ? "Memuat kategori..." : "Memuat teman..."}
             </p>
         </main>
       </div>
@@ -744,40 +787,52 @@ export default function SplitBillAppPage() {
                 
                 <section>
                     <h3 className="text-lg font-semibold mb-3 flex items-center"><Users className="mr-2 h-5 w-5"/>Partisipan</h3>
-                    <div className="flex space-x-2">
-                    <Input
-                        type="text"
-                        placeholder="Nama Orang"
-                        value={personNameInput}
-                        onChange={(e) => setPersonNameInput(e.target.value)}
-                        onKeyPress={(e) => { if (e.key === 'Enter') handleAddPerson(); }}
-                        className="flex-grow"
-                    />
-                    <Button onClick={handleAddPerson} variant="outline" disabled={!personNameInput.trim()}>
-                        <UserPlus className="mr-2 h-4 w-4" /> Tambah
-                    </Button>
-                    </div>
-                    {people.length > 0 && (
-                    <div className="mt-4 space-y-2">
-                        <h4 className="text-sm font-medium text-muted-foreground">Daftar Orang ({people.length}):</h4>
-                        <div className="flex flex-wrap gap-2">
-                        {people.map(person => (
-                            <Badge key={person.id} variant="secondary" className="py-1 px-3 text-sm flex items-center gap-2 shadow-sm">
-                            {person.name}
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-5 w-5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-full"
-                                onClick={() => handleRemovePerson(person.id)}
-                                aria-label={`Hapus ${person.name}`}
-                            >
-                                <Trash2 className="h-3 w-3" />
-                            </Button>
-                            </Badge>
-                        ))}
+                    <div className="space-y-4">
+                      <div className="flex flex-col sm:flex-row gap-2">
+                        <Button onClick={() => setIsInviteDialogOpen(true)} variant="default" className="w-full sm:w-auto">
+                          <Users2 className="mr-2 h-4 w-4" /> Undang Teman
+                        </Button>
+                        <div className="flex-grow flex items-center gap-2">
+                           <Input
+                              type="text"
+                              placeholder="Nama partisipan non-pengguna"
+                              value={personNameInput}
+                              onChange={(e) => setPersonNameInput(e.target.value)}
+                              onKeyPress={(e) => { if (e.key === 'Enter') handleAddGuest(); }}
+                              className="flex-grow"
+                          />
+                          <Button onClick={handleAddGuest} variant="outline" disabled={!personNameInput.trim()}>
+                              <UserPlus className="mr-2 h-4 w-4" /> Tambah Tamu
+                          </Button>
                         </div>
+                      </div>
+
+                      {people.length > 0 && (
+                        <div className="mt-4 space-y-3">
+                            <h4 className="text-sm font-medium text-muted-foreground">Daftar Partisipan ({people.length}):</h4>
+                            <div className="flex flex-wrap gap-3">
+                              {people.map(person => (
+                                <div key={person.id} className="flex items-center gap-2 bg-secondary text-secondary-foreground p-1.5 pr-2.5 rounded-full shadow-sm">
+                                  <Avatar className="h-7 w-7">
+                                    <AvatarImage src={person.avatar_url || undefined} alt={person.name} />
+                                    <AvatarFallback>{person.name.substring(0,1).toUpperCase()}</AvatarFallback>
+                                  </Avatar>
+                                  <span className="text-sm font-medium">{person.name}</span>
+                                  <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-5 w-5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-full"
+                                      onClick={() => handleRemovePerson(person.id)}
+                                      aria-label={`Hapus ${person.name}`}
+                                  >
+                                      <Trash2 className="h-3 w-3" />
+                                  </Button>
+                                </div>
+                              ))}
+                            </div>
+                        </div>
+                      )}
                     </div>
-                    )}
                 </section>
 
                 <Separator/>
@@ -959,6 +1014,50 @@ export default function SplitBillAppPage() {
         </div>
         )}
       </main>
+
+       {/* Invite Friend Dialog */}
+      <Dialog open={isInviteDialogOpen} onOpenChange={setIsInviteDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Undang Teman</DialogTitle>
+            <DialogDescription>
+              Pilih teman dari daftar Anda untuk ditambahkan ke tagihan ini.
+            </DialogDescription>
+          </DialogHeader>
+          <ScrollArea className="max-h-[60vh] -mx-4">
+            <div className="py-2 px-4 space-y-2">
+              {isLoadingFriends ? (
+                <p className="text-muted-foreground text-center">Memuat daftar teman...</p>
+              ) : availableFriendsToInvite.length > 0 ? (
+                availableFriendsToInvite.map(friend => (
+                  <div key={friend.id} className="flex items-center justify-between p-2 rounded-md hover:bg-muted">
+                    <div className="flex items-center gap-3">
+                      <Avatar>
+                        <AvatarImage src={friend.avatar_url || undefined} alt={friend.full_name || friend.username || "T"} data-ai-hint="friend avatar" />
+                        <AvatarFallback>{(friend.full_name || friend.username || "T").substring(0, 2).toUpperCase()}</AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <p className="font-medium text-sm">{friend.full_name}</p>
+                        <p className="text-xs text-muted-foreground">@{friend.username}</p>
+                      </div>
+                    </div>
+                    <Button size="sm" variant="outline" onClick={() => handleInviteFriend(friend)}>
+                      <UserPlus className="mr-2 h-4 w-4"/> Undang
+                    </Button>
+                  </div>
+                ))
+              ) : (
+                <div className="text-center py-4 text-muted-foreground">
+                  <p>Semua teman Anda sudah ditambahkan.</p>
+                  <p className="text-xs">Atau Anda bisa <Link href="/app/social" className="text-primary underline">menambah teman baru</Link>.</p>
+                </div>
+              )}
+            </div>
+          </ScrollArea>
+        </DialogContent>
+      </Dialog>
+
+
       <footer className="relative z-10 mt-12 pt-8 border-t text-center text-sm text-muted-foreground">
         <p>&copy; {new Date().getFullYear()} Patungan. Hak cipta dilindungi.</p>
         <p>Ditenagai oleh Next.js, Shadcn/UI, Genkit, dan Supabase.</p>

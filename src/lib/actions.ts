@@ -1,4 +1,5 @@
 
+
 "use server";
 
 import { scanReceipt, ScanReceiptOutput, ReceiptItem as AiReceiptItem } from "@/ai/flows/scan-receipt";
@@ -340,16 +341,22 @@ export async function createBillAction(
   }
 }
 
-export async function addParticipantAction(billId: string, personName: string): Promise<{ success: boolean; person?: Person; error?: string }> {
+export async function addParticipantAction(billId: string, personName: string, profileId?: string | null): Promise<{ success: boolean; person?: Person; error?: string }> {
   const supabase = createSupabaseServerClient();
   if (!billId || !personName.trim()) {
-    return { success: false, error: "Bill ID and person name are required." };
+    return { success: false, error: "ID Tagihan dan nama orang diperlukan." };
   }
   try {
+    const insertData: Database['public']['Tables']['bill_participants']['Insert'] = {
+      bill_id: billId,
+      name: personName.trim(),
+      profile_id: profileId || null,
+    };
+
     const { data, error } = await supabase
       .from('bill_participants')
-      .insert([{ bill_id: billId, name: personName.trim() }])
-      .select('id, name')
+      .insert([insertData])
+      .select('id, name, profile_id')
       .single();
 
     if (error) {
@@ -357,9 +364,18 @@ export async function addParticipantAction(billId: string, personName: string): 
       return { success: false, error: error.message };
     }
     if (!data) {
-      return { success: false, error: "Failed to add participant or retrieve data." };
+      return { success: false, error: "Gagal menambahkan partisipan atau mengambil data." };
     }
-    return { success: true, person: { id: data.id, name: data.name } };
+    
+    // Construct the Person object for the client
+    const person: Person = { 
+      id: data.id, 
+      name: data.name,
+      profile_id: data.profile_id
+      // avatar_url will be added on the client-side for invited friends, or fetched in getBillDetails
+    };
+
+    return { success: true, person };
   } catch (e: any) {
     console.error("Exception in addParticipantAction:", e);
     return { success: false, error: e.message || "Terjadi kesalahan server saat menambahkan partisipan." };
@@ -1421,7 +1437,7 @@ export async function getBillDetailsAction(billId: string): Promise<{ success: b
 
     const { data: participantsRawData, error: participantsFetchError } = await supabase
       .from('bill_participants')
-      .select('id, name, total_share_amount')
+      .select('id, name, total_share_amount, profile_id')
       .eq('bill_id', billId);
 
     if (participantsFetchError) {
@@ -1431,14 +1447,31 @@ export async function getBillDetailsAction(billId: string): Promise<{ success: b
     if (!participantsRawData) {
         return { success: false, error: "Tidak ada data partisipan yang ditemukan." };
     }
+
+    const profileIds = participantsRawData.map(p => p.profile_id).filter((id): id is string => !!id);
+    let profilesData: { id: string; avatar_url: string | null }[] = [];
+    if (profileIds.length > 0) {
+      const { data: fetchedProfiles, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id, avatar_url')
+        .in('id', profileIds);
+
+      if (profilesError) {
+        console.warn("Could not fetch profiles for participants:", profilesError.message);
+      } else if (fetchedProfiles) {
+        profilesData = fetchedProfiles;
+      }
+    }
     
-    // Since bill_participants aren't directly linked to profiles, we can't reliably get avatars here.
-    // We will pass avatar_url as null and let the UI handle the fallback.
-    const participants: Person[] = participantsRawData.map(p_raw => ({
-        id: p_raw.id,
-        name: p_raw.name,
-        avatar_url: null // Avatars cannot be fetched with the current schema
-    }));
+    const participants: Person[] = participantsRawData.map(p_raw => {
+        const profile = profilesData.find(p => p.id === p_raw.profile_id);
+        return {
+            id: p_raw.id,
+            name: p_raw.name,
+            profile_id: p_raw.profile_id,
+            avatar_url: profile?.avatar_url || null
+        };
+    });
 
 
     const { data: allBillItems, error: billItemsError } = await supabase

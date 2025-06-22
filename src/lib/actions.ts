@@ -1415,7 +1415,6 @@ export async function getBillDetailsAction(billId: string): Promise<{ success: b
       .from('bills')
       .select('id, name, created_at, grand_total, tax_amount, tip_amount, payer_participant_id, tax_tip_split_strategy, scheduled_at')
       .eq('id', billId)
-      .eq('user_id', user.id)
       .single();
 
     if (billError) {
@@ -1564,8 +1563,8 @@ export async function getBillDetailsAction(billId: string): Promise<{ success: b
       .select(`
         amount,
         status,
-        from_participant:bill_participants!settlements_from_participant_id_fkey(id, name),
-        to_participant:bill_participants!settlements_to_participant_id_fkey(id, name)
+        from_participant:bill_participants!from_participant_id(id, name),
+        to_participant:bill_participants!to_participant_id(id, name)
       `)
       .eq('bill_id', billId);
 
@@ -1959,7 +1958,7 @@ export async function getPendingInvitationsAction(): Promise<{ success: boolean;
             .select(`
                 id,
                 created_at,
-                bill:bills!inner(id, name, inviter:user_id(full_name))
+                bill:bills!bill_id(id, name, inviter:user_id(full_name))
             `)
             .eq('profile_id', user.id)
             .eq('status', 'invited');
@@ -1969,7 +1968,9 @@ export async function getPendingInvitationsAction(): Promise<{ success: boolean;
             return { success: false, error: "Gagal mengambil undangan tagihan: " + error.message };
         }
         
-        const invitations: BillInvitation[] = data.map((p: any) => ({
+        const validData = data?.filter((p: any) => p.bill) || [];
+
+        const invitations: BillInvitation[] = validData.map((p: any) => ({
             participantId: p.id,
             billId: p.bill.id,
             billName: p.bill.name,
@@ -2036,3 +2037,5 @@ export async function respondToBillInvitationAction(participantId: string, respo
         return { success: false, error: "Terjadi kesalahan server: " + e.message };
     }
 }
+
+    

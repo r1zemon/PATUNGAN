@@ -865,8 +865,6 @@ export async function updateUserProfileAction(
   if (!userId) return { success: false, error: "User ID is required." };
 
   try {
-    const errorMessages: string[] = [];
-
     const { data: currentProfileData, error: fetchError } = await supabase
       .from('profiles')
       .select('avatar_url, full_name, username, phone_number')
@@ -1952,32 +1950,69 @@ export async function getPendingInvitationsAction(): Promise<{ success: boolean;
     }
     
     try {
-        const { data, error } = await supabase
+        // Step 1: Get pending invitations for the current user
+        const { data: invitationsData, error: invitationsError } = await supabase
             .from('bill_participants')
-            .select(`
-                id,
-                created_at,
-                bill:bills!bill_id(id, name, inviter:profiles!bills_user_id_fkey(full_name))
-            `)
+            .select('id, created_at, bill_id')
             .eq('profile_id', user.id)
             .eq('status', 'invited');
 
-        if (error) {
-            console.error("Error fetching pending bill invitations:", error);
-            return { success: false, error: "Gagal mengambil undangan tagihan: " + error.message };
+        if (invitationsError) {
+            console.error("Error fetching pending invitations (step 1):", invitationsError);
+            return { success: false, error: "Gagal mengambil data undangan: " + invitationsError.message };
         }
         
-        const validData = data?.filter((p: any) => p.bill) || [];
+        if (!invitationsData || invitationsData.length === 0) {
+            return { success: true, invitations: [] };
+        }
 
-        const invitations: BillInvitation[] = validData.map((p: any) => ({
-            participantId: p.id,
-            billId: p.bill.id,
-            billName: p.bill.name,
-            inviterName: p.bill.inviter?.full_name || 'Seseorang',
-            createdAt: p.created_at
-        }));
+        const billIds = invitationsData.map(inv => inv.bill_id);
 
-        return { success: true, invitations };
+        // Step 2: Get details for the associated bills
+        const { data: billsData, error: billsError } = await supabase
+            .from('bills')
+            .select('id, name, user_id') // user_id is the inviter's ID
+            .in('id', billIds);
+
+        if (billsError) {
+            console.error("Error fetching bill details (step 2):", billsError);
+            return { success: false, error: "Gagal mengambil detail tagihan untuk undangan: " + billsError.message };
+        }
+
+        const inviterIds = billsData.map(bill => bill.user_id).filter((id): id is string => !!id);
+
+        // Step 3: Get profiles for the inviters
+        let inviterProfiles: Map<string, string> = new Map();
+        if (inviterIds.length > 0) {
+            const { data: profilesData, error: profilesError } = await supabase
+                .from('profiles')
+                .select('id, full_name')
+                .in('id', inviterIds);
+
+            if (profilesError) {
+                console.warn("Could not fetch some inviter profiles (step 3):", profilesError.message);
+            } else if (profilesData){
+                profilesData.forEach(profile => {
+                    inviterProfiles.set(profile.id, profile.full_name || 'Seseorang');
+                });
+            }
+        }
+        
+        // Step 4: Stitch everything together
+        const finalInvitations: BillInvitation[] = invitationsData.map(invitation => {
+            const bill = billsData.find(b => b.id === invitation.bill_id);
+            const inviterName = bill && bill.user_id ? (inviterProfiles.get(bill.user_id) || 'Seseorang') : 'Seseorang';
+
+            return {
+                participantId: invitation.id,
+                billId: invitation.bill_id,
+                billName: bill?.name || 'Tagihan Dihapus',
+                inviterName: inviterName,
+                createdAt: invitation.created_at
+            };
+        }).filter(inv => inv.billId); // Ensure we don't have invitations for deleted bills
+
+        return { success: true, invitations: finalInvitations };
     } catch (e: any) {
         console.error("Exception in getPendingInvitationsAction:", e);
         return { success: false, error: "Terjadi kesalahan server saat mengambil undangan: " + e.message };

@@ -19,7 +19,7 @@ import {
   updateBillItemInDbAction, 
   deleteBillItemFromDbAction,
   getBillDetailsAction,
-  getFriendsAction // Added import
+  getFriendsAction
 } from "@/lib/actions";
 import { ReceiptUploader } from "@/components/receipt-uploader";
 import { ItemEditor } from "@/components/item-editor";
@@ -33,7 +33,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useToast } from "@/hooks/use-toast";
 import { Separator } from "@/components/ui/separator";
-import { UserCheck, Loader2, UserPlus, ArrowRight, Trash2, Users, ScanLine, PlusCircle, Edit2, ListChecks, FilePlus, FileText, CalendarClock, FolderPlus, Tag, Percent, Landmark, Power, User, Users2 } from "lucide-react"; 
+import { UserCheck, Loader2, UserPlus, ArrowRight, Trash2, Users, ScanLine, PlusCircle, Edit2, ListChecks, FilePlus, FileText, CalendarClock, FolderPlus, Tag, Percent, Landmark, Power, User, Users2, Clock } from "lucide-react"; 
 import { useRouter } from "next/navigation";
 import { format } from 'date-fns';
 import { id as IndonesianLocale } from 'date-fns/locale';
@@ -42,6 +42,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import Link from "next/link";
 
 
 interface Profile {
@@ -384,7 +385,7 @@ export default function SplitBillAppPage() {
         avatar_url: friend.avatar_url,
       };
       setPeople(prev => [...prev, newPerson]);
-      toast({ title: "Teman Diundang", description: `${newPerson.name} telah ditambahkan ke tagihan.` });
+      toast({ title: "Teman Diundang", description: `Undangan untuk ${newPerson.name} telah dikirim.` });
     } else {
       toast({ variant: "destructive", title: "Gagal Mengundang Teman", description: result.error || "Tidak dapat menambahkan teman ke database." });
     }
@@ -511,8 +512,10 @@ export default function SplitBillAppPage() {
       toast({ variant: "destructive", title: "Gagal Menghitung", description: "Pembayar belum dipilih." });
       return;
     }
-    if (people.length < 2) {
-      toast({ variant: "destructive", title: "Partisipan Kurang", description: "Perlu minimal dua orang untuk membagi tagihan." });
+    
+    const joinedPeople = people.filter(p => p.status !== 'invited');
+    if (joinedPeople.length < 2) {
+      toast({ variant: "destructive", title: "Partisipan Kurang", description: "Perlu minimal dua orang (yang sudah bergabung) untuk membagi tagihan." });
       return;
     }
     
@@ -818,6 +821,11 @@ export default function SplitBillAppPage() {
                                     <AvatarFallback>{person.name.substring(0,1).toUpperCase()}</AvatarFallback>
                                   </Avatar>
                                   <span className="text-sm font-medium">{person.name}</span>
+                                  {person.status === 'invited' && (
+                                    <Badge variant="outline" className="text-xs bg-amber-100 text-amber-800 border-amber-200">
+                                      <Clock className="mr-1 h-3 w-3"/> Pending
+                                    </Badge>
+                                  )}
                                   <Button
                                       variant="ghost"
                                       size="icon"
@@ -856,7 +864,7 @@ export default function SplitBillAppPage() {
                     <h3 className="text-lg font-semibold mb-3 flex items-center"><Edit2 className="mr-2 h-5 w-5"/>Item Tagihan & Alokasi</h3>
                      <ItemEditor
                         items={splitItems}
-                        people={people}
+                        people={people.filter(p => p.status !== 'invited')}
                         onUpdateItem={handleUpdateItem}
                         onAddItem={handleAddItem}
                         onDeleteItem={handleDeleteItem}
@@ -876,13 +884,13 @@ export default function SplitBillAppPage() {
                       <Select
                         value={billDetails.payerId || ""}
                         onValueChange={(value) => handleBillDetailsChange("payerId", value)} 
-                        disabled={people.length === 0}
+                        disabled={people.filter(p => p.status !== 'invited').length === 0}
                       >
                         <SelectTrigger id="payer" className="w-full">
-                          <SelectValue placeholder={people.length > 0 ? "Pilih pembayar" : "Tambah orang dulu"} />
+                          <SelectValue placeholder={people.filter(p => p.status !== 'invited').length > 0 ? "Pilih pembayar" : "Tambah atau tunggu orang bergabung"} />
                         </SelectTrigger>
                         <SelectContent>
-                          {people.map(person => (
+                          {people.filter(p => p.status !== 'invited').map(person => (
                             <SelectItem key={person.id} value={person.id}>{person.name}</SelectItem>
                           ))}
                         </SelectContent>
@@ -973,7 +981,7 @@ export default function SplitBillAppPage() {
                 <CardFooter className="border-t p-6">
                     <Button 
                     onClick={handleCalculateSummary} 
-                    disabled={isCalculating || (itemsForSummary.length === 0 && billDetails.taxAmount === 0 && billDetails.tipAmount === 0) || !billDetails.payerId || people.length < 2 || !currentBillId} 
+                    disabled={isCalculating || (itemsForSummary.length === 0 && billDetails.taxAmount === 0 && billDetails.tipAmount === 0) || !billDetails.payerId || people.filter(p => p.status !== 'invited').length < 2 || !currentBillId} 
                     size="lg" 
                     className="w-full"
                     >

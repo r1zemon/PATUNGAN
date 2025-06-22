@@ -5,6 +5,7 @@ export interface Person {
   name: string;
   profile_id?: string | null; // This is the user/profile id, if they are a registered user
   avatar_url?: string | null;
+  status: 'joined' | 'invited'; // Status of the participant
 }
 
 export interface ScannedItem {
@@ -99,6 +100,16 @@ export interface Notification {
     name: string;
     avatar_url?: string;
   };
+  payload?: any; // For additional data like invitation IDs
+}
+
+// ===== INVITATION & NOTIFICATION TYPES =====
+export interface BillInvitation {
+  participantId: string;
+  billId: string;
+  billName: string | null;
+  inviterName: string | null;
+  createdAt: string;
 }
 
 // ===== DASHBOARD TYPES =====

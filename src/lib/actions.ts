@@ -4,7 +4,7 @@
 
 import { scanReceipt, ScanReceiptOutput, ReceiptItem as AiReceiptItem } from "@/ai/flows/scan-receipt";
 import { summarizeBill, SummarizeBillInput } from "@/ai/flows/summarize-bill";
-import type { SplitItem, Person, RawBillSummary, TaxTipSplitStrategy, ScannedItem, BillHistoryEntry, BillCategory, DashboardData, MonthlyExpenseByCategory, ExpenseChartDataPoint, RecentBillDisplayItem, ScheduledBillDisplayItem, DetailedBillSummaryData, Settlement, FetchedBillDetails, PersonalShareDetail, UserProfileBasic, FriendRequestDisplay, FriendDisplay, SettlementStatus } from "./types";
+import type { SplitItem, Person, RawBillSummary, TaxTipSplitStrategy, ScannedItem, BillHistoryEntry, BillCategory, DashboardData, MonthlyExpenseByCategory, ExpenseChartDataPoint, RecentBillDisplayItem, ScheduledBillDisplayItem, DetailedBillSummaryData, Settlement, FetchedBillDetails, PersonalShareDetail, UserProfileBasic, FriendRequestDisplay, FriendDisplay, SettlementStatus, BillInvitation } from "./types";
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
 import type { PostgrestSingleResponse, User as SupabaseUser } from "@supabase/supabase-js";
@@ -347,19 +347,24 @@ export async function addParticipantAction(billId: string, personName: string, p
     return { success: false, error: "ID Tagihan dan nama orang diperlukan." };
   }
   try {
+    const status: 'invited' | 'joined' = profileId ? 'invited' : 'joined';
     const insertData: Database['public']['Tables']['bill_participants']['Insert'] = {
       bill_id: billId,
       name: personName.trim(),
       profile_id: profileId || null,
+      status: status,
     };
 
     const { data, error } = await supabase
       .from('bill_participants')
       .insert([insertData])
-      .select('id, name, profile_id')
+      .select('id, name, profile_id, status, created_at')
       .single();
 
     if (error) {
+      if (error.code === '23505') { // unique constraint violation
+        return { success: false, error: "Pengguna ini sudah diundang atau ditambahkan ke tagihan." };
+      }
       console.error("Error adding participant:", error);
       return { success: false, error: error.message };
     }
@@ -371,10 +376,12 @@ export async function addParticipantAction(billId: string, personName: string, p
     const person: Person = { 
       id: data.id, 
       name: data.name,
-      profile_id: data.profile_id
+      profile_id: data.profile_id,
+      status: data.status as 'joined' | 'invited',
       // avatar_url will be added on the client-side for invited friends, or fetched in getBillDetails
     };
 
+    revalidatePath(`/app/notifications`); // Revalidate a conceptual path for notifications
     return { success: true, person };
   } catch (e: any) {
     console.error("Exception in addParticipantAction:", e);
@@ -630,14 +637,17 @@ export async function handleSummarizeBillAction(
   if (!payerParticipantId) {
     return { success: false, error: "ID Pembayar tidak disediakan." };
   }
-   if (people.length < 2) {
-    return { success: false, error: "Minimal dua orang diperlukan untuk membagi tagihan." };
+
+  const joinedPeople = people.filter(p => p.status === 'joined');
+  if (joinedPeople.length < 2) {
+    return { success: false, error: "Minimal dua orang (yang sudah bergabung) diperlukan untuk membagi tagihan." };
   }
+  
   if (splitItems.length === 0 && taxAmount === 0 && tipAmount === 0) {
     const zeroSummary: RawBillSummary = {};
-    people.forEach(p => zeroSummary[p.name] = 0);
+    joinedPeople.forEach(p => zeroSummary[p.name] = 0);
 
-    for (const person of people) {
+    for (const person of joinedPeople) {
         const { error: updateError } = await supabase.from('bill_participants').update({ total_share_amount: 0 }).eq('id', person.id);
         if (updateError) console.warn("Error setting share to 0 for " + person.name + ": " + updateError.message);
     }
@@ -654,9 +664,9 @@ export async function handleSummarizeBillAction(
     return { success: true, data: zeroSummary };
   }
 
-  const payer = people.find(p => p.id === payerParticipantId);
+  const payer = joinedPeople.find(p => p.id === payerParticipantId);
   if (!payer) {
-    return { success: false, error: "Data pembayar tidak valid atau tidak ditemukan dalam daftar partisipan." };
+    return { success: false, error: "Data pembayar tidak valid atau tidak ditemukan dalam daftar partisipan yang sudah bergabung." };
   }
   const payerName = payer.name;
 
@@ -694,9 +704,9 @@ export async function handleSummarizeBillAction(
       }
       for (const assignment of item.assignedTo) {
         if (assignment.count > 0) {
-          const participantExists = people.some(p => p.id === assignment.personId);
+          const participantExists = joinedPeople.some(p => p.id === assignment.personId);
           if (!participantExists) {
-              console.warn("Participant with id " + assignment.personId + " for item " + item.name + " assignment is not found in the current bill's participants. Skipping this assignment.");
+              console.warn("Participant with id " + assignment.personId + " for item " + item.name + " assignment is not found in the current bill's joined participants. Skipping this assignment.");
               continue;
           }
           newAssignments.push({
@@ -730,7 +740,7 @@ export async function handleSummarizeBillAction(
     unitPrice: item.unitPrice,
     quantity: item.quantity,
     assignedTo: item.assignedTo.map(assignment => {
-      const participant = people.find(p => p.id === assignment.personId);
+      const participant = joinedPeople.find(p => p.id === assignment.personId);
       return {
         personName: participant?.name || "Unknown Person",
         count: assignment.count,
@@ -738,7 +748,7 @@ export async function handleSummarizeBillAction(
     }).filter(a => a.personName !== "Unknown Person" && a.count > 0),
   })).filter(item => item.quantity > 0 && item.unitPrice >= 0);
 
-  const peopleNamesForAI: SummarizeBillInput["people"] = people.map(p => p.name);
+  const peopleNamesForAI: SummarizeBillInput["people"] = joinedPeople.map(p => p.name);
 
   const summarizeBillInput: SummarizeBillInput = {
     items: itemsForAI,
@@ -753,7 +763,7 @@ export async function handleSummarizeBillAction(
     const rawSummary: RawBillSummary = await summarizeBill(summarizeBillInput);
 
     let calculatedGrandTotal = 0;
-    const participantSharePromises = people.map(async (person) => {
+    const participantSharePromises = joinedPeople.map(async (person) => {
       const share = rawSummary[person.name];
       if (typeof share === 'number') {
         calculatedGrandTotal += share;
@@ -769,7 +779,7 @@ export async function handleSummarizeBillAction(
     const participantUpdateResults = await Promise.all(participantSharePromises);
     for (const result of participantUpdateResults) {
       if (!result.success && result.error) {
-        const personNameFound = people.find(p=>p.id === result.personId)?.name || result.personId;
+        const personNameFound = joinedPeople.find(p=>p.id === result.personId)?.name || result.personId;
         console.error("Error updating participant share for " + personNameFound + " in DB:", result.error.message);
         return { success: false, error: "Gagal memperbarui bagian untuk partisipan " + personNameFound + " di database: " + result.error.message };
       }
@@ -798,7 +808,7 @@ export async function handleSummarizeBillAction(
     }
 
     const settlementPromises: Promise<PostgrestSingleResponse<any>>[] = [];
-    for (const person of people) {
+    for (const person of joinedPeople) {
       const share = rawSummary[person.name];
       if (person.id !== payerParticipantId && typeof share === 'number' && share > 0) {
         const settlementData: SettlementInsert = {
@@ -1143,7 +1153,9 @@ export async function getBillsHistoryAction(): Promise<{ success: boolean; data?
       const { count: participantCount, error: countError } = await supabase
         .from('bill_participants')
         .select('*', { count: 'exact', head: true })
-        .eq('bill_id', bill.id);
+        .eq('bill_id', bill.id)
+        .eq('status', 'joined');
+
 
       if (countError) {
         console.warn("Could not fetch participant count for bill " + bill.id + ": " + countError.message);
@@ -1437,7 +1449,7 @@ export async function getBillDetailsAction(billId: string): Promise<{ success: b
 
     const { data: participantsRawData, error: participantsFetchError } = await supabase
       .from('bill_participants')
-      .select('id, name, total_share_amount, profile_id')
+      .select('id, name, total_share_amount, profile_id, status')
       .eq('bill_id', billId);
 
     if (participantsFetchError) {
@@ -1469,7 +1481,8 @@ export async function getBillDetailsAction(billId: string): Promise<{ success: b
             id: p_raw.id,
             name: p_raw.name,
             profile_id: p_raw.profile_id,
-            avatar_url: profile?.avatar_url || null
+            avatar_url: profile?.avatar_url || null,
+            status: p_raw.status as 'joined' | 'invited'
         };
     });
 
@@ -1506,9 +1519,9 @@ export async function getBillDetailsAction(billId: string): Promise<{ success: b
     });
 
     const detailedPersonalSharesData: PersonalShareDetail[] = [];
-    const numParticipants = participantsRawData.length;
+    const numParticipants = participantsRawData.filter(p => p.status === 'joined').length;
 
-    for (const participantRaw of participantsRawData) {
+    for (const participantRaw of participantsRawData.filter(p => p.status === 'joined')) {
       const personDetail: PersonalShareDetail = {
           personId: participantRaw.id,
           personName: participantRaw.name,
@@ -1546,11 +1559,16 @@ export async function getBillDetailsAction(billId: string): Promise<{ success: b
       detailedPersonalSharesData.push(personDetail);
     }
     
-    // FIX: Simplified the query to remove the invalid join with profiles.
     const { data: settlementsData, error: settlementsError } = await supabase
       .from('settlements')
-      .select('amount, status, from_participant:bill_participants!settlements_from_participant_id_fkey(id, name), to_participant:bill_participants!settlements_to_participant_id_fkey(id, name)')
+      .select(`
+        amount,
+        status,
+        from_participant:bill_participants!settlements_from_participant_id_fkey(id, name),
+        to_participant:bill_participants!settlements_to_participant_id_fkey(id, name)
+      `)
       .eq('bill_id', billId);
+
 
     if (settlementsError) {
       console.error("Error fetching settlements for bill:", settlementsError);
@@ -1896,9 +1914,6 @@ export async function removeFriendAction(friendshipId: string): Promise<{ succes
 
     if (deleteError) throw deleteError;
     
-    // Also, set related friend_requests to 'declined' or 'cancelled' if they were 'accepted'
-    // This prevents re-friending automatically if one user sends a new request.
-    // Find the original request that led to this friendship
     const { data: requestToUpdate, error: findRequestError } = await supabase
         .from('friend_requests')
         .select('id')
@@ -1906,14 +1921,14 @@ export async function removeFriendAction(friendshipId: string): Promise<{ succes
             `and(requester_id.eq.${friendship.user1_id},receiver_id.eq.${friendship.user2_id},status.eq.accepted),` +
             `and(requester_id.eq.${friendship.user2_id},receiver_id.eq.${friendship.user1_id},status.eq.accepted)`
         )
-        .maybeSingle(); // It's possible no request exists if friendship was added manually or if request was cleaned up
+        .maybeSingle();
 
     if (findRequestError) {
         console.warn("Error finding associated friend request for cleanup after removing friend:", findRequestError.message);
     } else if (requestToUpdate) {
         const { error: updateRequestError } = await supabase
             .from('friend_requests')
-            .update({ status: 'cancelled', updated_at: new Date().toISOString() }) // Or 'declined'
+            .update({ status: 'cancelled', updated_at: new Date().toISOString() })
             .eq('id', requestToUpdate.id);
         if (updateRequestError) {
             console.warn("Error updating associated friend request status after removing friend:", updateRequestError.message);
@@ -1928,6 +1943,96 @@ export async function removeFriendAction(friendshipId: string): Promise<{ succes
   }
 }
 
-    
+// ===== BILL INVITATION ACTIONS =====
 
+export async function getPendingInvitationsAction(): Promise<{ success: boolean; invitations?: BillInvitation[]; error?: string }> {
+    const supabase = createSupabaseServerClient();
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+        return { success: false, error: "Pengguna tidak terautentikasi." };
+    }
     
+    try {
+        const { data, error } = await supabase
+            .from('bill_participants')
+            .select(`
+                id,
+                created_at,
+                bill:bills!inner(id, name, inviter:user_id(full_name))
+            `)
+            .eq('profile_id', user.id)
+            .eq('status', 'invited');
+
+        if (error) {
+            console.error("Error fetching pending bill invitations:", error);
+            return { success: false, error: "Gagal mengambil undangan tagihan: " + error.message };
+        }
+        
+        const invitations: BillInvitation[] = data.map((p: any) => ({
+            participantId: p.id,
+            billId: p.bill.id,
+            billName: p.bill.name,
+            inviterName: p.bill.inviter?.full_name || 'Seseorang',
+            createdAt: p.created_at
+        }));
+
+        return { success: true, invitations };
+    } catch (e: any) {
+        console.error("Exception in getPendingInvitationsAction:", e);
+        return { success: false, error: "Terjadi kesalahan server saat mengambil undangan: " + e.message };
+    }
+}
+
+export async function respondToBillInvitationAction(participantId: string, response: 'accept' | 'decline'): Promise<{ success: boolean; error?: string }> {
+    const supabase = createSupabaseServerClient();
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+        return { success: false, error: "Pengguna tidak terautentikasi." };
+    }
+
+    try {
+        const { data: participant, error: fetchError } = await supabase
+            .from('bill_participants')
+            .select('profile_id')
+            .eq('id', participantId)
+            .eq('status', 'invited')
+            .single();
+
+        if (fetchError || !participant) {
+            return { success: false, error: "Undangan tidak ditemukan atau sudah ditindaklanjuti." };
+        }
+
+        if (participant.profile_id !== user.id) {
+            return { success: false, error: "Anda tidak berhak menanggapi undangan ini." };
+        }
+
+        if (response === 'accept') {
+            const { error: updateError } = await supabase
+                .from('bill_participants')
+                .update({ status: 'joined' })
+                .eq('id', participantId);
+            
+            if (updateError) {
+                return { success: false, error: "Gagal menerima undangan: " + updateError.message };
+            }
+        } else { // decline
+            const { error: deleteError } = await supabase
+                .from('bill_participants')
+                .delete()
+                .eq('id', participantId);
+
+            if (deleteError) {
+                return { success: false, error: "Gagal menolak undangan: " + deleteError.message };
+            }
+        }
+        
+        revalidatePath('/app'); 
+        revalidatePath('/app/notifications'); 
+        return { success: true };
+    } catch (e: any) {
+        console.error("Exception in respondToBillInvitationAction:", e);
+        return { success: false, error: "Terjadi kesalahan server: " + e.message };
+    }
+}

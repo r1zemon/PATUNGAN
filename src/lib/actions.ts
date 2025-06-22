@@ -1,5 +1,4 @@
 
-
 "use server";
 
 import { scanReceipt, ScanReceiptOutput, ReceiptItem as AiReceiptItem } from "@/ai/flows/scan-receipt";
@@ -1958,7 +1957,7 @@ export async function getPendingInvitationsAction(): Promise<{ success: boolean;
             .select(`
                 id,
                 created_at,
-                bill:bills!bill_id(id, name, inviter:user_id(full_name))
+                bill:bills!bill_id(id, name, inviter:profiles!bills_user_id_fkey(full_name))
             `)
             .eq('profile_id', user.id)
             .eq('status', 'invited');
@@ -2037,5 +2036,3 @@ export async function respondToBillInvitationAction(participantId: string, respo
         return { success: false, error: "Terjadi kesalahan server: " + e.message };
     }
 }
-
-    

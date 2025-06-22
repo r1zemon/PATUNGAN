@@ -1426,27 +1426,19 @@ export async function getBillDetailsAction(billId: string): Promise<{ success: b
 
     if (participantsFetchError) {
       console.error("Error fetching participants for bill (raw):", participantsFetchError);
-      return { success: false, error: "Gagal mengambil partisipan (raw): " + participantsFetchError.message };
+      return { success: false, error: "Gagal mengambil partisipan: " + participantsFetchError.message };
     }
     if (!participantsRawData) {
         return { success: false, error: "Tidak ada data partisipan yang ditemukan." };
     }
     
-    // Fetch profiles for participants to get avatar_url
-    const participantUserIds = participantsRawData.map(p => p.id); // Assuming participant id is user id for now.
-    const { data: profiles, error: profilesError } = await supabase
-        .from('profiles')
-        .select('id, avatar_url')
-        .in('id', participantUserIds);
-
-    const participants: Person[] = participantsRawData.map(p_raw => {
-        const profile = profiles?.find(prof => prof.id === p_raw.id);
-        return {
-            id: p_raw.id,
-            name: p_raw.name,
-            avatar_url: profile?.avatar_url
-        }
-    });
+    // Since bill_participants aren't directly linked to profiles, we can't reliably get avatars here.
+    // We will pass avatar_url as null and let the UI handle the fallback.
+    const participants: Person[] = participantsRawData.map(p_raw => ({
+        id: p_raw.id,
+        name: p_raw.name,
+        avatar_url: null // Avatars cannot be fetched with the current schema
+    }));
 
 
     const { data: allBillItems, error: billItemsError } = await supabase
@@ -1520,10 +1512,11 @@ export async function getBillDetailsAction(billId: string): Promise<{ success: b
       }
       detailedPersonalSharesData.push(personDetail);
     }
-
+    
+    // FIX: Simplified the query to remove the invalid join with profiles.
     const { data: settlementsData, error: settlementsError } = await supabase
       .from('settlements')
-      .select('amount, status, from_participant:bill_participants!settlements_from_participant_id_fkey(id, name, profile_id:profiles(avatar_url)), to_participant:bill_participants!settlements_to_participant_id_fkey(id, name, profile_id:profiles(avatar_url))')
+      .select('amount, status, from_participant:bill_participants!settlements_from_participant_id_fkey(id, name), to_participant:bill_participants!settlements_to_participant_id_fkey(id, name)')
       .eq('bill_id', billId);
 
     if (settlementsError) {
@@ -1901,5 +1894,7 @@ export async function removeFriendAction(friendshipId: string): Promise<{ succes
     return { success: false, error: e.message || "Gagal menghapus teman." };
   }
 }
+
+    
 
     

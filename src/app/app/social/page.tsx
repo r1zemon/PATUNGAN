@@ -55,7 +55,8 @@ export default function SocialPage() {
   const { toast } = useToast();
   const router = useRouter();
 
-  const fetchInitialData = useCallback(async (currentUser: SupabaseUser) => {
+  const fetchInitialData = useCallback(async () => {
+    // No need to pass currentUser anymore, as it's closed over by the parent effect
     setIsLoadingFriends(true);
     setIsLoadingRequests(true);
 
@@ -91,7 +92,7 @@ export default function SocialPage() {
         }
         setAuthUser(user);
         setIsLoadingUser(false);
-        await fetchInitialData(user);
+        await fetchInitialData();
     };
     init();
   }, [router, toast, fetchInitialData]);
@@ -99,40 +100,27 @@ export default function SocialPage() {
   useEffect(() => {
     if (!authUser) return;
 
-    const channel = supabase
-      .channel('friend-requests-channel')
+    // Channel for friend requests
+    const friendRequestsChannel = supabase
+      .channel('friend-requests-realtime')
       .on(
         'postgres_changes',
-        { 
-          event: '*', 
-          schema: 'public', 
+        {
+          event: '*',
+          schema: 'public',
           table: 'friend_requests',
+          filter: `or(requester_id.eq.${authUser.id},receiver_id.eq.${authUser.id})`,
         },
         (payload) => {
           console.log('Realtime friend_requests change received!', payload);
-          
-          const record = payload.new || payload.old;
-          const isRelevant = record && (
-              ('requester_id' in record && record.requester_id === authUser.id) ||
-              ('receiver_id' in record && record.receiver_id === authUser.id)
-          );
-
-          if (isRelevant) {
-            console.log('Change is relevant, refetching data.');
-            if (payload.eventType === 'INSERT' && (payload.new as any).receiver_id === authUser.id) {
-              toast({ 
-                title: "Permintaan Pertemanan Baru", 
-                description: "Anda menerima permintaan pertemanan baru. Periksa tab permintaan.",
-                duration: 5000 
-              });
-            } else if (payload.eventType === 'UPDATE') {
-               const updatedRecord = payload.new as any;
-               if (updatedRecord.status === 'accepted' && updatedRecord.requester_id === authUser.id) {
-                 toast({ title: "Pertemanan Diterima", description: "Permintaan pertemanan Anda telah diterima."});
-               }
-            }
-            fetchInitialData(authUser);
+          if (payload.eventType === 'INSERT' && (payload.new as any).receiver_id === authUser.id) {
+            toast({
+              title: "Permintaan Pertemanan Baru",
+              description: "Anda menerima permintaan pertemanan baru. Periksa tab permintaan.",
+              duration: 5000
+            });
           }
+          fetchInitialData();
         }
       )
       .subscribe((status, err) => {
@@ -140,14 +128,44 @@ export default function SocialPage() {
           console.log('Subscribed to friend_requests changes!');
         }
         if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-          console.error('Realtime subscription error or timeout:', err);
-          toast({variant: "destructive", title: "Koneksi Realtime Gagal", description: "Gagal terhubung untuk pembaruan langsung. Coba segarkan halaman."})
+          console.error('Realtime friend_requests subscription error or timeout:', err);
+        }
+      });
+
+    // Channel for friendships (when a friend is added or removed)
+    const friendshipsChannel = supabase
+      .channel('friendships-realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'friendships',
+          filter: `or(user1_id.eq.${authUser.id},user2_id.eq.${authUser.id})`,
+        },
+        (payload) => {
+          console.log('Realtime friendships change received!', payload);
+          if (payload.eventType === 'INSERT') {
+             toast({ title: "Teman Baru Ditambahkan", description: "Daftar teman Anda telah diperbarui." });
+          } else if (payload.eventType === 'DELETE') {
+             toast({ title: "Teman Dihapus", description: "Daftar teman Anda telah diperbarui." });
+          }
+          fetchInitialData();
+        }
+      )
+      .subscribe((status, err) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('Subscribed to friendships changes!');
+        }
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          console.error('Realtime friendships subscription error or timeout:', err);
         }
       });
 
     return () => {
-      supabase.removeChannel(channel);
-      console.log('Unsubscribed from friend_requests changes.');
+      supabase.removeChannel(friendRequestsChannel);
+      supabase.removeChannel(friendshipsChannel);
+      console.log('Unsubscribed from realtime channels.');
     };
   }, [authUser, fetchInitialData, toast]);
 
@@ -188,7 +206,7 @@ export default function SocialPage() {
     const result = await acceptFriendRequestAction(requestId);
     if (result.success) {
       toast({ title: "Permintaan Diterima", description: `Anda sekarang berteman dengan ${username}.` });
-      fetchInitialData(authUser!); // Refresh lists
+      await fetchInitialData(); // Refresh lists
     } else {
       toast({ variant: "destructive", title: "Gagal Menerima", description: result.error });
     }
@@ -198,7 +216,7 @@ export default function SocialPage() {
     const result = await declineOrCancelFriendRequestAction(requestId, 'decline');
     if (result.success) {
       toast({ title: "Permintaan Ditolak", description: `Permintaan dari ${username} ditolak.` });
-      fetchInitialData(authUser!); // Refresh lists
+      await fetchInitialData(); // Refresh lists
     } else {
       toast({ variant: "destructive", title: "Gagal Menolak", description: result.error });
     }
@@ -208,7 +226,7 @@ export default function SocialPage() {
     const result = await removeFriendAction(friendshipId);
     if (result.success) {
       toast({ title: "Teman Dihapus", description: `Anda tidak lagi berteman dengan ${username}.` });
-      fetchInitialData(authUser!); // Refresh lists
+      await fetchInitialData(); // Refresh lists
     } else {
       toast({ variant: "destructive", title: "Gagal Menghapus Teman", description: result.error });
     }

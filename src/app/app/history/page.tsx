@@ -38,17 +38,13 @@ interface Profile {
   email?: string; 
 }
 
-const MAX_FREE_HISTORY_ITEMS = 3; 
-
 export default function HistoryPage() {
   const [billsHistory, setBillsHistory] = useState<BillHistoryEntry[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const [authUser, setAuthUser] = useState<SupabaseUser | null>(null);
-  // Profile state no longer needed here
   const [isLoadingUser, setIsLoadingUser] = useState(true);
-  const [isPremiumUser, setIsPremiumUser] = useState(false); 
 
   const [selectedBillForDetail, setSelectedBillForDetail] = useState<FetchedBillDetails | null>(null);
   const [isLoadingBillDetail, setIsLoadingBillDetail] = useState(false);
@@ -63,7 +59,7 @@ export default function HistoryPage() {
     setIsLoadingUser(true);
     setIsLoadingHistory(true);
 
-    const { user, error: userError } = await getCurrentUserAction(); // Removed profile
+    const { user, error: userError } = await getCurrentUserAction();
     if (userError || !user) {
       toast({ variant: "destructive", title: "Akses Ditolak", description: userError || "Anda harus login untuk melihat riwayat." });
       router.push("/login");
@@ -121,7 +117,7 @@ export default function HistoryPage() {
     );
   }
 
-  const displayedBills = isPremiumUser ? billsHistory : billsHistory.slice(0, MAX_FREE_HISTORY_ITEMS);
+  const displayedBills = billsHistory;
 
   return (
     <div className="relative flex flex-col min-h-screen bg-background bg-money-pattern bg-[length:120px_auto] before:content-[''] before:absolute before:inset-0 before:bg-white/[.90] before:dark:bg-black/[.90] before:z-0">
@@ -206,32 +202,6 @@ export default function HistoryPage() {
               </Card>
             ))}
           </div>
-        )}
-
-        {!isPremiumUser && billsHistory.length > MAX_FREE_HISTORY_ITEMS && (
-          <Card className="mt-8 shadow-lg border-primary/50 bg-primary/5 hover:shadow-xl transition-shadow duration-300 ease-in-out">
-            <CardHeader>
-              <CardTitle className="flex items-center text-primary">
-                <Star className="mr-2 h-5 w-5" /> Akses Riwayat Lengkap
-              </CardTitle>
-              <CardDescription>
-                Anda telah melihat {MAX_FREE_HISTORY_ITEMS} tagihan terbaru. Total {billsHistory.length} tagihan tercatat.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground mb-4">
-                Dengan Patungan Premium, Anda mendapatkan akses tak terbatas ke semua riwayat tagihan, fitur analitik lanjutan, ekspor data, dan banyak lagi!
-              </p>
-            </CardContent>
-            <CardFooter>
-              <Button
-                className="w-full bg-gradient-to-r from-primary to-accent text-primary-foreground hover:opacity-90 transition-opacity"
-                onClick={() => toast({ title: "Fitur Premium", description: "Tingkatkan ke Premium untuk melihat semua riwayat. (Fitur ini belum tersedia)" })}
-              >
-                <Zap className="mr-2 h-4 w-4" /> Tingkatkan ke Premium
-              </Button>
-            </CardFooter>
-          </Card>
         )}
 
         <Card className="shadow-lg mt-10 mb-8">

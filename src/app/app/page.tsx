@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
-import type { SplitItem, Person, BillDetails, TaxTipSplitStrategy, DetailedBillSummaryData, BillCategory, ScannedItem, FriendDisplay } from "@/lib/types";
+import type { SplitItem, Person, BillDetails, TaxTipSplitStrategy, DetailedBillSummaryData, BillCategory, ScannedItem } from "@/lib/types";
 import type { User as SupabaseUser } from "@supabase/supabase-js";
 import { 
   handleScanReceiptAction, 
@@ -18,7 +18,6 @@ import {
   updateBillItemInDbAction, 
   deleteBillItemFromDbAction,
   getBillDetailsAction,
-  getFriendsAction
 } from "@/lib/actions";
 import { supabase } from "@/lib/supabaseClient";
 import { ReceiptUploader } from "@/components/receipt-uploader";
@@ -33,17 +32,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useToast } from "@/hooks/use-toast";
 import { Separator } from "@/components/ui/separator";
-import { UserCheck, Loader2, UserPlus, ArrowRight, Trash2, Users, ScanLine, PlusCircle, Edit2, ListChecks, FilePlus, FileText, CalendarClock, FolderPlus, Tag, Percent, Landmark, Power, User, Users2, Clock, Share2, CopyIcon } from "lucide-react"; 
+import { UserCheck, Loader2, UserPlus, ArrowRight, Trash2, Users, ScanLine, PlusCircle, Edit2, ListChecks, FilePlus, FileText, CalendarClock, FolderPlus, Tag, Percent, Landmark, Power, User, Clock } from "lucide-react"; 
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { format } from 'date-fns';
 import { id as IndonesianLocale } from 'date-fns/locale';
 import { LandingHeader } from "@/components/landing-header";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import Link from "next/link";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 
 const DEFAULT_CATEGORIES = ["Makanan", "Transportasi", "Hiburan", "Penginapan", "Lainnya"];
@@ -89,11 +84,6 @@ export default function SplitBillAppPage() {
   const [newCategoryInput, setNewCategoryInput] = useState<string>("");
   const [isLoadingCategories, setIsLoadingCategories] = useState(true);
   const [showNewCategoryInput, setShowNewCategoryInput] = useState(false);
-
-  // Friends & Invite State
-  const [friends, setFriends] = useState<FriendDisplay[]>([]);
-  const [isLoadingFriends, setIsLoadingFriends] = useState(true);
-  const [isInviteDialogOpen, setIsInviteDialogOpen] = useState(false);
   
   const [taxInputDisplayValue, setTaxInputDisplayValue] = useState<string>(billDetails.taxAmount.toString());
   const [tipInputDisplayValue, setTipInputDisplayValue] = useState<string>(billDetails.tipAmount.toString());
@@ -111,10 +101,7 @@ export default function SplitBillAppPage() {
       return;
     }
 
-    const [categoriesResult, friendsResult] = await Promise.all([
-      getUserCategoriesAction(),
-      getFriendsAction()
-    ]);
+    const categoriesResult = await getUserCategoriesAction();
 
     if (categoriesResult.success && categoriesResult.categories) {
       // Process and set categories
@@ -131,13 +118,6 @@ export default function SplitBillAppPage() {
       toast({ variant: "destructive", title: "Gagal Memuat Kategori", description: categoriesResult.error });
     }
     setIsLoadingCategories(false);
-
-    if (friendsResult.success && friendsResult.friends) {
-      setFriends(friendsResult.friends);
-    } else {
-      toast({ variant: "destructive", title: "Gagal Memuat Teman", description: friendsResult.error });
-    }
-    setIsLoadingFriends(false);
     setIsLoading(false);
   }, [router, toast]);
 
@@ -208,43 +188,6 @@ export default function SplitBillAppPage() {
     }
   }, [searchParams, authUser, currentBillId, loadBillSession]);
 
-  // ===== REAL-TIME SUBSCRIPTION =====
-  useEffect(() => {
-    if (!currentBillId) return;
-
-    const channel = supabase.channel(`bill-session-${currentBillId}`);
-
-    const handleDbChange = (payload: any) => {
-       console.log('Realtime change received:', payload);
-       // Simple and robust: re-fetch the whole session state on any change.
-       // This avoids complex state management on the client.
-       loadBillSession(currentBillId);
-       toast({ title: "Sesi diperbarui", description: "Seseorang membuat perubahan pada tagihan." });
-    };
-
-    channel
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'bills', filter: `id=eq.${currentBillId}` }, handleDbChange)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'bill_participants', filter: `bill_id=eq.${currentBillId}` }, handleDbChange)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'bill_items', filter: `bill_id=eq.${currentBillId}` }, handleDbChange)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'item_assignments' }, (payload) => {
-          // A bit more specific check for assignments to avoid reloads from other bills
-          const billItemIds = splitItems.map(item => item.id);
-          if (payload.new && billItemIds.includes(payload.new.bill_item_id)) {
-              handleDbChange(payload);
-          } else if (payload.old && billItemIds.includes(payload.old.bill_item_id)) {
-              handleDbChange(payload);
-          }
-      })
-      .subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
-          console.log(`Subscribed to real-time updates for bill ${currentBillId}`);
-        }
-      });
-      
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [currentBillId, loadBillSession, toast, splitItems]);
 
   const sortCategories = (cats: BillCategory[]): BillCategory[] => {
     let orderedDefaults: BillCategory[] = [];
@@ -360,20 +303,19 @@ export default function SplitBillAppPage() {
      }
   }
 
-  // FIX: This effect now only updates local state to prevent the real-time reload loop.
+  // Set default payer without causing a server update loop
   useEffect(() => {
     if (people.length > 0 && !detailedBillSummary) {
       const payerExists = people.some(p => p.id === billDetails.payerId);
       if (!billDetails.payerId || !payerExists) {
         const firstJoinedPerson = people.find(p => p.status === 'joined');
         if (firstJoinedPerson) {
-          // ONLY update local state. The DB will be updated upon explicit user action (e.g., calculate summary).
+          // ONLY update local state. The DB will be updated upon explicit user action.
           setBillDetails(prevDetails => ({ ...prevDetails, payerId: firstJoinedPerson.id }));
         }
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [people, detailedBillSummary]); // Intentionally exclude billDetails.payerId to only run when people/summary changes.
+  }, [people, detailedBillSummary, billDetails.payerId]);
 
   useEffect(() => { setTaxInputDisplayValue(billDetails.taxAmount.toString()); }, [billDetails.taxAmount]);
   useEffect(() => { setTipInputDisplayValue(billDetails.tipAmount.toString()); }, [billDetails.tipAmount]);
@@ -389,37 +331,26 @@ export default function SplitBillAppPage() {
       toast({ variant: "destructive", title: "Nama Duplikat" }); return;
     }
     const result = await addParticipantAction(currentBillId, personNameInput.trim(), null);
-    if (result.success) {
+    if (result.success && result.person) {
       setPersonNameInput("");
+      setPeople(prev => [...prev, result.person!]);
       toast({ title: "Tamu Ditambahkan"});
-      // Real-time will handle state update
     } else {
       toast({ variant: "destructive", title: "Gagal Menambah Tamu", description: result.error });
     }
   };
 
-  const handleInviteFriend = async (friend: FriendDisplay) => {
-    if (!currentBillId) return;
-    if (people.some(p => p.profile_id === friend.id)) {
-      toast({ variant: "destructive", title: "Sudah Ditambahkan" }); return;
-    }
-    const result = await addParticipantAction(currentBillId, friend.full_name || friend.username || 'Friend', friend.id);
-    if (result.success) {
-      toast({ title: "Teman Diundang" });
-      // Real-time will handle state update
-    } else {
-      toast({ variant: "destructive", title: "Gagal Mengundang Teman", description: result.error });
-    }
-  };
-
   const handleRemovePerson = async (personIdToRemove: string) => {
     if (!currentBillId) return;
+    
+    const originalPeople = [...people];
+    setPeople(prev => prev.filter(p => p.id !== personIdToRemove));
+    toast({ title: "Partisipan Dihapus"});
+
     const result = await removeParticipantAction(personIdToRemove);
-    if (result.success) {
-      toast({ title: "Partisipan Dihapus"});
-      // Real-time will handle state update
-    } else {
+    if (!result.success) {
        toast({ variant: "destructive", title: "Gagal Menghapus Partisipan", description: result.error });
+       setPeople(originalPeople); // Revert on failure
     }
   };
   
@@ -429,12 +360,13 @@ export default function SplitBillAppPage() {
     setError(null);
     setDetailedBillSummary(null); 
     const result = await handleScanReceiptAction(currentBillId, receiptDataUri);
-    if (result.success) {
-      toast({ title: "Struk Dipindai", description: `${result.data?.items.length || 0} baris item ditambahkan.` });
-       if (result.data?.items.length === 0) {
+    if (result.success && result.data?.items) {
+      toast({ title: "Struk Dipindai", description: `${result.data.items.length || 0} baris item ditambahkan.` });
+       if (result.data.items.length === 0) {
         toast({ title: "Tidak ada item ditemukan" });
       }
-      // Real-time will handle state update
+      const newSplitItems: SplitItem[] = result.data.items.map(item => ({...item, assignedTo: []}));
+      setSplitItems(prev => [...prev, ...newSplitItems]);
     } else {
       setError(result.error || "Gagal memindai struk.");
       toast({ variant: "destructive", title: "Pemindaian Gagal", description: result.error });
@@ -444,30 +376,40 @@ export default function SplitBillAppPage() {
 
   const handleUpdateItem = async (updatedItem: SplitItem) => {
     setDetailedBillSummary(null);
+
+    const originalItems = [...splitItems];
+    setSplitItems(prev => prev.map(item => item.id === updatedItem.id ? updatedItem : item));
+    
     const result = await updateBillItemInDbAction(updatedItem);
     if (!result.success) {
       toast({ variant: "destructive", title: "Gagal Memperbarui Item", description: result.error });
+      setSplitItems(originalItems);
     }
-    // Real-time will handle state update
   };
 
   const handleAddItem = async () => {
     if (!currentBillId) return;
     setDetailedBillSummary(null);
     const result = await addBillItemToDbAction(currentBillId, { name: "Item Baru", unitPrice: 0, quantity: 1 });
-    if (!result.success) {
-      toast({ variant: "destructive", title: "Gagal Menambah Item", description: result.error });
+    if (result.success && result.item) {
+        const newSplitItem: SplitItem = { ...result.item, assignedTo: [] };
+        setSplitItems(prev => [...prev, newSplitItem]);
+    } else {
+        toast({ variant: "destructive", title: "Gagal Menambah Item", description: result.error });
     }
-    // Real-time will handle state update
   };
 
   const handleDeleteItem = async (itemId: string) => {
     setDetailedBillSummary(null); 
+    
+    const originalItems = [...splitItems];
+    setSplitItems(prev => prev.filter(item => item.id !== itemId));
+
     const result = await deleteBillItemFromDbAction(itemId);
     if (!result.success) {
       toast({ variant: "destructive", title: "Gagal Menghapus Item", description: result.error });
+      setSplitItems(originalItems);
     }
-    // Real-time will handle state update
   };
 
 
@@ -484,6 +426,7 @@ export default function SplitBillAppPage() {
         tax_tip_split_strategy: newDetails.taxTipSplitStrategy,
     };
     
+    // Fire and forget, optimistic update is enough here
     await supabase.from('bills').update(updateToDb).eq('id', currentBillId);
   };
 
@@ -509,7 +452,6 @@ export default function SplitBillAppPage() {
 
     if (result.success) {
       toast({ title: "Tagihan Diringkas & Disimpan" });
-      // Real-time listener will update the summary display
       loadBillSession(currentBillId); // Force a reload to get final summary state
     } else {
       setError(result.error || "Gagal meringkas tagihan.");
@@ -518,24 +460,6 @@ export default function SplitBillAppPage() {
     setIsCalculating(false);
   };
   
-  const availableFriendsToInvite = useMemo(() => {
-    const participantProfileIds = new Set(people.map(p => p.profile_id).filter(Boolean));
-    return friends.filter(friend => !participantProfileIds.has(friend.id));
-  }, [friends, people]);
-
-  const shareUrl = useMemo(() => {
-    if (typeof window !== 'undefined' && currentBillId) {
-      return `${window.location.origin}/app?billId=${currentBillId}`;
-    }
-    return '';
-  }, [currentBillId]);
-
-  const copyShareUrl = () => {
-    if (!shareUrl) return;
-    navigator.clipboard.writeText(shareUrl)
-      .then(() => toast({ title: "URL Disalin!", description: "Bagikan tautan ini dengan teman Anda."}))
-      .catch(() => toast({ variant: "destructive", title: "Gagal Menyalin", description: "Tidak dapat menyalin tautan."}));
-  };
 
   if (isLoading || !authUser) {
     return (
@@ -703,52 +627,28 @@ export default function SplitBillAppPage() {
                     <CardTitle className="text-xl sm:text-2xl font-semibold flex items-center">
                         Tagihan: <span className="text-primary ml-2">{currentBillName}</span>
                     </CardTitle>
-                    <CardDescription>Sesi kolaboratif. Semua perubahan akan terlihat oleh semua anggota.</CardDescription>
+                    <CardDescription>Masukkan semua partisipan dan item untuk membagi tagihan.</CardDescription>
                   </div>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button variant="outline"><Share2 className="mr-2"/> Bagikan Sesi</Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-80">
-                      <div className="grid gap-4">
-                        <div className="space-y-2">
-                          <h4 className="font-medium leading-none">Bagikan Tautan</h4>
-                          <p className="text-sm text-muted-foreground">
-                            Undang orang lain ke sesi tagihan ini dengan tautan.
-                          </p>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                           <Input value={shareUrl} readOnly className="h-8 flex-1" />
-                           <Button size="sm" className="px-3" onClick={copyShareUrl}>
-                              <span className="sr-only">Salin</span>
-                              <CopyIcon className="h-4 w-4" />
-                           </Button>
-                        </div>
-                      </div>
-                    </PopoverContent>
-                  </Popover>
+                  <Button variant="outline" onClick={() => resetAppToStart(true)}> 
+                    <FilePlus className="mr-2 h-4 w-4" /> Buat Tagihan Lain
+                </Button>
               </CardHeader>
               <CardContent className="p-6 space-y-8">
                  <section>
                     <h3 className="text-lg font-semibold mb-3 flex items-center"><Users className="mr-2 h-5 w-5"/>Partisipan</h3>
                     <div className="space-y-4">
                       <div className="flex flex-col sm:flex-row gap-2">
-                        <Button onClick={() => setIsInviteDialogOpen(true)} variant="default" className="w-full sm:w-auto">
-                          <Users2 className="mr-2 h-4 w-4" /> Undang Teman
+                        <Input
+                            type="text"
+                            placeholder="Masukkan nama partisipan..."
+                            value={personNameInput}
+                            onChange={(e) => setPersonNameInput(e.target.value)}
+                            onKeyPress={(e) => { if (e.key === 'Enter') handleAddGuest(); }}
+                            className="flex-grow"
+                        />
+                        <Button onClick={handleAddGuest} disabled={!personNameInput.trim()} className="w-full sm:w-auto">
+                            <UserPlus className="mr-2 h-4 w-4" /> Tambah Partisipan
                         </Button>
-                        <div className="flex-grow flex items-center gap-2">
-                           <Input
-                              type="text"
-                              placeholder="Nama partisipan non-pengguna"
-                              value={personNameInput}
-                              onChange={(e) => setPersonNameInput(e.target.value)}
-                              onKeyPress={(e) => { if (e.key === 'Enter') handleAddGuest(); }}
-                              className="flex-grow"
-                          />
-                          <Button onClick={handleAddGuest} variant="outline" disabled={!personNameInput.trim()}>
-                              <UserPlus className="mr-2 h-4 w-4" /> Tambah Tamu
-                          </Button>
-                        </div>
                       </div>
 
                       {people.length > 0 && (
@@ -762,10 +662,8 @@ export default function SplitBillAppPage() {
                                     <AvatarFallback>{person.name.substring(0,1).toUpperCase()}</AvatarFallback>
                                   </Avatar>
                                   <span className="text-sm font-medium">{person.name}</span>
-                                  {person.status === 'invited' && (
-                                    <Badge variant="outline" className="text-xs bg-amber-100 text-amber-800 border-amber-200">
-                                      <Clock className="mr-1 h-3 w-3"/> Pending
-                                    </Badge>
+                                  {person.profile_id === authUser?.id && (
+                                     <Badge variant="outline" className="text-xs bg-primary/20 text-primary-foreground border-primary/30">Anda</Badge>
                                   )}
                                   <Button
                                       variant="ghost"
@@ -805,7 +703,7 @@ export default function SplitBillAppPage() {
                     <h3 className="text-lg font-semibold mb-3 flex items-center"><Edit2 className="mr-2 h-5 w-5"/>Item Tagihan & Alokasi</h3>
                      <ItemEditor
                         items={splitItems}
-                        people={people.filter(p => p.status !== 'invited')}
+                        people={people}
                         onUpdateItem={handleUpdateItem}
                         onAddItem={handleAddItem}
                         onDeleteItem={handleDeleteItem}
@@ -821,13 +719,13 @@ export default function SplitBillAppPage() {
                       <Select
                         value={billDetails.payerId || ""}
                         onValueChange={(value) => handleBillDetailsChange("payerId", value)} 
-                        disabled={people.filter(p => p.status !== 'invited').length === 0}
+                        disabled={people.length === 0}
                       >
                         <SelectTrigger id="payer" className="w-full">
-                          <SelectValue placeholder={people.filter(p => p.status !== 'invited').length > 0 ? "Pilih pembayar" : "Tambah atau tunggu orang bergabung"} />
+                          <SelectValue placeholder={people.length > 0 ? "Pilih pembayar" : "Tambah partisipan dahulu"} />
                         </SelectTrigger>
                         <SelectContent>
-                          {people.filter(p => p.status !== 'invited').map(person => (
+                          {people.map(person => (
                             <SelectItem key={person.id} value={person.id}>{person.name}</SelectItem>
                           ))}
                         </SelectContent>
@@ -898,7 +796,7 @@ export default function SplitBillAppPage() {
                 <CardFooter className="border-t p-6">
                     <Button 
                     onClick={handleCalculateSummary} 
-                    disabled={isCalculating || !billDetails.payerId || people.filter(p => p.status !== 'invited').length === 0 || !currentBillId} 
+                    disabled={isCalculating || !billDetails.payerId || people.length === 0 || !currentBillId} 
                     size="lg" 
                     className="w-full"
                     >
@@ -939,49 +837,6 @@ export default function SplitBillAppPage() {
         </div>
       </main>
 
-       {/* Invite Friend Dialog */}
-      <Dialog open={isInviteDialogOpen} onOpenChange={setIsInviteDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Undang Teman</DialogTitle>
-            <DialogDescription>
-              Pilih teman dari daftar Anda untuk ditambahkan ke tagihan ini.
-            </DialogDescription>
-          </DialogHeader>
-          <ScrollArea className="max-h-[60vh] -mx-4">
-            <div className="py-2 px-4 space-y-2">
-              {isLoadingFriends ? (
-                <p className="text-muted-foreground text-center">Memuat daftar teman...</p>
-              ) : availableFriendsToInvite.length > 0 ? (
-                availableFriendsToInvite.map(friend => (
-                  <div key={friend.id} className="flex items-center justify-between p-2 rounded-md hover:bg-muted">
-                    <div className="flex items-center gap-3">
-                      <Avatar>
-                        <AvatarImage src={friend.avatar_url || undefined} alt={friend.full_name || friend.username || "T"} data-ai-hint="friend avatar" />
-                        <AvatarFallback>{(friend.full_name || friend.username || "T").substring(0, 2).toUpperCase()}</AvatarFallback>
-                      </Avatar>
-                      <div>
-                        <p className="font-medium text-sm">{friend.full_name}</p>
-                        <p className="text-xs text-muted-foreground">@{friend.username}</p>
-                      </div>
-                    </div>
-                    <Button size="sm" variant="outline" onClick={() => handleInviteFriend(friend)}>
-                      <UserPlus className="mr-2 h-4 w-4"/> Undang
-                    </Button>
-                  </div>
-                ))
-              ) : (
-                <div className="text-center py-4 text-muted-foreground">
-                  <p>Semua teman Anda sudah ditambahkan.</p>
-                  <p className="text-xs">Atau Anda bisa <Link href="/app/social" className="text-primary underline">menambah teman baru</Link>.</p>
-                </div>
-              )}
-            </div>
-          </ScrollArea>
-        </DialogContent>
-      </Dialog>
-
-
       <footer className="relative z-10 mt-12 pt-8 border-t text-center text-sm text-muted-foreground">
         <p>&copy; {new Date().getFullYear()} Patungan. Hak cipta dilindungi.</p>
         <p>Ditenagai oleh Next.js, Shadcn/UI, Genkit, dan Supabase.</p>
@@ -989,3 +844,5 @@ export default function SplitBillAppPage() {
     </div>
   );
 }
+
+    

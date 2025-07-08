@@ -33,8 +33,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useToast } from "@/hooks/use-toast";
 import { Separator } from "@/components/ui/separator";
-import { UserCheck, Loader2, UserPlus, ArrowRight, Trash2, Users, ScanLine, PlusCircle, Edit2, ListChecks, FilePlus, FileText, CalendarClock, FolderPlus, Tag, Percent, Landmark, Power, User, Users2, Clock, Share2 } from "lucide-react"; 
-import { useRouter, useSearchParams } from "next/navigation";
+import { UserCheck, Loader2, UserPlus, ArrowRight, Trash2, Users, ScanLine, PlusCircle, Edit2, ListChecks, FilePlus, FileText, CalendarClock, FolderPlus, Tag, Percent, Landmark, Power, User, Users2, Clock, Share2, CopyIcon } from "lucide-react"; 
+import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { format } from 'date-fns';
 import { id as IndonesianLocale } from 'date-fns/locale';
 import { LandingHeader } from "@/components/landing-header";
@@ -54,6 +54,7 @@ const OTHERS_CATEGORY_NAME_FOR_PAGE = "Lainnya";
 export default function SplitBillAppPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const pathname = usePathname();
   const { toast } = useToast();
 
   const [authUser, setAuthUser] = useState<SupabaseUser | null>(null);
@@ -147,44 +148,51 @@ export default function SplitBillAppPage() {
   const loadBillSession = useCallback(async (billId: string) => {
     setIsLoading(true);
     setError(null);
-    const result = await getBillDetailsAction(billId);
+    try {
+        const result = await getBillDetailsAction(billId);
 
-    if (result.success && result.data) {
-      const { billName, summaryData, participants, items } = result.data;
+        if (result.success && result.data) {
+        const { billName, summaryData, participants, items } = result.data;
 
-      // Authorization check: is current user part of this bill?
-      if (!participants.some(p => p.profile_id === authUser?.id) && result.data.ownerId !== authUser?.id) {
-         setError("Anda tidak memiliki akses ke tagihan ini.");
-         toast({ variant: "destructive", title: "Akses Ditolak", description: "Anda bukan bagian dari sesi tagihan ini." });
-         router.push('/app');
-         setIsLoading(false);
-         return;
-      }
+        // Authorization check: is current user part of this bill?
+        if (!participants.some(p => p.profile_id === authUser?.id) && result.data.ownerId !== authUser?.id) {
+            setError("Anda tidak memiliki akses ke tagihan ini.");
+            toast({ variant: "destructive", title: "Akses Ditolak", description: "Anda bukan bagian dari sesi tagihan ini." });
+            router.push('/app');
+            return;
+        }
 
-      setCurrentBillId(billId);
-      setCurrentBillName(billName || "");
-      setPeople(participants);
-      setSplitItems(items);
-      setBillDetails({
-        payerId: summaryData.payerId,
-        taxAmount: summaryData.taxAmount,
-        tipAmount: summaryData.tipAmount,
-        taxTipSplitStrategy: summaryData.taxTipSplitStrategy,
-      });
+        setCurrentBillId(billId);
+        setCurrentBillName(billName || "");
+        setPeople(participants);
+        setSplitItems(items);
+        setBillDetails({
+            payerId: summaryData?.payerId || null,
+            taxAmount: summaryData?.taxAmount || 0,
+            tipAmount: summaryData?.tipAmount || 0,
+            taxTipSplitStrategy: summaryData?.taxTipSplitStrategy || "SPLIT_EQUALLY",
+        });
 
-      if (summaryData.grandTotal > 0 && !summaryData.isStillEditing) {
-        setDetailedBillSummary(summaryData);
-        setCurrentStep(2);
-      } else {
-        setDetailedBillSummary(null);
-        setCurrentStep(1);
-      }
-    } else {
-      setError(result.error || "Gagal memuat sesi tagihan.");
-      toast({ variant: "destructive", title: "Gagal Memuat Sesi", description: result.error });
-      router.push('/app');
+        if (summaryData && summaryData.grandTotal > 0 && !summaryData.isStillEditing) {
+            setDetailedBillSummary(summaryData);
+            setCurrentStep(2);
+        } else {
+            setDetailedBillSummary(null);
+            setCurrentStep(1);
+        }
+        } else {
+        setError(result.error || "Gagal memuat sesi tagihan.");
+        toast({ variant: "destructive", title: "Gagal Memuat Sesi", description: result.error });
+        router.push('/app');
+        }
+    } catch (e) {
+        console.error("Critical error in loadBillSession:", e);
+        setError("Terjadi kesalahan kritis saat memuat sesi.");
+        toast({ variant: "destructive", title: "Kesalahan Kritis", description: "Tidak dapat memuat sesi tagihan." });
+        router.push('/app');
+    } finally {
+        setIsLoading(false);
     }
-    setIsLoading(false);
   }, [authUser, router, toast]);
 
   // This effect handles initializing or loading a session based on the URL
@@ -344,23 +352,28 @@ export default function SplitBillAppPage() {
      setDetailedBillSummary(null);
      setCurrentStep(0); 
      setError(null);
-     router.push('/app', { scroll: false });
+     if (pathname !== '/app' || searchParams.has('billId')) {
+        router.push('/app', { scroll: false });
+     }
      if (shouldRefetchUser) {
         fetchInitialUserData();
      }
   }
 
+  // FIX: This effect now only updates local state to prevent the real-time reload loop.
   useEffect(() => {
     if (people.length > 0 && !detailedBillSummary) {
       const payerExists = people.some(p => p.id === billDetails.payerId);
       if (!billDetails.payerId || !payerExists) {
         const firstJoinedPerson = people.find(p => p.status === 'joined');
         if (firstJoinedPerson) {
-          handleBillDetailsChange("payerId", firstJoinedPerson.id);
+          // ONLY update local state. The DB will be updated upon explicit user action (e.g., calculate summary).
+          setBillDetails(prevDetails => ({ ...prevDetails, payerId: firstJoinedPerson.id }));
         }
       }
     }
-  }, [people, billDetails.payerId, detailedBillSummary]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [people, detailedBillSummary]); // Intentionally exclude billDetails.payerId to only run when people/summary changes.
 
   useEffect(() => { setTaxInputDisplayValue(billDetails.taxAmount.toString()); }, [billDetails.taxAmount]);
   useEffect(() => { setTipInputDisplayValue(billDetails.tipAmount.toString()); }, [billDetails.tipAmount]);
@@ -464,7 +477,6 @@ export default function SplitBillAppPage() {
     const newDetails = { ...billDetails, [field]: value };
     setBillDetails(newDetails); // Optimistic update
     
-    // Debounced update to DB
     const updateToDb = {
         payer_participant_id: newDetails.payerId,
         tax_amount: newDetails.taxAmount,
@@ -557,7 +569,6 @@ export default function SplitBillAppPage() {
                 <CardDescription>Pilih kategori, beri nama tagihan Anda, dan pilih waktu pembuatan.</CardDescription>
               </CardHeader>
               <CardContent className="p-6 space-y-6">
-                {/* ... existing start new bill form ... */}
                  <div className="space-y-3">
                   <Label htmlFor="billCategory">Kategori Tagihan</Label>
                   <div className="flex flex-col sm:flex-row gap-2">
@@ -718,7 +729,6 @@ export default function SplitBillAppPage() {
                   </Popover>
               </CardHeader>
               <CardContent className="p-6 space-y-8">
-                {/* ... all the editing sections ... */}
                  <section>
                     <h3 className="text-lg font-semibold mb-3 flex items-center"><Users className="mr-2 h-5 w-5"/>Partisipan</h3>
                     <div className="space-y-4">
@@ -979,21 +989,3 @@ export default function SplitBillAppPage() {
     </div>
   );
 }
-
-const CopyIcon = (props: React.SVGProps<SVGSVGElement>) => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    width="24"
-    height="24"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    {...props}
-  >
-    <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
-    <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
-  </svg>
-);

@@ -31,9 +31,9 @@ export function SummaryDisplay({ summary, people }: SummaryDisplayProps) {
     return <p className="text-muted-foreground">Ringkasan tagihan akan ditampilkan di sini setelah dihitung.</p>;
   }
 
-  const { payerName, taxAmount, tipAmount, detailedPersonalShares, settlements, grandTotal } = summary;
+  const { payerName, taxAmount, tipAmount, settlements, grandTotal } = summary;
 
-  if (grandTotal === 0 && (!detailedPersonalShares || detailedPersonalShares.every(shareDetail => shareDetail.totalShare === 0))) {
+  if (grandTotal === 0) {
      return (
       <Card className="shadow-lg">
         <CardHeader>
@@ -41,7 +41,7 @@ export function SummaryDisplay({ summary, people }: SummaryDisplayProps) {
           <CardDescription>Jumlah yang harus dibayar oleh setiap orang.</CardDescription>
         </CardHeader>
         <CardContent>
-          <p className="text-muted-foreground">Semua orang berutang Rp0,00. Tidak ada yang perlu dibagi!</p>
+          <p className="text-muted-foreground">Tidak ada yang perlu dibagi!</p>
         </CardContent>
       </Card>
     );
@@ -81,85 +81,6 @@ export function SummaryDisplay({ summary, people }: SummaryDisplayProps) {
             <span className="font-semibold">Total Keseluruhan Tagihan:</span>
             <span className="font-bold text-primary">{formatCurrency(grandTotal, "IDR")}</span>
           </div>
-        </CardContent>
-      </Card>
-
-      <Card className="shadow-lg">
-        <CardHeader>
-          <CardTitle className="flex items-center"><Users className="mr-2 h-6 w-6 text-primary"/> Bagian Masing-Masing Orang</CardTitle>
-          <CardDescription>Total biaya yang menjadi tanggungan setiap orang setelah pembagian item, pajak, dan tip.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {detailedPersonalShares && detailedPersonalShares.length > 0 ? (
-            <Accordion type="single" collapsible className="w-full">
-              {detailedPersonalShares.map((shareDetail) => {
-                const personData = people.find(p => p.id === shareDetail.personId);
-                return (
-                  <AccordionItem value={shareDetail.personId} key={shareDetail.personId}>
-                    <AccordionTrigger>
-                      <div className="flex items-center justify-between w-full">
-                        <div className="flex items-center gap-3">
-                          <Avatar className="h-9 w-9">
-                            <AvatarImage src={personData?.avatar_url || undefined} alt={shareDetail.personName} data-ai-hint="profile avatar" />
-                            <AvatarFallback>{shareDetail.personName.substring(0, 2).toUpperCase()}</AvatarFallback>
-                          </Avatar>
-                          <span className="truncate font-medium">{shareDetail.personName}</span>
-                        </div>
-                        <span className="font-semibold text-primary ml-4">{formatCurrency(shareDetail.totalShare, "IDR")}</span>
-                      </div>
-                    </AccordionTrigger>
-                    <AccordionContent className="pt-2 pb-4 pl-2 pr-1">
-                      <div className="space-y-3 text-sm">
-                        {shareDetail.items.length > 0 && (
-                          <div>
-                            <h4 className="font-medium text-muted-foreground mb-1.5 flex items-center"><ShoppingBasket className="mr-2 h-4 w-4"/>Item yang Dikonsumsi:</h4>
-                            <ul className="space-y-1 list-inside pl-2">
-                              {shareDetail.items.map((item, idx) => (
-                                <li key={idx} className="flex justify-between items-center text-xs">
-                                  <span className="truncate pr-2">{item.itemName} (x{item.quantityConsumed} @ {formatCurrency(item.unitPrice)})</span>
-                                  <span className="text-foreground">{formatCurrency(item.totalItemCost)}</span>
-                                </li>
-                              ))}
-                            </ul>
-                            <Separator className="my-2"/>
-                             <div className="flex justify-between items-center font-medium text-xs">
-                                <span>Subtotal Item:</span>
-                                <span>{formatCurrency(shareDetail.subTotalFromItems)}</span>
-                            </div>
-                          </div>
-                        )}
-                        {(shareDetail.taxShare > 0 || shareDetail.tipShare > 0 || shareDetail.items.length > 0) && <Separator className="my-2"/>}
-                        {shareDetail.taxShare > 0 && (
-                          <div className="flex justify-between items-center text-xs">
-                            <span className="text-muted-foreground flex items-center"><Landmark className="mr-1.5 h-3 w-3"/>Bagian Pajak:</span>
-                            <span className="text-foreground">{formatCurrency(shareDetail.taxShare)}</span>
-                          </div>
-                        )}
-                        {shareDetail.tipShare > 0 && (
-                          <div className="flex justify-between items-center text-xs">
-                            <span className="text-muted-foreground flex items-center"><Percent className="mr-1.5 h-3 w-3"/>Bagian Tip:</span>
-                            <span className="text-foreground">{formatCurrency(shareDetail.tipShare)}</span>
-                          </div>
-                        )}
-                         {(shareDetail.taxShare > 0 || shareDetail.tipShare > 0 || shareDetail.items.length > 0) && <Separator className="my-2"/>}
-                        <div className="flex justify-between items-center font-semibold text-sm">
-                            <span>Total Tanggungan:</span>
-                            <span>{formatCurrency(shareDetail.totalShare)}</span>
-                        </div>
-                        {Math.abs(shareDetail.totalShare - (shareDetail.subTotalFromItems + shareDetail.taxShare + shareDetail.tipShare)) > 0.01 && (
-                            <p className="text-xs text-destructive mt-1">
-                                * Ada selisih pembulatan. Total aktual dari AI: {formatCurrency(shareDetail.totalShare)}.
-                            </p>
-                        )}
-                      </div>
-                    </AccordionContent>
-                  </AccordionItem>
-                );
-              })}
-            </Accordion>
-          ) : (
-            <p className="text-muted-foreground text-center py-4">Tidak ada rincian bagian per orang yang tersedia.</p>
-          )}
         </CardContent>
       </Card>
       
@@ -236,13 +157,13 @@ export function SummaryDisplay({ summary, people }: SummaryDisplayProps) {
           </CardFooter>
         </Card>
       )}
-       {settlements.length === 0 && grandTotal > 0 && summary.payerName && Object.keys(summary.personalTotalShares).length > 0 && summary.personalTotalShares[summary.payerName] === grandTotal && (
+       {settlements.length === 0 && grandTotal > 0 && summary.payerName && (
         <Card className="shadow-lg">
             <CardHeader>
                 <CardTitle className="flex items-center"><ArrowRight className="mr-2 h-6 w-6 text-primary"/> Penyelesaian Pembayaran</CardTitle>
             </CardHeader>
             <CardContent>
-                <p className="text-muted-foreground">{payerName} menanggung seluruh tagihan. Tidak ada pembayaran antar peserta lain yang diperlukan.</p>
+                <p className="text-muted-foreground">{payerName} menanggung seluruh tagihan atau semua orang membayar bagiannya sendiri. Tidak ada pembayaran antar peserta lain yang diperlukan.</p>
             </CardContent>
         </Card>
       )}

@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
@@ -61,18 +60,19 @@ export function NotificationBell({ authUser }: NotificationBellProps) {
     }
   }, [isOpen, fetchInvitations]);
 
-  const handleResponse = async (participantId: string, response: 'accept' | 'decline') => {
-    setActionLoading(participantId);
-    const result = await respondToBillInvitationAction(participantId, response);
+  const handleResponse = async (invitation: BillInvitation, response: 'accept' | 'decline') => {
+    setActionLoading(invitation.participantId);
+    const result = await respondToBillInvitationAction(invitation.participantId, response);
     if (result.success) {
       toast({
         title: `Undangan ${response === 'accept' ? 'Diterima' : 'Ditolak'}`,
         description: `Anda berhasil ${response === 'accept' ? 'bergabung dengan' : 'menolak'} tagihan.`,
       });
-      // Refresh the list after action
-      setInvitations(prev => prev.filter(inv => inv.participantId !== participantId));
-      if (response === 'accept') {
-        router.refresh(); // Refresh page data to reflect new participation
+      
+      setInvitations(prev => prev.filter(inv => inv.participantId !== invitation.participantId));
+      if (response === 'accept' && invitation.billId) {
+        router.push(`/app?billId=${invitation.billId}`);
+        setIsOpen(false);
       }
     } else {
       toast({
@@ -141,11 +141,11 @@ export function NotificationBell({ authUser }: NotificationBellProps) {
                     </div>
                   </div>
                   <div className="flex justify-end gap-2 mt-2">
-                      <Button size="sm" variant="outline" onClick={() => handleResponse(invitation.participantId, 'decline')} disabled={isLoadingThis}>
+                      <Button size="sm" variant="outline" onClick={() => handleResponse(invitation, 'decline')} disabled={isLoadingThis}>
                           {isLoadingThis ? <Loader2 className="h-4 w-4 animate-spin"/> : <X className="h-4 w-4"/>}
                           <span className="ml-1.5">Tolak</span>
                       </Button>
-                      <Button size="sm" onClick={() => handleResponse(invitation.participantId, 'accept')} disabled={isLoadingThis}>
+                      <Button size="sm" onClick={() => handleResponse(invitation, 'accept')} disabled={isLoadingThis}>
                            {isLoadingThis ? <Loader2 className="h-4 w-4 animate-spin"/> : <Check className="h-4 w-4"/>}
                           <span className="ml-1.5">Terima</span>
                       </Button>

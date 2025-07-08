@@ -36,7 +36,7 @@ export type SettlementStatus = 'unpaid' | 'paid' | 'pending' | 'failed';
 export interface Settlement {
   fromId: string;
   from: string; // Person name
-  toId: string;
+  toId: string;   // Person name (usually the payer)
   to: string;   // Person name (usually the payer)
   amount: number;
   status: SettlementStatus;
@@ -60,13 +60,14 @@ export interface PersonalShareDetail {
 }
 
 export interface DetailedBillSummaryData {
+  payerId: string | null;
   payerName: string;
   taxAmount: number; // Overall bill tax
   tipAmount: number; // Overall bill tip
-  personalTotalShares: RawBillSummary; // Kept for potential simple overview
-  detailedPersonalShares?: PersonalShareDetail[]; // New detailed breakdown
+  taxTipSplitStrategy: TaxTipSplitStrategy;
   settlements: Settlement[];
   grandTotal: number;
+  isStillEditing: boolean;
 }
 
 export interface BillCategory { // New type
@@ -152,8 +153,13 @@ export interface DashboardData {
 export interface FetchedBillDetails {
   billName: string | null;
   createdAt: string;
-  summaryData: DetailedBillSummaryData;
+  summaryData: DetailedBillSummaryData | null;
   participants: Person[];
+  ownerId: string | null;
+}
+
+export interface FetchedBillDetailsWithItems extends FetchedBillDetails {
+  items: SplitItem[];
 }
 
 // ===== SOCIAL/FRIENDSHIP TYPES =====

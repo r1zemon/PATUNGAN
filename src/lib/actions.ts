@@ -3,7 +3,7 @@
 
 import { scanReceipt, ScanReceiptOutput, ReceiptItem as AiReceiptItem } from "@/ai/flows/scan-receipt";
 import { summarizeBill, SummarizeBillInput } from "@/ai/flows/summarize-bill";
-import type { SplitItem, Person, RawBillSummary, TaxTipSplitStrategy, ScannedItem, BillHistoryEntry, BillCategory, DashboardData, MonthlyExpenseByCategory, ExpenseChartDataPoint, RecentBillDisplayItem, ScheduledBillDisplayItem, FetchedBillDetails, Settlement, FetchedBillDetailsWithItems, PersonalShareDetail, UserProfileBasic, FriendRequestDisplay, FriendDisplay, SettlementStatus, BillInvitation } from "./types";
+import type { SplitItem, Person, RawBillSummary, TaxTipSplitStrategy, ScannedItem, BillHistoryEntry, BillCategory, DashboardData, MonthlyExpenseByCategory, ExpenseChartDataPoint, RecentBillDisplayItem, ScheduledBillDisplayItem, FetchedBillDetails, Settlement, FetchedBillDetailsWithItems, PersonalShareDetail, SettlementStatus } from "./types";
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
 import type { PostgrestSingleResponse, User as SupabaseUser } from "@supabase/supabase-js";
@@ -156,7 +156,7 @@ export async function loginUserAction(formData: FormData) {
 }
 
 
-export async function getCurrentUserAction(): Promise<{ user: SupabaseUser | null; profile: UserProfileBasic | null; error?: string }> {
+export async function getCurrentUserAction(): Promise<{ user: SupabaseUser | null; profile: any | null; error?: string }> {
   const supabase = createSupabaseServerClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
 
@@ -179,7 +179,7 @@ export async function getCurrentUserAction(): Promise<{ user: SupabaseUser | nul
       console.error("Error fetching profile for user:", user.id, profileError.message);
       return { user: user, profile: null, error: "Gagal mengambil profil: " + profileError.message };
     }
-    return { user: user, profile: profileData as UserProfileBasic | null };
+    return { user: user, profile: profileData as any | null };
   } catch (e: any) {
     console.error("Exception fetching profile in getCurrentUserAction:", e);
     return { user: user, profile: null, error: "Terjadi kesalahan server saat mengambil profil: " + e.message };
@@ -350,7 +350,7 @@ export async function addParticipantAction(billId: string, personName: string, p
         return { success: false, error: "Pengguna tidak terautentikasi." };
     }
 
-    const status: 'invited' | 'joined' = profileId === user.id || !profileId ? 'joined' : 'invited';
+    const status: 'joined' | 'invited' = 'joined'; // Simplified: always 'joined'
     
     const insertData: Database['public']['Tables']['bill_participants']['Insert'] = {
       bill_id: billId,
@@ -991,209 +991,4 @@ export async function getBillDetailsAction(billId: string): Promise<{ success: b
   } catch (e: any) {
     return { success: false, error: e.message || "Kesalahan server saat mengambil detail." };
   }
-}
-
-// ... existing friendship actions ...
-export async function searchUsersAction(query: string): Promise<{ success: boolean; users?: UserProfileBasic[]; error?: string }> {
-  const supabase = createSupabaseServerClient();
-  const { data: { user: currentUser } } = await supabase.auth.getUser();
-  if (!currentUser) return { success: false, error: "Pengguna tidak terautentikasi." };
-  if (!query.trim()) return { success: true, users: [] };
-
-  try {
-    const { data } = await supabase.from('profiles').select('id, username, full_name, avatar_url').or(`username.ilike.%${query}%,full_name.ilike.%${query}%`).neq('id', currentUser.id).limit(10);
-    return { success: true, users: data as UserProfileBasic[] };
-  } catch (e: any) {
-    return { success: false, error: e.message || "Gagal mencari pengguna." };
-  }
-}
-
-export async function sendFriendRequestAction(receiverId: string): Promise<{ success: boolean; error?: string }> {
-  const supabase = createSupabaseServerClient();
-  const { data: { user: requester } } = await supabase.auth.getUser();
-  if (!requester) return { success: false, error: "Pengguna tidak terautentikasi." };
-  if (requester.id === receiverId) return { success: false, error: "Anda tidak dapat mengirim permintaan ke diri sendiri." };
-
-  try {
-    const { data: existingFriendship } = await supabase.from('friendships').select('id').or(`and(user1_id.eq.${requester.id},user2_id.eq.${receiverId}),and(user1_id.eq.${receiverId},user2_id.eq.${requester.id})`).maybeSingle();
-    if (existingFriendship) return { success: false, error: "Anda sudah berteman." };
-
-    const { data: existingRequest } = await supabase.from('friend_requests').select('id, status, requester_id').or(`and(requester_id.eq.${requester.id},receiver_id.eq.${receiverId}),and(requester_id.eq.${receiverId},receiver_id.eq.${requester.id})`).in('status', ['pending']).maybeSingle();
-    if (existingRequest) return { success: false, error: "Permintaan sudah ada." };
-
-    await supabase.from('friend_requests').insert({ requester_id: requester.id, receiver_id: receiverId, status: 'pending' });
-    revalidatePath('/app/social', 'page');
-    return { success: true };
-  } catch (e: any) {
-    return { success: false, error: e.message || "Gagal mengirim permintaan." };
-  }
-}
-
-export async function getFriendRequestsAction(): Promise<{ success: boolean; requests?: FriendRequestDisplay[]; error?: string }> {
-  const supabase = createSupabaseServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { success: false, error: "Pengguna tidak terautentikasi." };
-
-  try {
-    const { data } = await supabase.from('friend_requests').select(`id, created_at, status, profile:requester_id(id, username, full_name, avatar_url)`).eq('receiver_id', user.id).eq('status', 'pending').order('created_at', { ascending: false });
-    if (!data) return { success: true, requests: [] };
-
-    const requests: FriendRequestDisplay[] = data.filter(req => req.profile).map(req => {
-        const profile = req.profile as UserProfileBasic;
-        return { requestId: req.id, id: profile.id, username: profile.username, full_name: profile.full_name, avatar_url: profile.avatar_url, requestedAt: req.created_at, status: req.status as FriendRequestDisplay['status'] };
-    });
-    return { success: true, requests };
-  } catch (e: any) {
-    return { success: false, error: e.message || "Gagal mengambil permintaan." };
-  }
-}
-
-export async function acceptFriendRequestAction(requestId: string): Promise<{ success: boolean; error?: string }> {
-  const supabase = createSupabaseServerClient();
-  const { data: { user: currentUser } } = await supabase.auth.getUser();
-  if (!currentUser) return { success: false, error: "Pengguna tidak terautentikasi." };
-
-  try {
-    const { data: request, error: requestError } = await supabase.from('friend_requests').select('requester_id, receiver_id, status').eq('id', requestId).single();
-    if (requestError || !request) throw new Error(requestError?.message || "Permintaan tidak ditemukan.");
-    if (request.receiver_id !== currentUser.id) return { success: false, error: "Anda tidak berhak." };
-    if (request.status !== 'pending') return { success: false, error: "Permintaan sudah tidak pending." };
-
-    await supabase.from('friend_requests').update({ status: 'accepted', updated_at: new Date().toISOString() }).eq('id', requestId);
-    await supabase.from('friendships').insert({ user1_id: request.requester_id, user2_id: request.receiver_id });
-
-    revalidatePath('/app/social', 'page');
-    return { success: true };
-  } catch (e: any) {
-    return { success: false, error: e.message || "Gagal menerima permintaan." };
-  }
-}
-
-export async function declineOrCancelFriendRequestAction(requestId: string, actionType: 'decline' | 'cancel'): Promise<{ success: boolean; error?: string }> {
-  const supabase = createSupabaseServerClient();
-  const { data: { user: currentUser } } = await supabase.auth.getUser();
-  if (!currentUser) return { success: false, error: "Pengguna tidak terautentikasi." };
-
-  try {
-    const { data: request, error: requestError } = await supabase.from('friend_requests').select('requester_id, receiver_id, status').eq('id', requestId).single();
-    if (requestError || !request) throw new Error(requestError?.message || "Permintaan tidak ditemukan.");
-
-    let newStatus: 'declined' | 'cancelled';
-    if (actionType === 'decline') {
-        if (request.receiver_id !== currentUser.id) return { success: false, error: "Tidak berhak." };
-        newStatus = 'declined';
-    } else {
-        if (request.requester_id !== currentUser.id) return { success: false, error: "Tidak berhak." };
-        newStatus = 'cancelled';
-    }
-    if (request.status !== 'pending') return { success: false, error: "Permintaan sudah tidak pending." };
-
-    await supabase.from('friend_requests').update({ status: newStatus, updated_at: new Date().toISOString() }).eq('id', requestId);
-    revalidatePath('/app/social', 'page');
-    return { success: true };
-  } catch (e: any) {
-    return { success: false, error: e.message || "Gagal." };
-  }
-}
-
-export async function getFriendsAction(): Promise<{ success: boolean; friends?: FriendDisplay[]; error?: string }> {
-  const supabase = createSupabaseServerClient();
-  const { data: { user: currentUser } } = await supabase.auth.getUser();
-  if (!currentUser) return { success: false, error: "Pengguna tidak terautentikasi." };
-  try {
-    const { data } = await supabase.from('friendships').select(`id, created_at, user1:user1_id(id, username, full_name, avatar_url), user2:user2_id(id, username, full_name, avatar_url)`).or(`user1_id.eq.${currentUser.id},user2_id.eq.${currentUser.id}`).order('created_at', { ascending: false });
-    if (!data) return { success: true, friends: [] };
-
-    const friends: FriendDisplay[] = data.filter(f => f.user1 && f.user2).map(f => {
-        const friendProfile = (f.user1 as UserProfileBasic).id === currentUser.id ? f.user2 as UserProfileBasic : f.user1 as UserProfileBasic;
-        return { friendshipId: f.id, id: friendProfile.id, username: friendProfile.username, full_name: friendProfile.full_name, avatar_url: friendProfile.avatar_url, since: f.created_at };
-    });
-    return { success: true, friends };
-  } catch (e: any) {
-    return { success: false, error: e.message || "Gagal mengambil teman." };
-  }
-}
-
-export async function removeFriendAction(friendshipId: string): Promise<{ success: boolean; error?: string }> {
-  const supabase = createSupabaseServerClient();
-  const { data: { user: currentUser } } = await supabase.auth.getUser();
-  if (!currentUser) return { success: false, error: "Pengguna tidak terautikentikasi." };
-
-  try {
-    const { data: friendship } = await supabase.from('friendships').select('user1_id, user2_id').eq('id', friendshipId).or(`user1_id.eq.${currentUser.id},user2_id.eq.${currentUser.id}`).single();
-    if (!friendship) throw new Error("Pertemanan tidak ditemukan.");
-    
-    await supabase.from('friendships').delete().eq('id', friendshipId);
-    revalidatePath('/app/social', 'page');
-    return { success: true };
-  } catch (e: any) {
-    return { success: false, error: e.message || "Gagal menghapus teman." };
-  }
-}
-
-// ===== BILL INVITATION ACTIONS =====
-
-export async function getPendingInvitationsAction(): Promise<{ success: boolean; invitations?: BillInvitation[]; error?: string }> {
-    const supabase = createSupabaseServerClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return { success: false, error: "Pengguna tidak terautentikasi." };
-    
-    try {
-        const { data: invitationsData } = await supabase.from('bill_participants').select('id, created_at, bill_id').eq('profile_id', user.id).eq('status', 'invited');
-        if (!invitationsData || invitationsData.length === 0) return { success: true, invitations: [] };
-
-        const billIds = invitationsData.map(inv => inv.bill_id);
-        const { data: billsData } = await supabase.from('bills').select('id, name, user_id').in('id', billIds);
-
-        const inviterIds = (billsData || []).map(bill => bill.user_id).filter((id): id is string => !!id);
-        let inviterProfiles: Map<string, string> = new Map();
-        if (inviterIds.length > 0) {
-            const { data: profilesData } = await supabase.from('profiles').select('id, full_name').in('id', inviterIds);
-            if (profilesData) {
-                profilesData.forEach(profile => {
-                    inviterProfiles.set(profile.id, profile.full_name || 'Seseorang');
-                });
-            }
-        }
-        
-        const finalInvitations: BillInvitation[] = invitationsData.map(invitation => {
-            const bill = (billsData || []).find(b => b.id === invitation.bill_id);
-            const inviterName = bill && bill.user_id ? (inviterProfiles.get(bill.user_id) || 'Seseorang') : 'Seseorang';
-            return {
-                participantId: invitation.id,
-                billId: invitation.bill_id,
-                billName: bill?.name || 'Tagihan Dihapus',
-                inviterName: inviterName,
-                createdAt: invitation.created_at
-            };
-        }).filter(inv => inv.billId);
-
-        return { success: true, invitations: finalInvitations };
-    } catch (e: any) {
-        return { success: false, error: "Kesalahan server: " + e.message };
-    }
-}
-
-export async function respondToBillInvitationAction(participantId: string, response: 'accept' | 'decline'): Promise<{ success: boolean; error?: string }> {
-    const supabase = createSupabaseServerClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return { success: false, error: "Pengguna tidak terautentikasi." };
-
-    try {
-        const { data: participant, error: fetchError } = await supabase.from('bill_participants').select('profile_id').eq('id', participantId).eq('status', 'invited').single();
-        if (fetchError || !participant) return { success: false, error: "Undangan tidak ditemukan." };
-        if (participant.profile_id !== user.id) return { success: false, error: "Anda tidak berhak." };
-
-        if (response === 'accept') {
-            await supabase.from('bill_participants').update({ status: 'joined' }).eq('id', participantId);
-        } else {
-            await supabase.from('bill_participants').delete().eq('id', participantId);
-        }
-        
-        revalidatePath('/app'); 
-        revalidatePath('/app/notifications'); 
-        return { success: true };
-    } catch (e: any) {
-        return { success: false, error: "Kesalahan server: " + e.message };
-    }
 }

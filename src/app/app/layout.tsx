@@ -12,13 +12,6 @@ export const historyPageMetadata: Metadata = {
   description: 'Lihat riwayat tagihan yang telah Anda buat sebelumnya.',
 };
 
-// Separate metadata for social page
-export const socialPageMetadata: Metadata = {
-  title: 'Teman - Patungan',
-  description: 'Kelola daftar teman Anda dan temukan teman baru.',
-};
-
-
 export default function AppLayout({
   children,
 }: {

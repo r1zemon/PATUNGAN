@@ -1,3 +1,4 @@
+
 "use client";
 
 import Link from 'next/link';
@@ -19,7 +20,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { NotificationBell } from './notification-bell';
 import type { UserProfileBasic } from '@/lib/types';
 
 
@@ -27,7 +27,6 @@ import type { UserProfileBasic } from '@/lib/types';
 const navLinks = [
   { href: '/', label: 'Beranda', icon: Home },
   { href: '/app/history', label: 'Riwayat', icon: ListChecks },
-  { href: '/app/social', label: 'Teman', icon: Users }, 
 ];
 
 export function LandingHeader() {
@@ -90,17 +89,6 @@ export function LandingHeader() {
     }
   };
 
-  const handleFriendsNavigation = () => {
-    setIsMobileMenuOpen(false);
-    if (authUser) {
-      router.push('/app/social');
-    } else {
-      toast({title: "Akses Ditolak", description: "Anda harus login untuk mengakses fitur sosial.", duration: 3000});
-      router.push('/login');
-    }
-  };
-
-
   const handleNavLinkClick = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
     e.preventDefault(); 
     setIsMobileMenuOpen(false);
@@ -115,8 +103,6 @@ export function LandingHeader() {
       handleHistoryClick();
     } else if (href === '/app/profile') { 
       handleProfileClick();
-    } else if (href === '/app/social') { 
-      handleFriendsNavigation();
     }
     else {
       if (href.startsWith('#')) {
@@ -153,7 +139,6 @@ export function LandingHeader() {
              <Button variant="ghost" disabled size="sm">Memuat...</Button>
           ) : authUser ? (
             <>
-              <NotificationBell authUser={authUser} />
               <Button variant="default" asChild size="sm">
                 <Link href="/app">
                   <FilePlus className="mr-2 h-4 w-4" /> Tagihan Baru
@@ -210,7 +195,6 @@ export function LandingHeader() {
         </div>
 
         <div className="md:hidden flex items-center gap-2">
-          {authUser && <NotificationBell authUser={authUser} />}
           <Sheet open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
             <SheetTrigger asChild>
               <Button variant="ghost" size="icon">

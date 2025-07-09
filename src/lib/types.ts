@@ -88,30 +88,14 @@ export interface BillHistoryEntry {
   categoryName?: string | null;
 }
 
-export interface Notification {
+// Minimal profile type for header display
+export interface UserProfileBasic {
   id: string;
-  type: 'friend_request' | 'bill_invite' | 'generic' | 'info';
-  title: string;
-  description?: string;
-  createdAt: string; // ISO string date
-  read: boolean;
-  icon?: React.ElementType;
-  link?: string;
-  sender?: {
-    name: string;
-    avatar_url?: string;
-  };
-  payload?: any; // For additional data like invitation IDs
+  username: string | null;
+  full_name: string | null;
+  avatar_url: string | null;
 }
 
-// ===== INVITATION & NOTIFICATION TYPES =====
-export interface BillInvitation {
-  participantId: string;
-  billId: string;
-  billName: string | null;
-  inviterName: string | null;
-  createdAt: string;
-}
 
 // ===== DASHBOARD TYPES =====
 export interface ScheduledBillDisplayItem {
@@ -160,23 +144,4 @@ export interface FetchedBillDetails {
 
 export interface FetchedBillDetailsWithItems extends FetchedBillDetails {
   items: SplitItem[];
-}
-
-// ===== SOCIAL/FRIENDSHIP TYPES =====
-export interface UserProfileBasic {
-  id: string;
-  username: string | null;
-  full_name: string | null;
-  avatar_url: string | null;
-}
-
-export interface FriendRequestDisplay extends UserProfileBasic {
-  requestId: string;
-  requestedAt: string; // ISO string date
-  status: 'pending' | 'accepted' | 'declined' | 'cancelled';
-}
-
-export interface FriendDisplay extends UserProfileBasic {
-  friendshipId: string;
-  since: string; // ISO string date
 }

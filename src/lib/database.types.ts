@@ -76,7 +76,6 @@ export type Database = {
       }
       bill_participants: {
         Row: {
-          avatar_url: string | null
           bill_id: string
           created_at: string
           id: string
@@ -86,7 +85,6 @@ export type Database = {
           total_share_amount: number | null
         }
         Insert: {
-          avatar_url?: string | null
           bill_id: string
           created_at?: string
           id?: string
@@ -96,7 +94,6 @@ export type Database = {
           total_share_amount?: number | null
         }
         Update: {
-          avatar_url?: string | null
           bill_id?: string
           created_at?: string
           id?: string
@@ -135,6 +132,7 @@ export type Database = {
           tax_tip_split_strategy: "PAYER_PAYS_ALL" | "SPLIT_EQUALLY"
           tip_amount: number | null
           user_id: string | null
+          updated_at: string | null
         }
         Insert: {
           category_id?: string | null
@@ -148,6 +146,7 @@ export type Database = {
           tax_tip_split_strategy?: "PAYER_PAYS_ALL" | "SPLIT_EQUALLY"
           tip_amount?: number | null
           user_id?: string | null
+          updated_at?: string | null
         }
         Update: {
           category_id?: string | null
@@ -161,6 +160,7 @@ export type Database = {
           tax_tip_split_strategy?: "PAYER_PAYS_ALL" | "SPLIT_EQUALLY"
           tip_amount?: number | null
           user_id?: string | null
+          updated_at?: string | null
         }
         Relationships: [
           {
@@ -234,6 +234,7 @@ export type Database = {
           phone_number: string | null
           updated_at: string | null
           username: string
+          role: string | null
         }
         Insert: {
           avatar_url?: string | null
@@ -243,6 +244,7 @@ export type Database = {
           phone_number?: string | null
           updated_at?: string | null
           username: string
+          role?: string | null
         }
         Update: {
           avatar_url?: string | null
@@ -252,6 +254,7 @@ export type Database = {
           phone_number?: string | null
           updated_at?: string | null
           username?: string
+          role?: string | null
         }
         Relationships: [
           {
@@ -412,3 +415,5 @@ export type Enums<
   : PublicEnumNameOrOptions extends keyof PublicSchema["Enums"]
     ? PublicSchema["Enums"][PublicEnumNameOrOptions]
     : never
+
+    

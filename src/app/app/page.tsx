@@ -845,3 +845,5 @@ export default function SplitBillAppPage() {
     </div>
   );
 }
+
+    

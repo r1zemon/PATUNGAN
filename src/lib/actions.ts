@@ -922,7 +922,7 @@ export async function getBillDetailsAction(billId: string): Promise<{ success: b
       .single();
     if (billError) return { success: false, error: "Gagal mengambil detail tagihan: " + billError.message };
 
-    const { data: participantsRaw, error: pError } = await supabase.from('bill_participants').select('id, name, profile_id, avatar_url, status, total_share_amount').eq('bill_id', billId);
+    const { data: participantsRaw, error: pError } = await supabase.from('bill_participants').select('id, name, profile_id, status, total_share_amount, profiles ( avatar_url )').eq('bill_id', billId);
     if (pError) return { success: false, error: "Gagal mengambil partisipan: " + pError.message };
 
     const { data: itemsRaw, error: iError } = await supabase.from('bill_items').select('id, name, unit_price, quantity').eq('bill_id', billId);
@@ -935,7 +935,7 @@ export async function getBillDetailsAction(billId: string): Promise<{ success: b
         id: p.id,
         name: p.name,
         profile_id: p.profile_id,
-        avatar_url: p.avatar_url,
+        avatar_url: p.profiles?.avatar_url || null,
         status: p.status as 'joined' | 'invited'
     }));
     
@@ -991,3 +991,5 @@ export async function getBillDetailsAction(billId: string): Promise<{ success: b
     return { success: false, error: e.message || "Kesalahan server saat mengambil detail." };
   }
 }
+
+    

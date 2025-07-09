@@ -143,3 +143,5 @@ export interface FetchedBillDetails {
 export interface FetchedBillDetailsWithItems extends FetchedBillDetails {
   items: SplitItem[];
 }
+
+    

@@ -128,7 +128,6 @@ export type Database = {
           created_at: string
           grand_total: number | null
           id: string
-          is_still_editing: boolean
           name: string | null
           payer_participant_id: string | null
           scheduled_at: string | null
@@ -142,7 +141,6 @@ export type Database = {
           created_at?: string
           grand_total?: number | null
           id?: string
-          is_still_editing?: boolean
           name?: string | null
           payer_participant_id?: string | null
           scheduled_at?: string | null
@@ -156,7 +154,6 @@ export type Database = {
           created_at?: string
           grand_total?: number | null
           id?: string
-          is_still_editing?: boolean
           name?: string | null
           payer_participant_id?: string | null
           scheduled_at?: string | null

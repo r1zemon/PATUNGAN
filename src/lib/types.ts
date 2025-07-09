@@ -1,5 +1,4 @@
 
-
 export interface Person {
   id: string; // This is the bill_participants.id
   name: string;
@@ -67,7 +66,6 @@ export interface DetailedBillSummaryData {
   taxTipSplitStrategy: TaxTipSplitStrategy;
   settlements: Settlement[];
   grandTotal: number;
-  isStillEditing: boolean;
 }
 
 export interface BillCategory { // New type

@@ -153,7 +153,8 @@ export default function SplitBillAppPage() {
             taxTipSplitStrategy: summaryData?.taxTipSplitStrategy || "SPLIT_EQUALLY",
         });
 
-        if (summaryData && summaryData.grandTotal > 0 && !summaryData.isStillEditing) {
+        // Determine step based on whether the bill has been summarized (grandTotal > 0)
+        if (summaryData && summaryData.grandTotal > 0) {
             setDetailedBillSummary(summaryData);
             setCurrentStep(2);
         } else {
@@ -844,5 +845,3 @@ export default function SplitBillAppPage() {
     </div>
   );
 }
-
-    

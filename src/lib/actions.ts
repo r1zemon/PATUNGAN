@@ -308,7 +308,6 @@ export async function createBillAction(
       user_id: user.id,
       category_id: categoryId,
       scheduled_at: scheduledAt || null,
-      is_still_editing: true, // New bill starts in editing mode
     };
 
     const { data: billData, error: billInsertError } = await supabase
@@ -619,7 +618,6 @@ export async function handleSummarizeBillAction(
         tip_amount: tipAmount,
         tax_tip_split_strategy: taxTipSplitStrategy,
         grand_total: calculatedGrandTotal,
-        is_still_editing: false, // Mark editing as finished
     }).eq('id', billId);
 
     await supabase.from('settlements').delete().eq('bill_id', billId);
@@ -919,7 +917,7 @@ export async function getBillDetailsAction(billId: string): Promise<{ success: b
   try {
     const { data: bill, error: billError } = await supabase
       .from('bills')
-      .select('id, name, user_id, created_at, grand_total, tax_amount, tip_amount, payer_participant_id, tax_tip_split_strategy, scheduled_at, is_still_editing')
+      .select('id, name, user_id, created_at, grand_total, tax_amount, tip_amount, payer_participant_id, tax_tip_split_strategy, scheduled_at')
       .eq('id', billId)
       .single();
     if (billError) return { success: false, error: "Gagal mengambil detail tagihan: " + billError.message };
@@ -953,9 +951,11 @@ export async function getBillDetailsAction(billId: string): Promise<{ success: b
 
     const payerName = participants.find(p => p.id === bill.payer_participant_id)?.name || "Belum ditentukan";
     
-    // Build summary data if not in editing mode
+    // Build summary data if bill is summarized (grand_total is not null)
     let summaryData: FetchedBillDetails['summaryData'] | null = null;
-    if (!bill.is_still_editing) {
+    const isSummarized = bill.grand_total !== null;
+
+    if (isSummarized) {
        const { data: settlementsData, error: settlementsError } = await supabase
           .from('settlements')
           .select('amount, status, from_participant:bill_participants!from_participant_id(id, name), to_participant:bill_participants!to_participant_id(id, name)')
@@ -975,15 +975,14 @@ export async function getBillDetailsAction(billId: string): Promise<{ success: b
             taxTipSplitStrategy: bill.tax_tip_split_strategy as TaxTipSplitStrategy,
             settlements: settlements,
             grandTotal: bill.grand_total || 0,
-            isStillEditing: bill.is_still_editing || false
         };
     } else {
+        // Bill is still being edited
         summaryData = {
             payerId: bill.payer_participant_id, payerName,
             taxAmount: bill.tax_amount || 0, tipAmount: bill.tip_amount || 0,
             taxTipSplitStrategy: bill.tax_tip_split_strategy as TaxTipSplitStrategy,
-            settlements: [], grandTotal: bill.grand_total || 0,
-            isStillEditing: true
+            settlements: [], grandTotal: 0,
         };
     }
 

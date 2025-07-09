@@ -81,7 +81,6 @@ export type Database = {
           id: string
           name: string
           profile_id: string | null
-          status: "joined" | "invited"
           total_share_amount: number | null
         }
         Insert: {
@@ -90,7 +89,6 @@ export type Database = {
           id?: string
           name: string
           profile_id?: string | null
-          status: "joined" | "invited"
           total_share_amount?: number | null
         }
         Update: {
@@ -99,7 +97,6 @@ export type Database = {
           id?: string
           name?: string
           profile_id?: string | null
-          status?: "joined" | "invited"
           total_share_amount?: number | null
         }
         Relationships: [
@@ -234,7 +231,6 @@ export type Database = {
           phone_number: string | null
           updated_at: string | null
           username: string
-          role: string | null
         }
         Insert: {
           avatar_url?: string | null
@@ -244,7 +240,6 @@ export type Database = {
           phone_number?: string | null
           updated_at?: string | null
           username: string
-          role?: string | null
         }
         Update: {
           avatar_url?: string | null
@@ -254,7 +249,6 @@ export type Database = {
           phone_number?: string | null
           updated_at?: string | null
           username?: string
-          role?: string | null
         }
         Relationships: [
           {
@@ -408,12 +402,11 @@ export type Enums<
     | keyof PublicSchema["Enums"]
     | { schema: keyof Database },
   EnumName extends PublicEnumNameOrOptions extends { schema: keyof Database }
-    ? keyof Database[PublicEnumNameOrOptions["schema"]]["Enums"]
+    ? keyof Database[PublicTableNameOrOptions["schema"]]["Enums"]
     : never = never,
 > = PublicEnumNameOrOptions extends { schema: keyof Database }
   ? Database[PublicEnumNameOrOptions["schema"]]["Enums"][EnumName]
   : PublicEnumNameOrOptions extends keyof PublicSchema["Enums"]
     ? PublicSchema["Enums"][PublicEnumNameOrOptions]
     : never
-
     

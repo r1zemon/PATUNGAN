@@ -37,13 +37,20 @@ export default function LoginPage() {
       const formData = new FormData(event.currentTarget);
       const result = await loginUserAction(formData);
 
-      if (result.success) {
+      if (result.success && result.user) {
         toast({
           title: "Login Berhasil!",
           description: "Anda akan diarahkan ke halaman beranda.",
         });
         router.refresh(); 
-        router.push("/"); 
+
+        // Role-based redirection logic
+        if (result.role === 'admin') {
+          router.push("/admin");
+        } else {
+          router.push("/");
+        }
+
       } else {
         toast({
           variant: "destructive",

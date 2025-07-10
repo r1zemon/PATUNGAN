@@ -1,4 +1,5 @@
 
+
 "use server";
 
 import { scanReceipt, ScanReceiptOutput, ReceiptItem as AiReceiptItem } from "@/ai/flows/scan-receipt";
@@ -141,18 +142,37 @@ export async function loginUserAction(formData: FormData) {
     return { success: false, error: "Email dan password wajib diisi." };
   }
 
-  const { data, error } = await supabase.auth.signInWithPassword({
+  const { data: loginData, error: loginError } = await supabase.auth.signInWithPassword({
     email,
     password,
   });
 
-  if (error) {
-    return { success: false, error: error.message };
+  if (loginError) {
+    return { success: false, error: loginError.message };
+  }
+
+  if (!loginData.user) {
+    return { success: false, error: "Gagal mendapatkan data pengguna setelah login." };
+  }
+
+  // Fetch the user's profile to get their role
+  const { data: profileData, error: profileError } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', loginData.user.id)
+    .single();
+  
+  if (profileError) {
+    // Log out the user if their profile can't be fetched, to be safe
+    await supabase.auth.signOut();
+    return { success: false, error: "Login berhasil, tetapi gagal mengambil profil pengguna." };
   }
 
   revalidatePath('/', 'layout');
   revalidatePath('/', 'page');
-  return { success: true, user: data.user };
+  revalidatePath('/admin', 'layout'); // Revalidate admin path as well
+
+  return { success: true, user: loginData.user, role: profileData.role };
 }
 
 
@@ -598,7 +618,7 @@ export async function handleSummarizeBillAction(
   };
 
   try {
-    const rawSummary: RawBillSummary = await summarizeBill(summarizeBillInput);
+    const rawSummary: RawBillSummary = await summarize(summarizeBillInput);
 
     let calculatedGrandTotal = 0;
     const participantUpdatePromises = people.map(async (person) => {
@@ -660,7 +680,7 @@ export async function markSettlementsAsPaidAction(billId: string): Promise<{ suc
     // Ambil semua settlement untuk menghitung total fee
     const { data: settlements, error: fetchError } = await supabase
       .from('settlements')
-      .select('amount')
+      .select('id, amount')
       .eq('bill_id', billId)
       .eq('status', 'unpaid');
 
@@ -668,41 +688,24 @@ export async function markSettlementsAsPaidAction(billId: string): Promise<{ suc
       return { success: false, error: "Gagal mengambil data settlement: " + fetchError.message };
     }
 
-    // Hitung service fee untuk setiap settlement
-    const updates = (settlements || []).map(s => ({
-      match: { bill_id: billId, from_participant_id: s.from_participant_id, to_participant_id: s.to_participant_id }, // This seems incorrect, need to match unique settlement.
-      update: { status: 'paid' as const, service_fee: s.amount * 0.01 }
-    }));
+    if (!settlements || settlements.length === 0) {
+      return { success: true }; // No unpaid settlements to mark
+    }
     
-    // Ini bukan cara yang benar untuk update batch di Supabase.
-    // Mari kita lakukan dengan benar: satu panggilan update.
-
+    // Efficiently update all unpaid settlements for this bill in one go
     const { error: updateError } = await supabase
       .from('settlements')
-      .update({ status: 'paid' }) // Kita tidak bisa menghitung service_fee secara dinamis di sini tanpa logic yang lebih kompleks atau fungsi database. Mari kita set status saja.
+      .update({ status: 'paid' })
       .eq('bill_id', billId)
       .eq('status', 'unpaid');
-    
-    // Untuk service fee, kita mungkin perlu melakukan update terpisah atau menggunakan fungsi Postgres.
-    // Untuk kesederhanaan, mari kita update service_fee dalam loop setelahnya atau secara terpisah.
-    // Atau, cara yang lebih aman adalah dengan mengabaikan service fee untuk saat ini jika tidak bisa dihitung dengan andal di sini.
-    // Untuk sekarang, kita hanya update statusnya.
 
     if (updateError) {
       throw updateError;
     }
 
-    // Mari kita tambahkan service fee secara terpisah setelah status diupdate, jika diperlukan.
-    // Ini kurang efisien tapi lebih aman daripada batch update yang kompleks di sisi client.
-    for (const settlement of (settlements || [])) {
-        // Ini akan membuat banyak panggilan, tidak ideal. Cara yang lebih baik adalah menggunakan fungsi RPC di Postgres.
-        // Untuk saat ini, kita akan fokus pada pembaruan status saja.
-    }
-
-
     revalidatePath('/', 'page');
     revalidatePath('/app/history', 'page');
-    revalidatePath('/app/page');
+    revalidatePath('/app', 'page'); // Revalidate the main app page as well
     return { success: true };
   } catch (e: any) {
     console.error("Error marking settlements as paid:", e);
@@ -1096,4 +1099,16 @@ export async function getBillDetailsAction(billId: string): Promise<{ success: b
   } catch (e: any) {
     return { success: false, error: e.message || "Kesalahan server saat mengambil detail." };
   }
+}
+
+export async function getAllUsersAction() {
+    const supabase = createSupabaseServerClient()
+    const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+
+    if (error) {
+        return { success: false, error: error.message }
+    }
+    return { success: true, users: data }
 }

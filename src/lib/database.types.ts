@@ -81,6 +81,7 @@ export type Database = {
           id: string
           name: string
           profile_id: string | null
+          status: "joined" | "invited"
           total_share_amount: number | null
         }
         Insert: {
@@ -89,6 +90,7 @@ export type Database = {
           id?: string
           name: string
           profile_id?: string | null
+          status?: "joined" | "invited"
           total_share_amount?: number | null
         }
         Update: {
@@ -97,6 +99,7 @@ export type Database = {
           id?: string
           name?: string
           profile_id?: string | null
+          status?: "joined" | "invited"
           total_share_amount?: number | null
         }
         Relationships: [
@@ -124,6 +127,7 @@ export type Database = {
           id: string
           name: string | null
           payer_participant_id: string | null
+          role: "admin" | "pengguna" | null
           scheduled_at: string | null
           tax_amount: number | null
           tax_tip_split_strategy: "PAYER_PAYS_ALL" | "SPLIT_EQUALLY"
@@ -138,6 +142,7 @@ export type Database = {
           id?: string
           name?: string | null
           payer_participant_id?: string | null
+          role?: "admin" | "pengguna" | null
           scheduled_at?: string | null
           tax_amount?: number | null
           tax_tip_split_strategy?: "PAYER_PAYS_ALL" | "SPLIT_EQUALLY"
@@ -152,6 +157,7 @@ export type Database = {
           id?: string
           name?: string | null
           payer_participant_id?: string | null
+          role?: "admin" | "pengguna" | null
           scheduled_at?: string | null
           tax_amount?: number | null
           tax_tip_split_strategy?: "PAYER_PAYS_ALL" | "SPLIT_EQUALLY"
@@ -229,6 +235,7 @@ export type Database = {
           full_name: string | null
           id: string
           phone_number: string | null
+          role: "admin" | "pengguna"
           updated_at: string | null
           username: string
         }
@@ -238,6 +245,7 @@ export type Database = {
           full_name?: string | null
           id: string
           phone_number?: string | null
+          role?: "admin" | "pengguna"
           updated_at?: string | null
           username: string
         }
@@ -247,6 +255,7 @@ export type Database = {
           full_name?: string | null
           id?: string
           phone_number?: string | null
+          role?: "admin" | "pengguna"
           updated_at?: string | null
           username?: string
         }
@@ -320,7 +329,7 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      user_role: "admin" | "pengguna"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -405,8 +414,10 @@ export type Enums<
     ? keyof Database[PublicTableNameOrOptions["schema"]]["Enums"]
     : never = never,
 > = PublicEnumNameOrOptions extends { schema: keyof Database }
-  ? Database[PublicEnumNameOrOptions["schema"]]["Enums"][EnumName]
+  ? Database[PublicTableNameOrOptions["schema"]]["Enums"][EnumName]
   : PublicEnumNameOrOptions extends keyof PublicSchema["Enums"]
     ? PublicSchema["Enums"][PublicEnumNameOrOptions]
     : never
+    
+
     

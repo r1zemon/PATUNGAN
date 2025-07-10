@@ -31,7 +31,7 @@ export function SummaryDisplay({ summary, people }: SummaryDisplayProps) {
     return <p className="text-muted-foreground">Ringkasan tagihan akan ditampilkan di sini setelah dihitung.</p>;
   }
 
-  const { payerName, taxAmount, tipAmount, settlements, grandTotal } = summary;
+  const { payerName, taxAmount, tipAmount, settlements, grandTotal, personalShares } = summary;
 
   if (grandTotal === 0) {
      return (
@@ -96,9 +96,7 @@ export function SummaryDisplay({ summary, people }: SummaryDisplayProps) {
                 <TableRow>
                   <TableHead className="min-w-[120px]">Dari</TableHead>
                   <TableHead className="min-w-[120px]">Ke</TableHead>
-                  <TableHead>Jumlah</TableHead>
-                  <TableHead className="text-center">Status</TableHead>
-                  <TableHead className="text-right">Aksi</TableHead>
+                  <TableHead className="text-right">Jumlah</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -126,38 +124,75 @@ export function SummaryDisplay({ summary, people }: SummaryDisplayProps) {
                           {settlement.to}
                         </div>
                       </TableCell>
-                      <TableCell className="font-semibold text-primary">{formatCurrency(settlement.amount, "IDR")}</TableCell>
-                      <TableCell className="text-center">
-                        {settlement.status === 'paid' ? (
-                          <Badge variant="secondary" className="bg-green-100 text-green-800 border-green-200">
-                            <CheckCircle className="mr-1 h-3 w-3"/>Lunas
-                          </Badge>
-                        ) : (
-                           <Badge variant="outline" className="text-amber-700 border-amber-300">
-                            Belum Lunas
-                          </Badge>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {settlement.status === 'unpaid' && (
-                          <Button size="sm" onClick={() => toast({ title: "Fitur Dalam Pengembangan", description: "Pembayaran melalui Midtrans akan segera hadir." })}>
-                            <CreditCard className="mr-2 h-4 w-4"/>Bayar Sekarang
-                          </Button>
-                        )}
-                      </TableCell>
+                      <TableCell className="font-semibold text-primary text-right">{formatCurrency(settlement.amount, "IDR")}</TableCell>
                     </TableRow>
                   );
                 })}
               </TableBody>
             </Table>
           </CardContent>
-           <CardFooter className="flex-col items-start text-xs text-muted-foreground p-4 border-t">
-              <p className="flex items-center gap-1.5"><ShieldCheck className="h-3.5 w-3.5 text-primary"/> Bayar lewat Patungan untuk pencatatan otomatis & notifikasi.</p>
-              <p className="pl-5">Dikenakan biaya layanan 1% untuk setiap transaksi pembayaran.</p>
-          </CardFooter>
         </Card>
       )}
-       {settlements.length === 0 && grandTotal > 0 && summary.payerName && (
+
+      {personalShares && personalShares.length > 0 && (
+        <Card>
+          <CardHeader>
+             <CardTitle className="flex items-center"><Users className="mr-2 h-6 w-6 text-primary"/> Rincian per Orang</CardTitle>
+            <CardDescription>Klik nama untuk melihat detail pengeluaran masing-masing.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Accordion type="single" collapsible className="w-full">
+              {personalShares.map((share) => (
+                <AccordionItem value={share.personId} key={share.personId}>
+                  <AccordionTrigger>
+                    <div className="flex items-center justify-between w-full">
+                      <span className="font-medium">{share.personName}</span>
+                      <span className="font-semibold text-primary">{formatCurrency(share.totalShare)}</span>
+                    </div>
+                  </AccordionTrigger>
+                  <AccordionContent className="bg-muted/50 p-4 rounded-md">
+                     <div className="space-y-2">
+                        <h4 className="font-semibold text-sm mb-2">Item yang Dipesan:</h4>
+                        {share.items.length > 0 ? (
+                           <ul className="space-y-1 text-sm">
+                            {share.items.map((item, idx) => (
+                                <li key={idx} className="flex justify-between items-center">
+                                    <span>{item.itemName} (x{item.quantityConsumed})</span>
+                                    <span>{formatCurrency(item.totalItemCost)}</span>
+                                </li>
+                            ))}
+                            </ul>
+                        ) : (
+                            <p className="text-xs text-muted-foreground">Tidak ada item yang dialokasikan.</p>
+                        )}
+                        <Separator className="my-2"/>
+                        <div className="flex justify-between text-sm">
+                            <span className="text-muted-foreground">Subtotal Item</span>
+                            <span className="font-medium">{formatCurrency(share.subTotalFromItems)}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                            <span className="text-muted-foreground">Bagian Pajak</span>
+                            <span>{formatCurrency(share.taxShare)}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                            <span className="text-muted-foreground">Bagian Tip</span>
+                            <span>{formatCurrency(share.tipShare)}</span>
+                        </div>
+                         <Separator className="my-2"/>
+                        <div className="flex justify-between text-sm font-semibold">
+                            <span>Total Bagian</span>
+                            <span>{formatCurrency(share.totalShare)}</span>
+                        </div>
+                     </div>
+                  </AccordionContent>
+                </AccordionItem>
+              ))}
+            </Accordion>
+          </CardContent>
+        </Card>
+      )}
+
+       {settlements.length === 0 && grandTotal > 0 && summary.payerName && !personalShares && (
         <Card className="shadow-lg">
             <CardHeader>
                 <CardTitle className="flex items-center"><ArrowRight className="mr-2 h-6 w-6 text-primary"/> Penyelesaian Pembayaran</CardTitle>

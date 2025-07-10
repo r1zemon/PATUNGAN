@@ -3,7 +3,7 @@
 
 import { scanReceipt, ScanReceiptOutput, ReceiptItem as AiReceiptItem } from "@/ai/flows/scan-receipt";
 import { summarizeBill, SummarizeBillInput } from "@/ai/flows/summarize-bill";
-import type { SplitItem, Person, RawBillSummary, TaxTipSplitStrategy, ScannedItem, BillHistoryEntry, BillCategory, DashboardData, MonthlyExpenseByCategory, ExpenseChartDataPoint, RecentBillDisplayItem, ScheduledBillDisplayItem, FetchedBillDetails, Settlement, FetchedBillDetailsWithItems, PersonalShareDetail, SettlementStatus } from "./types";
+import type { SplitItem, Person, RawBillSummary, TaxTipSplitStrategy, ScannedItem, BillHistoryEntry, BillCategory, DashboardData, MonthlyExpenseByCategory, ExpenseChartDataPoint, RecentBillDisplayItem, ScheduledBillDisplayItem, FetchedBillDetails, Settlement, FetchedBillDetailsWithItems, PersonalShareDetail, SettlementStatus, PersonalItemDetail } from "./types";
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
 import type { PostgrestSingleResponse, User as SupabaseUser } from "@supabase/supabase-js";
@@ -441,8 +441,13 @@ export async function handleScanReceiptAction(
           quantity: dbItem.quantity,
         }));
       }
+      
+      const taxAmountFromAI = aiResult.taxAmount || 0;
+      if (taxAmountFromAI > 0) {
+         await supabase.from('bills').update({ tax_amount: taxAmountFromAI }).eq('id', billId);
+      }
 
-      return { success: true, data: { items: insertedDbItems, taxAmount: aiResult.taxAmount || 0 } };
+      return { success: true, data: { items: insertedDbItems, taxAmount: taxAmountFromAI } };
     } else {
       return { success: false, error: "Menerima data tak terduga dari pemindai." };
     }
@@ -619,12 +624,16 @@ export async function handleSummarizeBillAction(
           bill_id: billId,
           from_participant_id: p.id,
           to_participant_id: payerParticipantId,
-          amount: rawSummary[p.name],
+          amount: rawSummary[p.name] ?? 0,
           status: 'unpaid' as const,
       }));
 
     if (settlementInserts.length > 0) {
-      await supabase.from('settlements').insert(settlementInserts);
+      const { error: insertError } = await supabase.from('settlements').insert(settlementInserts);
+       if (insertError) {
+        console.error("Error inserting settlements:", insertError);
+        throw new Error("Gagal menyimpan data penyelesaian pembayaran: " + insertError.message);
+      }
     }
 
     revalidatePath('/', 'page');
@@ -971,7 +980,6 @@ export async function getBillDetailsAction(billId: string): Promise<{ success: b
 
     const payerName = participants.find(p => p.id === bill.payer_participant_id)?.name || "Belum ditentukan";
     
-    // Build summary data if bill is summarized (grand_total is not null)
     let summaryData: FetchedBillDetails['summaryData'] | null = null;
     const isSummarized = bill.grand_total !== null;
 
@@ -987,6 +995,48 @@ export async function getBillDetailsAction(billId: string): Promise<{ success: b
             amount: s.amount, status: s.status as SettlementStatus,
         }));
         
+        const totalTaxTip = (bill.tax_amount || 0) + (bill.tip_amount || 0);
+        
+        const personalShares: PersonalShareDetail[] = participantsRaw.map(p => {
+          let subTotalFromItems = 0;
+          const personalItems: PersonalItemDetail[] = [];
+          
+          items.forEach(item => {
+            const assignment = item.assignedTo.find(a => a.personId === p.id);
+            if (assignment && assignment.count > 0) {
+              const totalItemCost = assignment.count * item.unitPrice;
+              subTotalFromItems += totalItemCost;
+              personalItems.push({
+                itemName: item.name,
+                quantityConsumed: assignment.count,
+                unitPrice: item.unitPrice,
+                totalItemCost,
+              });
+            }
+          });
+
+          let taxShare = 0;
+          let tipShare = 0;
+
+          if (bill.tax_tip_split_strategy === 'SPLIT_EQUALLY') {
+              taxShare = (bill.tax_amount || 0) / participants.length;
+              tipShare = (bill.tip_amount || 0) / participants.length;
+          } else if (bill.tax_tip_split_strategy === 'PAYER_PAYS_ALL' && p.id === bill.payer_participant_id) {
+              taxShare = bill.tax_amount || 0;
+              tipShare = bill.tip_amount || 0;
+          }
+
+          return {
+            personId: p.id,
+            personName: p.name,
+            items: personalItems,
+            subTotalFromItems,
+            taxShare,
+            tipShare,
+            totalShare: p.total_share_amount || 0,
+          }
+        });
+
         summaryData = {
             payerId: bill.payer_participant_id,
             payerName: payerName,
@@ -995,6 +1045,7 @@ export async function getBillDetailsAction(billId: string): Promise<{ success: b
             taxTipSplitStrategy: bill.tax_tip_split_strategy as TaxTipSplitStrategy,
             settlements: settlements,
             grandTotal: bill.grand_total || 0,
+            personalShares: personalShares,
         };
     } else {
         // Bill is still being edited
@@ -1003,6 +1054,7 @@ export async function getBillDetailsAction(billId: string): Promise<{ success: b
             taxAmount: bill.tax_amount || 0, tipAmount: bill.tip_amount || 0,
             taxTipSplitStrategy: bill.tax_tip_split_strategy as TaxTipSplitStrategy,
             settlements: [], grandTotal: 0,
+            personalShares: [],
         };
     }
 

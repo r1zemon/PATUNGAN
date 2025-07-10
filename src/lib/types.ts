@@ -66,6 +66,7 @@ export interface DetailedBillSummaryData {
   taxTipSplitStrategy: TaxTipSplitStrategy;
   settlements: Settlement[];
   grandTotal: number;
+  personalShares: PersonalShareDetail[];
 }
 
 export interface BillCategory { // New type

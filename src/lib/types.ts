@@ -1,4 +1,5 @@
 
+
 export interface Person {
   id: string; // This is the bill_participants.id
   name: string;

@@ -405,7 +405,7 @@ export async function removeParticipantAction(participantId: string): Promise<{ 
 export async function handleScanReceiptAction(
   billId: string,
   receiptDataUri: string
-): Promise<{ success: boolean; data?: { items: ScannedItem[] }; error?: string }> {
+): Promise<{ success: boolean; data?: { items: ScannedItem[], taxAmount: number }; error?: string }> {
   const supabase = createSupabaseServerClient();
   if (!billId) return { success: false, error: "Bill ID tidak disediakan." };
   if (!receiptDataUri) return { success: false, error: "Tidak ada data gambar." };
@@ -421,30 +421,28 @@ export async function handleScanReceiptAction(
         quantity: (typeof item.quantity === 'number' && item.quantity > 0) ? item.quantity : 1,
       }));
 
-      if (itemsToInsert.length === 0) {
-        return { success: true, data: { items: [] } };
+      let insertedDbItems: ScannedItem[] = [];
+      if (itemsToInsert.length > 0) {
+        const { data, error: insertError } = await supabase
+          .from('bill_items')
+          .insert(itemsToInsert)
+          .select('id, name, unit_price, quantity');
+
+        if (insertError) {
+          return { success: false, error: "Gagal menyimpan item ke database: " + insertError.message };
+        }
+        if (!data) {
+          return { success: false, error: "Gagal mendapatkan data item setelah disimpan." };
+        }
+        insertedDbItems = data.map(dbItem => ({
+          id: dbItem.id,
+          name: dbItem.name,
+          unitPrice: dbItem.unit_price,
+          quantity: dbItem.quantity,
+        }));
       }
 
-      const { data: insertedDbItems, error: insertError } = await supabase
-        .from('bill_items')
-        .insert(itemsToInsert)
-        .select('id, name, unit_price, quantity');
-
-      if (insertError) {
-        return { success: false, error: "Gagal menyimpan item ke database: " + insertError.message };
-      }
-      if (!insertedDbItems) {
-        return { success: false, error: "Gagal mendapatkan data item setelah disimpan." };
-      }
-
-      const appItems: ScannedItem[] = insertedDbItems.map(dbItem => ({
-        id: dbItem.id,
-        name: dbItem.name,
-        unitPrice: dbItem.unit_price,
-        quantity: dbItem.quantity,
-      }));
-
-      return { success: true, data: { items: appItems } };
+      return { success: true, data: { items: insertedDbItems, taxAmount: aiResult.taxAmount || 0 } };
     } else {
       return { success: false, error: "Menerima data tak terduga dari pemindai." };
     }
@@ -635,6 +633,37 @@ export async function handleSummarizeBillAction(
   } catch (error) {
     const message = error instanceof Error ? error.message : "Kesalahan server tak terduga.";
     return { success: false, error: `Gagal meringkas tagihan: ${message}` };
+  }
+}
+
+export async function markSettlementsAsPaidAction(billId: string, settlements: Settlement[]): Promise<{ success: boolean, error?: string }> {
+  const supabase = createSupabaseServerClient();
+  if (!billId || settlements.length === 0) {
+    return { success: false, error: "Bill ID dan data penyelesaian diperlukan." };
+  }
+  try {
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+        return { success: false, error: "Pengguna tidak terautentikasi." };
+    }
+
+    const updates = settlements.map(s =>
+      supabase
+        .from('settlements')
+        .update({ status: 'paid', service_fee: s.amount * 0.01 })
+        .eq('bill_id', billId)
+        .eq('from_participant_id', s.fromId)
+        .eq('to_participant_id', s.toId)
+    );
+
+    await Promise.all(updates);
+    
+    revalidatePath('/', 'page');
+    revalidatePath('/app/history', 'page');
+    return { success: true };
+  } catch (e: any) {
+    console.error("Error marking settlements as paid:", e);
+    return { success: false, error: e.message || "Gagal menandai lunas." };
   }
 }
 

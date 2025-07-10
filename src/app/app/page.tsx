@@ -18,6 +18,7 @@ import {
   updateBillItemInDbAction, 
   deleteBillItemFromDbAction,
   getBillDetailsAction,
+  markSettlementsAsPaidAction,
 } from "@/lib/actions";
 import { supabase } from "@/lib/supabaseClient";
 import { ReceiptUploader } from "@/components/receipt-uploader";
@@ -32,7 +33,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useToast } from "@/hooks/use-toast";
 import { Separator } from "@/components/ui/separator";
-import { UserCheck, Loader2, UserPlus, ArrowRight, Trash2, Users, ScanLine, PlusCircle, Edit2, ListChecks, FilePlus, FileText, CalendarClock, FolderPlus, Tag, Percent, Landmark, Power, User, Clock } from "lucide-react"; 
+import { UserCheck, Loader2, UserPlus, ArrowRight, Trash2, Users, ScanLine, PlusCircle, Edit2, ListChecks, FilePlus, FileText, CalendarClock, FolderPlus, Tag, Percent, Landmark, Power, User, Clock, QrCode } from "lucide-react"; 
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { format } from 'date-fns';
 import { id as IndonesianLocale } from 'date-fns/locale';
@@ -71,6 +72,7 @@ export default function SplitBillAppPage() {
   // UI and Control State
   const [isCalculating, setIsCalculating] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
+  const [isPaying, setIsPaying] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [currentStep, setCurrentStep] = useState(0); // 0: Start, 1: Editing, 2: Summary
   const [personNameInput, setPersonNameInput] = useState<string>("");
@@ -366,6 +368,13 @@ export default function SplitBillAppPage() {
       }
       const newSplitItems: SplitItem[] = result.data.items.map(item => ({...item, assignedTo: []}));
       setSplitItems(prev => [...prev, ...newSplitItems]);
+      
+      // Auto-update tax from scan
+      if (result.data.taxAmount > 0) {
+        handleBillDetailsChange("taxAmount", result.data.taxAmount);
+        toast({ title: `Pajak Terdeteksi: ${result.data.taxAmount}`, description: "Jumlah pajak telah diisi otomatis." });
+      }
+
     } else {
       setError(result.error || "Gagal memindai struk.");
       toast({ variant: "destructive", title: "Pemindaian Gagal", description: result.error });
@@ -456,6 +465,23 @@ export default function SplitBillAppPage() {
       toast({ variant: "destructive", title: "Ringkasan Gagal", description: result.error });
     }
     setIsCalculating(false);
+  };
+
+  const handleMarkAsPaid = async () => {
+    if (!currentBillId || !detailedBillSummary) {
+      toast({ variant: "destructive", title: "Gagal", description: "Tidak ada tagihan untuk dibayar." });
+      return;
+    }
+    setIsPaying(true);
+    const result = await markSettlementsAsPaidAction(currentBillId, detailedBillSummary.settlements);
+    if (result.success) {
+      toast({ title: "Pembayaran Berhasil", description: "Semua tagihan telah ditandai lunas." });
+      // Reload the session to get the updated 'paid' status
+      loadBillSession(currentBillId);
+    } else {
+      toast({ variant: "destructive", title: "Pembayaran Gagal", description: result.error });
+    }
+    setIsPaying(false);
   };
   
 
@@ -729,25 +755,6 @@ export default function SplitBillAppPage() {
                         </SelectContent>
                       </Select>
                     </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="taxAmount">Jumlah Pajak (Rp)</Label>
-                      <div className="relative">
-                         <Landmark className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                        <Input 
-                          id="taxAmount" 
-                          type="number" 
-                          placeholder="Contoh: 15000"
-                          value={taxInputDisplayValue}
-                          onFocus={() => { if (billDetails.taxAmount === 0) setTaxInputDisplayValue(""); }}
-                          onChange={(e) => setTaxInputDisplayValue(e.target.value)}
-                          onBlur={(e) => handleBillDetailsChange("taxAmount", parseFloat(e.target.value) || 0)}
-                          className="pl-10"
-                        />
-                      </div>
-                    </div>
                     <div className="space-y-2">
                       <Label htmlFor="tipAmount">Jumlah Tip (Rp)</Label>
                        <div className="relative">
@@ -829,6 +836,24 @@ export default function SplitBillAppPage() {
               </CardHeader>
               <CardContent className="p-6">
                 <SummaryDisplay summary={detailedBillSummary} people={people} />
+                 {detailedBillSummary.settlements.some(s => s.status === 'unpaid') && (
+                  <div className="mt-6 border-t pt-6 text-center">
+                    <h3 className="text-lg font-semibold flex items-center justify-center mb-4"><QrCode className="mr-2 h-6 w-6"/>Selesaikan Pembayaran</h3>
+                    <div className="flex justify-center mb-4">
+                        <img src="https://placehold.co/250x250.png" alt="QR Code" width="250" height="250" data-ai-hint="qr code" />
+                    </div>
+                    <Alert className="max-w-md mx-auto text-left">
+                      <AlertTitle>Perhatian!</AlertTitle>
+                      <AlertDescription>
+                        Akan dikenakan biaya layanan sebesar 1% untuk setiap transaksi yang diselesaikan melalui metode pembayaran ini.
+                      </AlertDescription>
+                    </Alert>
+                    <Button onClick={handleMarkAsPaid} disabled={isPaying} size="lg" className="mt-4">
+                      {isPaying ? <Loader2 className="animate-spin mr-2"/> : null}
+                      {isPaying ? "Memproses..." : "Konfirmasi Semua Pembayaran Lunas"}
+                    </Button>
+                  </div>
+                )}
               </CardContent>
             </Card>
           )}

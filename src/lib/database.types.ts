@@ -81,7 +81,6 @@ export type Database = {
           id: string
           name: string
           profile_id: string | null
-          status: "joined" | "invited"
           total_share_amount: number | null
         }
         Insert: {
@@ -90,7 +89,6 @@ export type Database = {
           id?: string
           name: string
           profile_id?: string | null
-          status?: "joined" | "invited"
           total_share_amount?: number | null
         }
         Update: {
@@ -99,7 +97,6 @@ export type Database = {
           id?: string
           name?: string
           profile_id?: string | null
-          status?: "joined" | "invited"
           total_share_amount?: number | null
         }
         Relationships: [

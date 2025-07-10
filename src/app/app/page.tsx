@@ -309,10 +309,8 @@ export default function SplitBillAppPage() {
     if (people.length > 0 && !detailedBillSummary) {
       const payerExists = people.some(p => p.id === billDetails.payerId);
       if (!billDetails.payerId || !payerExists) {
-        const firstJoinedPerson = people.find(p => p.status === 'joined');
-        if (firstJoinedPerson) {
-          // ONLY update local state. The DB will be updated upon explicit user action.
-          setBillDetails(prevDetails => ({ ...prevDetails, payerId: firstJoinedPerson.id }));
+        if (people[0]) {
+          setBillDetails(prevDetails => ({ ...prevDetails, payerId: people[0].id }));
         }
       }
     }
@@ -437,8 +435,7 @@ export default function SplitBillAppPage() {
       return;
     }
     
-    const joinedPeople = people.filter(p => p.status === 'joined');
-    if (joinedPeople.length < 1) { // Can be 1 person now
+    if (people.length < 1) {
       toast({ variant: "destructive", title: "Partisipan Kurang", description: "Perlu minimal satu orang." });
       return;
     }
@@ -845,5 +842,3 @@ export default function SplitBillAppPage() {
     </div>
   );
 }
-
-    

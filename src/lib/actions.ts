@@ -342,26 +342,21 @@ export async function addParticipantAction(billId: string, personName: string, p
     return { success: false, error: "ID Tagihan dan nama orang diperlukan." };
   }
   try {
-    // A registered user is instantly 'joined'. A guest is instantly 'joined'.
-    // Only an invited user who is not the creator starts as 'invited'.
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
         return { success: false, error: "Pengguna tidak terautentikasi." };
     }
 
-    const status: 'joined' | 'invited' = 'joined'; // Simplified: always 'joined'
-    
     const insertData: Database['public']['Tables']['bill_participants']['Insert'] = {
       bill_id: billId,
       name: personName.trim(),
       profile_id: profileId || null,
-      status: status,
     };
 
     const { data, error } = await supabase
       .from('bill_participants')
       .insert([insertData])
-      .select('id, name, profile_id, status, created_at')
+      .select('id, name, profile_id, created_at')
       .single();
 
     if (error) {
@@ -378,7 +373,6 @@ export async function addParticipantAction(billId: string, personName: string, p
       id: data.id, 
       name: data.name,
       profile_id: data.profile_id,
-      status: data.status as 'joined' | 'invited',
     };
 
     return { success: true, person };
@@ -571,12 +565,11 @@ export async function handleSummarizeBillAction(
     return { success: false, error: "Bill ID dan Payer ID diperlukan." };
   }
 
-  const joinedPeople = people.filter(p => p.status === 'joined');
-  if (joinedPeople.length < 1) {
+  if (people.length < 1) {
     return { success: false, error: "Minimal satu partisipan diperlukan." };
   }
   
-  const payer = joinedPeople.find(p => p.id === payerParticipantId);
+  const payer = people.find(p => p.id === payerParticipantId);
   if (!payer) {
     return { success: false, error: "Data pembayar tidak valid." };
   }
@@ -586,7 +579,7 @@ export async function handleSummarizeBillAction(
     unitPrice: item.unitPrice,
     quantity: item.quantity,
     assignedTo: item.assignedTo.map(assignment => {
-      const participant = joinedPeople.find(p => p.id === assignment.personId);
+      const participant = people.find(p => p.id === assignment.personId);
       return {
         personName: participant?.name || "Unknown Person",
         count: assignment.count,
@@ -596,7 +589,7 @@ export async function handleSummarizeBillAction(
 
   const summarizeBillInput: SummarizeBillInput = {
     items: itemsForAI,
-    people: joinedPeople.map(p => p.name),
+    people: people.map(p => p.name),
     payerName: payer.name,
     taxAmount, tipAmount, taxTipSplitStrategy,
   };
@@ -605,7 +598,7 @@ export async function handleSummarizeBillAction(
     const rawSummary: RawBillSummary = await summarizeBill(summarizeBillInput);
 
     let calculatedGrandTotal = 0;
-    const participantUpdatePromises = joinedPeople.map(async (person) => {
+    const participantUpdatePromises = people.map(async (person) => {
       const share = rawSummary[person.name] ?? 0;
       calculatedGrandTotal += share;
       return supabase.from('bill_participants').update({ total_share_amount: share }).eq('id', person.id);
@@ -622,7 +615,7 @@ export async function handleSummarizeBillAction(
 
     await supabase.from('settlements').delete().eq('bill_id', billId);
 
-    const settlementInserts = joinedPeople
+    const settlementInserts = people
       .filter(p => p.id !== payerParticipantId && (rawSummary[p.name] ?? 0) > 0)
       .map(p => ({
           bill_id: billId,
@@ -813,8 +806,7 @@ export async function getBillsHistoryAction(): Promise<{ success: boolean; data?
       const { count: participantCount } = await supabase
         .from('bill_participants')
         .select('*', { count: 'exact', head: true })
-        .eq('bill_id', bill.id)
-        .eq('status', 'joined');
+        .eq('bill_id', bill.id);
       
       historyEntries.push({
         id: bill.id,
@@ -922,7 +914,7 @@ export async function getBillDetailsAction(billId: string): Promise<{ success: b
       .single();
     if (billError) return { success: false, error: "Gagal mengambil detail tagihan: " + billError.message };
 
-    const { data: participantsRaw, error: pError } = await supabase.from('bill_participants').select('id, name, profile_id, status, total_share_amount, profiles ( avatar_url )').eq('bill_id', billId);
+    const { data: participantsRaw, error: pError } = await supabase.from('bill_participants').select('id, name, profile_id, total_share_amount, profiles ( avatar_url )').eq('bill_id', billId);
     if (pError) return { success: false, error: "Gagal mengambil partisipan: " + pError.message };
 
     const { data: itemsRaw, error: iError } = await supabase.from('bill_items').select('id, name, unit_price, quantity').eq('bill_id', billId);
@@ -936,7 +928,6 @@ export async function getBillDetailsAction(billId: string): Promise<{ success: b
         name: p.name,
         profile_id: p.profile_id,
         avatar_url: p.profiles?.avatar_url || null,
-        status: p.status as 'joined' | 'invited'
     }));
     
     const items: SplitItem[] = itemsRaw.map(item => ({
@@ -991,5 +982,3 @@ export async function getBillDetailsAction(billId: string): Promise<{ success: b
     return { success: false, error: e.message || "Kesalahan server saat mengambil detail." };
   }
 }
-
-    

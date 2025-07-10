@@ -4,7 +4,6 @@ export interface Person {
   name: string;
   profile_id?: string | null; // This is the user/profile id, if they are a registered user
   avatar_url?: string | null;
-  status: 'joined' | 'invited'; // Status of the participant
 }
 
 export interface ScannedItem {
@@ -143,5 +142,3 @@ export interface FetchedBillDetails {
 export interface FetchedBillDetailsWithItems extends FetchedBillDetails {
   items: SplitItem[];
 }
-
-    

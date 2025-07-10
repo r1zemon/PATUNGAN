@@ -468,16 +468,16 @@ export default function SplitBillAppPage() {
   };
 
   const handleMarkAsPaid = async () => {
-    if (!currentBillId || !detailedBillSummary) {
+    if (!currentBillId) {
       toast({ variant: "destructive", title: "Gagal", description: "Tidak ada tagihan untuk dibayar." });
       return;
     }
     setIsPaying(true);
-    const result = await markSettlementsAsPaidAction(currentBillId, detailedBillSummary.settlements);
+    const result = await markSettlementsAsPaidAction(currentBillId);
     if (result.success) {
       toast({ title: "Pembayaran Berhasil", description: "Semua tagihan telah ditandai lunas." });
-      // Reload the session to get the updated 'paid' status
-      loadBillSession(currentBillId);
+      // Redirect to home page
+      router.push('/');
     } else {
       toast({ variant: "destructive", title: "Pembayaran Gagal", description: result.error });
     }

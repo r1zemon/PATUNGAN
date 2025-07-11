@@ -1,5 +1,4 @@
 
-
 "use server";
 
 import { scanReceipt, ScanReceiptOutput, ReceiptItem as AiReceiptItem } from "@/ai/flows/scan-receipt";

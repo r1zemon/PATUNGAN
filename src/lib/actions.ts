@@ -312,16 +312,17 @@ export async function getUserCategoriesAction(): Promise<{ success: boolean; cat
 export async function createBillAction(
   billName: string,
   categoryId: string | null,
-  scheduledAt?: string | null
-): Promise<{ success: boolean; billId?: string; error?: string }> {
+  scheduledAt: string | null | undefined,
+  creatorName: string
+): Promise<{ success: boolean; billId?: string; initialData?: { name: string; participants: Person[] }; error?: string }> {
+  const supabase = createSupabaseServerClient();
+  const { data: { user } , error: authError } = await supabase.auth.getUser();
+
+  if (authError || !user) {
+    return { success: false, error: "Pengguna tidak terautentikasi." };
+  }
+
   try {
-    const supabase = createSupabaseServerClient();
-    const { data: { user } , error: authError } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-       return { success: false, error: "Pengguna tidak terautentikasi." };
-    }
-
     const billInsertData: Database['public']['Tables']['bills']['Insert'] = {
       name: billName || "Tagihan Baru",
       user_id: user.id,
@@ -332,24 +333,26 @@ export async function createBillAction(
     const { data: billData, error: billInsertError } = await supabase
       .from('bills')
       .insert([billInsertData])
-      .select('id')
+      .select('id, name')
       .single();
 
-    if (billInsertError) {
-      return { success: false, error: "Gagal membuat tagihan: " + billInsertError.message };
-    }
-    if (!billData || !billData.id) {
-      return { success: false, error: "Gagal mendapatkan ID tagihan." };
-    }
+    if (billInsertError) throw new Error("Gagal membuat tagihan: " + billInsertError.message);
+    if (!billData || !billData.id) throw new Error("Gagal mendapatkan ID tagihan setelah pembuatan.");
 
-    // Automatically add the creator as a participant
-    await addParticipantAction(billData.id, user.user_metadata.full_name || user.email || 'Creator', user.id);
+    const { data: participantData, error: participantError } = await addParticipantAction(billData.id, creatorName, user.id);
+    if (participantError || !participantData || !participantData.person) throw new Error(participantError || "Gagal menambahkan kreator sebagai partisipan.");
+
+    const initialData = {
+      name: billData.name || "Tagihan Baru",
+      participants: [participantData.person],
+    };
     
     if (scheduledAt) {
       revalidatePath('/', 'page');
       revalidatePath('/app/history', 'page');
     }
-    return { success: true, billId: billData.id };
+
+    return { success: true, billId: billData.id, initialData };
   } catch (e: any) {
     return { success: false, error: e.message || "Kesalahan server saat membuat tagihan." };
   }
@@ -424,7 +427,7 @@ export async function removeParticipantAction(participantId: string): Promise<{ 
 export async function handleScanReceiptAction(
   billId: string,
   receiptDataUri: string
-): Promise<{ success: boolean; data?: { items: ScannedItem[], taxAmount: number }; error?: string }> {
+): Promise<{ success: boolean; data?: { items: ScannedItem[], taxAmount: number }; error?: string } | undefined> {
   const supabase = createSupabaseServerClient();
   if (!billId) return { success: false, error: "Bill ID tidak disediakan." };
   if (!receiptDataUri) return { success: false, error: "Tidak ada data gambar." };
@@ -472,6 +475,7 @@ export async function handleScanReceiptAction(
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : "Kesalahan server tak terduga.";
+    console.error("Error in handleScanReceiptAction:", error);
     return { success: false, error: `Pemindaian gagal: ${message}` };
   }
 }
@@ -645,6 +649,7 @@ export async function handleSummarizeBillAction(
           to_participant_id: payerParticipantId,
           amount: rawSummary[p.name] ?? 0,
           status: 'unpaid' as const,
+          service_fee: (rawSummary[p.name] ?? 0) * 0.01, // Calculate 1% service fee
       }));
 
     if (settlementInserts.length > 0) {
@@ -675,23 +680,7 @@ export async function markSettlementsAsPaidAction(billId: string): Promise<{ suc
     if (!user) {
       return { success: false, error: "Pengguna tidak terautentikasi." };
     }
-
-    // Ambil semua settlement untuk menghitung total fee
-    const { data: settlements, error: fetchError } = await supabase
-      .from('settlements')
-      .select('id, amount')
-      .eq('bill_id', billId)
-      .eq('status', 'unpaid');
-
-    if (fetchError) {
-      return { success: false, error: "Gagal mengambil data settlement: " + fetchError.message };
-    }
-
-    if (!settlements || settlements.length === 0) {
-      return { success: true }; // No unpaid settlements to mark
-    }
     
-    // Efficiently update all unpaid settlements for this bill in one go
     const { error: updateError } = await supabase
       .from('settlements')
       .update({ status: 'paid' })
@@ -704,7 +693,7 @@ export async function markSettlementsAsPaidAction(billId: string): Promise<{ suc
 
     revalidatePath('/', 'page');
     revalidatePath('/app/history', 'page');
-    revalidatePath('/app', 'page'); // Revalidate the main app page as well
+    revalidatePath('/app', 'page');
     return { success: true };
   } catch (e: any) {
     console.error("Error marking settlements as paid:", e);

@@ -87,7 +87,6 @@ export default function SplitBillAppPage() {
   const [isLoadingCategories, setIsLoadingCategories] = useState(true);
   const [showNewCategoryInput, setShowNewCategoryInput] = useState(false);
   
-  const [taxInputDisplayValue, setTaxInputDisplayValue] = useState<string>(billDetails.taxAmount.toString());
   const [tipInputDisplayValue, setTipInputDisplayValue] = useState<string>(billDetails.tipAmount.toString());
 
   // ===== DATA FETCHING & SESSION MANAGEMENT =====
@@ -266,15 +265,22 @@ export default function SplitBillAppPage() {
         scheduleDateISO = scheduledDate.toISOString();
     }
     
-    const result = await createBillAction(billNameInput.trim(), finalCategoryId, scheduleDateISO);
+    const result = await createBillAction(billNameInput.trim(), finalCategoryId, scheduleDateISO, authUser.user_metadata.full_name || authUser.email || 'Creator');
     
-    if (result.success && result.billId) {
+    if (result.success && result.billId && result.initialData) {
         if (isScheduling) {
             toast({ title: "Tagihan Dijadwalkan", description: `Tagihan "${billNameInput.trim()}" berhasil dijadwalkan.`});
             resetAppToStart(false);
         } else {
-            toast({ title: "Sesi Tagihan Dimulai", description: `Tagihan "${billNameInput.trim()}" siap untuk diisi.`});
-            router.push(`/app?billId=${result.billId}`);
+            // Optimistic UI update
+            toast({ title: "Sesi Tagihan Dimulai", description: `Tagihan "${result.initialData.name}" siap untuk diisi.`});
+            setCurrentBillId(result.billId);
+            setCurrentBillName(result.initialData.name);
+            setPeople(result.initialData.participants);
+            setSplitItems([]);
+            setBillDetails(prev => ({...prev, payerId: result.initialData.participants[0]?.id || null}));
+            setCurrentStep(1);
+            router.push(`/app?billId=${result.billId}`, { scroll: false });
         }
     } else {
         setError(result.error || "Gagal memulai sesi tagihan baru.");
@@ -318,7 +324,6 @@ export default function SplitBillAppPage() {
     }
   }, [people, detailedBillSummary, billDetails.payerId]);
 
-  useEffect(() => { setTaxInputDisplayValue(billDetails.taxAmount.toString()); }, [billDetails.taxAmount]);
   useEffect(() => { setTipInputDisplayValue(billDetails.tipAmount.toString()); }, [billDetails.tipAmount]);
 
   const itemsForSummary = useMemo(() => {
@@ -361,6 +366,13 @@ export default function SplitBillAppPage() {
     setError(null);
     setDetailedBillSummary(null); 
     const result = await handleScanReceiptAction(currentBillId, receiptDataUri);
+
+    if (!result) { // Added guard
+      toast({ variant: "destructive", title: "Pemindaian Gagal", description: "Terjadi kesalahan tak terduga pada server." });
+      setIsScanning(false);
+      return;
+    }
+
     if (result.success && result.data?.items) {
       toast({ title: "Struk Dipindai", description: `${result.data.items.length || 0} baris item ditambahkan.` });
        if (result.data.items.length === 0) {
@@ -372,7 +384,7 @@ export default function SplitBillAppPage() {
       // Auto-update tax from scan
       if (result.data.taxAmount > 0) {
         handleBillDetailsChange("taxAmount", result.data.taxAmount);
-        toast({ title: `Pajak Terdeteksi: ${result.data.taxAmount}`, description: "Jumlah pajak telah diisi otomatis." });
+        toast({ title: `Pajak Terdeteksi: ${formatCurrency(result.data.taxAmount, 'IDR')}`, description: "Jumlah pajak telah diisi otomatis." });
       }
 
     } else {
@@ -840,7 +852,7 @@ export default function SplitBillAppPage() {
                   <div className="mt-6 border-t pt-6 text-center">
                     <h3 className="text-lg font-semibold flex items-center justify-center mb-4"><QrCode className="mr-2 h-6 w-6"/>Selesaikan Pembayaran</h3>
                     <div className="flex justify-center mb-4">
-                        <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/d/d0/QR_code_for_mobile_English_Wikipedia.svg/250px-QR_code_for_mobile_English_Wikipedia.svg.png" alt="QR Code" width="250" height="250" data-ai-hint="qr code" />
+                        <img src="https://placehold.co/250x250.png" alt="QR Code" width="250" height="250" data-ai-hint="qr code" />
                     </div>
                     <Alert className="max-w-md mx-auto text-left">
                       <AlertTitle>Perhatian!</AlertTitle>

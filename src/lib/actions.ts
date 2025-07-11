@@ -618,7 +618,7 @@ export async function handleSummarizeBillAction(
   };
 
   try {
-    const rawSummary: RawBillSummary = await summarize(summarizeBillInput);
+    const rawSummary: RawBillSummary = await summarizeBill(summarizeBillInput);
 
     let calculatedGrandTotal = 0;
     const participantUpdatePromises = people.map(async (person) => {

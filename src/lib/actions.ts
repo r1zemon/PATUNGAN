@@ -314,7 +314,7 @@ export async function createBillAction(
   categoryId: string | null,
   scheduledAt: string | null | undefined,
   creatorName: string
-): Promise<{ success: boolean; billId?: string; initialData?: { name: string; participants: Person[] }; error?: string }> {
+): Promise<{ success: boolean; billId?: string; error?: string }> {
   const supabase = createSupabaseServerClient();
   const { data: { user } , error: authError } = await supabase.auth.getUser();
 
@@ -336,23 +336,29 @@ export async function createBillAction(
       .select('id, name')
       .single();
 
-    if (billInsertError) throw new Error("Gagal membuat tagihan: " + billInsertError.message);
-    if (!billData || !billData.id) throw new Error("Gagal mendapatkan ID tagihan setelah pembuatan.");
+    if (billInsertError) {
+        throw new Error("Gagal membuat tagihan: " + billInsertError.message);
+    }
+    if (!billData || !billData.id) {
+        throw new Error("Gagal mendapatkan ID tagihan setelah pembuatan.");
+    }
 
-    const { data: participantData, error: participantError } = await addParticipantAction(billData.id, creatorName, user.id);
-    if (participantError || !participantData || !participantData.person) throw new Error(participantError || "Gagal menambahkan kreator sebagai partisipan.");
+    const participantResult = await addParticipantAction(billData.id, creatorName, user.id);
+    if (!participantResult.success) {
+      // Rollback or notify about failed participant creation
+      console.error("Failed to add creator as participant:", participantResult.error);
+      // Optional: Delete the created bill to avoid orphaned bills
+      // await supabase.from('bills').delete().eq('id', billData.id);
+      return { success: false, error: `Gagal menambahkan kreator sebagai partisipan: ${participantResult.error}` };
+    }
 
-    const initialData = {
-      name: billData.name || "Tagihan Baru",
-      participants: [participantData.person],
-    };
-    
     if (scheduledAt) {
       revalidatePath('/', 'page');
       revalidatePath('/app/history', 'page');
     }
-
-    return { success: true, billId: billData.id, initialData };
+    
+    // We only need to return the billId, the frontend will redirect.
+    return { success: true, billId: billData.id };
   } catch (e: any) {
     return { success: false, error: e.message || "Kesalahan server saat membuat tagihan." };
   }
@@ -427,7 +433,7 @@ export async function removeParticipantAction(participantId: string): Promise<{ 
 export async function handleScanReceiptAction(
   billId: string,
   receiptDataUri: string
-): Promise<{ success: boolean; data?: { items: ScannedItem[], taxAmount: number }; error?: string } | undefined> {
+): Promise<{ success: boolean; data?: { items: ScannedItem[], taxAmount: number }; error?: string }> {
   const supabase = createSupabaseServerClient();
   if (!billId) return { success: false, error: "Bill ID tidak disediakan." };
   if (!receiptDataUri) return { success: false, error: "Tidak ada data gambar." };

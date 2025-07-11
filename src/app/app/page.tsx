@@ -265,21 +265,20 @@ export default function SplitBillAppPage() {
         scheduleDateISO = scheduledDate.toISOString();
     }
     
-    const result = await createBillAction(billNameInput.trim(), finalCategoryId, scheduleDateISO, authUser.user_metadata.full_name || authUser.email || 'Creator');
+    const result = await createBillAction(
+        billNameInput.trim(), 
+        finalCategoryId, 
+        scheduleDateISO, 
+        authUser.user_metadata.full_name || authUser.email || 'Creator'
+    );
     
-    if (result.success && result.billId && result.initialData) {
+    if (result.success && result.billId) {
         if (isScheduling) {
             toast({ title: "Tagihan Dijadwalkan", description: `Tagihan "${billNameInput.trim()}" berhasil dijadwalkan.`});
             resetAppToStart(false);
         } else {
-            // Optimistic UI update
-            toast({ title: "Sesi Tagihan Dimulai", description: `Tagihan "${result.initialData.name}" siap untuk diisi.`});
-            setCurrentBillId(result.billId);
-            setCurrentBillName(result.initialData.name);
-            setPeople(result.initialData.participants);
-            setSplitItems([]);
-            setBillDetails(prev => ({...prev, payerId: result.initialData.participants[0]?.id || null}));
-            setCurrentStep(1);
+            // Optimistic UI update no longer needed, just redirect.
+            toast({ title: "Sesi Tagihan Dimulai", description: `Tagihan "${billNameInput.trim()}" siap untuk diisi.`});
             router.push(`/app?billId=${result.billId}`, { scroll: false });
         }
     } else {

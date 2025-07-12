@@ -57,20 +57,18 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  // Refresh session if expired - important for Server Components
-  // await supabase.auth.getUser()
-
   // This will refresh the session if it's expired
   const { data: { session } } = await supabase.auth.getSession()
 
   const { pathname } = request.nextUrl
 
   // Protected routes logic
-  // If user is not logged in and trying to access /app or /app/*, redirect to /login
-  if (!session && (pathname.startsWith('/app') || pathname === '/app')) {
-    return NextResponse.redirect(new URL('/login', request.url))
-  }
+  const isProtectedRoute = pathname.startsWith('/app') || pathname.startsWith('/admin');
 
+  if (!session && isProtectedRoute) {
+    return NextResponse.redirect(new URL('/login', request.url));
+  }
+  
   // If user is logged in and trying to access /login or /signup, redirect to / (landing page)
   if (session && (pathname === '/login' || pathname === '/signup')) {
     return NextResponse.redirect(new URL('/', request.url))

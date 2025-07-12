@@ -278,7 +278,6 @@ export default function SplitBillAppPage() {
             toast({ title: "Tagihan Dijadwalkan", description: `Tagihan "${billNameInput.trim()}" berhasil dijadwalkan.`});
             resetAppToStart(false);
         } else {
-            // Optimistic UI update no longer needed, just redirect.
             toast({ title: "Sesi Tagihan Dimulai", description: `Tagihan "${billNameInput.trim()}" siap untuk diisi.`});
             router.push(`/app?billId=${result.billId}`, { scroll: false });
         }
@@ -488,7 +487,6 @@ export default function SplitBillAppPage() {
     const result = await markSettlementsAsPaidAction(currentBillId);
     if (result.success) {
       toast({ title: "Pembayaran Berhasil", description: "Semua tagihan telah ditandai lunas." });
-      // Redirect to home page
       router.push('/');
     } else {
       toast({ variant: "destructive", title: "Pembayaran Gagal", description: result.error });
@@ -848,7 +846,7 @@ export default function SplitBillAppPage() {
               </CardHeader>
               <CardContent className="p-6">
                 <SummaryDisplay summary={detailedBillSummary} people={people} />
-                 {detailedBillSummary.settlements.some(s => s.status === 'unpaid') && (
+                {detailedBillSummary.settlements && detailedBillSummary.settlements.length > 0 && (
                   <div className="mt-6 border-t pt-6 text-center">
                     <h3 className="text-lg font-semibold flex items-center justify-center mb-4"><QrCode className="mr-2 h-6 w-6"/>Selesaikan Pembayaran</h3>
                     <div className="flex justify-center mb-4">

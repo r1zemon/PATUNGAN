@@ -284,7 +284,7 @@ export type Database = {
           from_participant_id: string
           id?: string
           service_fee?: number | null
-          status: "unpaid" | "paid" | "pending" | "failed"
+          status?: "unpaid" | "paid" | "pending" | "failed"
           to_participant_id: string
         }
         Update: {

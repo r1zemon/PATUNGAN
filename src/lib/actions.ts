@@ -647,16 +647,19 @@ export async function handleSummarizeBillAction(
 
     await supabase.from('settlements').delete().eq('bill_id', billId);
 
-    const settlementInserts = people
+    const settlementInserts: SettlementInsert[] = people
       .filter(p => p.id !== payerParticipantId && (rawSummary[p.name] ?? 0) > 0)
-      .map(p => ({
+      .map(p => {
+        const amount = rawSummary[p.name] ?? 0;
+        return {
           bill_id: billId,
           from_participant_id: p.id,
           to_participant_id: payerParticipantId,
-          amount: rawSummary[p.name] ?? 0,
+          amount: amount,
           status: 'unpaid' as const,
-          service_fee: (rawSummary[p.name] ?? 0) * 0.01, // Calculate 1% service fee
-      }));
+          service_fee: amount * 0.01, // Calculate 1% service fee
+        }
+      });
 
     if (settlementInserts.length > 0) {
       const { error: insertError } = await supabase.from('settlements').insert(settlementInserts);

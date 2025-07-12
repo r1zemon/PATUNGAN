@@ -235,6 +235,8 @@ export type Database = {
           role: "admin" | "pengguna"
           updated_at: string | null
           username: string
+          status: 'active' | 'pending' | 'blocked';
+          created_at: string;
         }
         Insert: {
           avatar_url?: string | null
@@ -245,6 +247,8 @@ export type Database = {
           role?: "admin" | "pengguna"
           updated_at?: string | null
           username: string
+          status?: 'active' | 'pending' | 'blocked';
+          created_at?: string;
         }
         Update: {
           avatar_url?: string | null
@@ -255,6 +259,8 @@ export type Database = {
           role?: "admin" | "pengguna"
           updated_at?: string | null
           username?: string
+          status?: 'active' | 'pending' | 'blocked';
+          created_at?: string;
         }
         Relationships: [
           {
@@ -326,7 +332,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      count_distinct_paying_users: {
+        Args: Record<string, unknown>
+        Returns: number
+      }
     }
     Enums: {
       user_role: "admin" | "pengguna"

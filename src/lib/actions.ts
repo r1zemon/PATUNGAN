@@ -3,12 +3,12 @@
 
 import { scanReceipt, ScanReceiptOutput, ReceiptItem as AiReceiptItem } from "@/ai/flows/scan-receipt";
 import { summarizeBill, SummarizeBillInput } from "@/ai/flows/summarize-bill";
-import type { SplitItem, Person, RawBillSummary, TaxTipSplitStrategy, ScannedItem, BillHistoryEntry, BillCategory, DashboardData, MonthlyExpenseByCategory, ExpenseChartDataPoint, RecentBillDisplayItem, ScheduledBillDisplayItem, FetchedBillDetails, Settlement, FetchedBillDetailsWithItems, PersonalShareDetail, SettlementStatus, PersonalItemDetail } from "./types";
+import type { SplitItem, Person, RawBillSummary, TaxTipSplitStrategy, ScannedItem, BillHistoryEntry, BillCategory, DashboardData, MonthlyExpenseByCategory, ExpenseChartDataPoint, RecentBillDisplayItem, ScheduledBillDisplayItem, FetchedBillDetails, Settlement, FetchedBillDetailsWithItems, PersonalShareDetail, SettlementStatus, PersonalItemDetail, AdminDashboardData, RevenueData, SpendingAnalysisData } from "./types";
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
 import type { PostgrestSingleResponse, User as SupabaseUser } from "@supabase/supabase-js";
 import type { Database } from '@/lib/database.types';
-import { format, startOfMonth, endOfMonth, parseISO, isFuture } from 'date-fns';
+import { format, startOfMonth, endOfMonth, parseISO, isFuture, subMonths, subDays } from 'date-fns';
 import { id as IndonesianLocale } from 'date-fns/locale';
 import { formatCurrency } from "./utils";
 
@@ -431,7 +431,7 @@ export async function removeParticipantAction(participantId: string): Promise<{ 
 export async function handleScanReceiptAction(
   billId: string,
   receiptDataUri: string
-): Promise<{ success: boolean; data?: { items: ScannedItem[], taxAmount: number }; error?: string } | undefined> {
+): Promise<{ success: boolean; data?: { items: ScannedItem[], taxAmount: number }; error?: string }> {
   const supabase = createSupabaseServerClient();
   if (!billId) return { success: false, error: "Bill ID tidak disediakan." };
   if (!receiptDataUri) return { success: false, error: "Tidak ada data gambar." };
@@ -896,82 +896,6 @@ export async function getBillsHistoryAction(): Promise<{ success: boolean; data?
   }
 }
 
-// ===== DASHBOARD ACTIONS =====
-const CATEGORY_ICON_KEYS: { [key: string]: string } = { "Makanan": "Utensils", "Transportasi": "Car", "Hiburan": "Gamepad2", "Penginapan": "BedDouble", "Belanja Online": "ShoppingBag", "Lainnya": "Shapes" };
-const PREDEFINED_CATEGORY_COLORS: { [key: string]: string } = { "Makanan": "hsl(var(--chart-1))", "Transportasi": "hsl(var(--chart-2))", "Hiburan": "hsl(var(--chart-3))", "Penginapan": "hsl(var(--chart-4))", "Belanja Online": "hsl(var(--chart-5))", "Lainnya": "hsl(var(--chart-5))" };
-const DEFAULT_CATEGORY_ORDER_FOR_DASHBOARD = ["Makanan", "Transportasi", "Hiburan", "Penginapan"];
-const OTHERS_CATEGORY_NAME_FOR_DASHBOARD = "Lainnya";
-
-
-export async function getDashboardDataAction(): Promise<{ success: boolean; data?: DashboardData; error?: string }> {
-  const supabase = createSupabaseServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { success: false, error: "Pengguna tidak terautentikasi." };
-
-  try {
-    const { data: userCategories } = await supabase.from('bill_categories').select('id, name').eq('user_id', user.id);
-    const now = new Date();
-    const startDate = format(startOfMonth(now), "yyyy-MM-dd'T'HH:mm:ss.SSSxxx");
-    const endDate = format(endOfMonth(now), "yyyy-MM-dd'T'HH:mm:ss.SSSxxx");
-    const { data: monthlyBillData } = await supabase.from('bills').select('category_id, grand_total').eq('user_id', user.id).not('grand_total', 'is', null).gte('created_at', startDate).lte('created_at', endDate);
-
-    const spendingPerCategory: Record<string, number> = {};
-    if (monthlyBillData) {
-      for (const bill of monthlyBillData) {
-        if (bill.category_id && bill.grand_total !== null) {
-          spendingPerCategory[bill.category_id] = (spendingPerCategory[bill.category_id] || 0) + bill.grand_total;
-        }
-      }
-    }
-    
-    let allMonthlyExpensesRaw: MonthlyExpenseByCategory[] = (userCategories || []).map(category => ({
-        categoryName: category.name,
-        totalAmount: spendingPerCategory[category.id] || 0,
-        icon: CATEGORY_ICON_KEYS[category.name] || "Shapes",
-        color: PREDEFINED_CATEGORY_COLORS[category.name] || "hsl(var(--chart-1))",
-    }));
-
-    // Sorting logic remains same
-    const predefinedExpenses: MonthlyExpenseByCategory[] = [];
-    const customExpenses: MonthlyExpenseByCategory[] = [];
-    let othersExpense: MonthlyExpenseByCategory | null = null;
-    allMonthlyExpensesRaw.forEach(expense => {
-      if (expense.categoryName === OTHERS_CATEGORY_NAME_FOR_DASHBOARD) othersExpense = expense;
-      else if (DEFAULT_CATEGORY_ORDER_FOR_DASHBOARD.includes(expense.categoryName)) predefinedExpenses.push(expense);
-      else customExpenses.push(expense);
-    });
-    predefinedExpenses.sort((a, b) => DEFAULT_CATEGORY_ORDER_FOR_DASHBOARD.indexOf(a.categoryName) - DEFAULT_CATEGORY_ORDER_FOR_DASHBOARD.indexOf(b.categoryName));
-    customExpenses.sort((a, b) => a.categoryName.localeCompare(b.categoryName));
-    let monthlyExpenses: MonthlyExpenseByCategory[] = [...predefinedExpenses, ...customExpenses];
-    if (othersExpense) monthlyExpenses.push(othersExpense);
-
-    const expenseChartData: ExpenseChartDataPoint[] = monthlyExpenses.filter(e => e.totalAmount > 0).map(e => ({ name: e.categoryName, total: e.totalAmount }));
-
-    const { data: dbRecentBills } = await supabase.from('bills').select('id, name, created_at, grand_total, bill_categories ( name )').eq('user_id', user.id).not('grand_total', 'is', null).order('created_at', { ascending: false }).limit(3);
-    const recentBills: RecentBillDisplayItem[] = [];
-    if (dbRecentBills) {
-        for (const bill of dbRecentBills) {
-            const { count: participantCount } = await supabase.from('bill_participants').select('*', { count: 'exact', head: true }).eq('bill_id', bill.id);
-            recentBills.push({ id: bill.id, name: bill.name, createdAt: bill.created_at!, grandTotal: bill.grand_total!, categoryName: (bill.bill_categories as any)?.name, participantCount: participantCount! });
-        }
-    }
-
-    const { data: dbScheduledBills } = await supabase.from('bills').select('id, name, scheduled_at, bill_categories ( name )').eq('user_id', user.id).is('grand_total', null).not('scheduled_at', 'is', null).gt('scheduled_at', new Date().toISOString()).order('scheduled_at', { ascending: true }).limit(3);
-    const scheduledBills: ScheduledBillDisplayItem[] = [];
-    if (dbScheduledBills) {
-        for (const bill of dbScheduledBills) {
-             const { count: participantCount } = await supabase.from('bill_participants').select('*', { count: 'exact', head: true }).eq('bill_id', bill.id);
-            scheduledBills.push({ id: bill.id, name: bill.name, scheduled_at: bill.scheduled_at!, categoryName: (bill.bill_categories as any)?.name, participantCount: participantCount! });
-        }
-    }
-    revalidatePath('/', 'page');
-    return { success: true, data: { monthlyExpenses, expenseChartData, recentBills, scheduledBills } };
-  } catch (e: any) {
-    return { success: false, error: e.message || "Kesalahan server saat mengambil data dashboard." };
-  }
-}
-
-
 export async function getBillDetailsAction(billId: string): Promise<{ success: boolean; data?: FetchedBillDetailsWithItems; error?: string }> {
   const supabase = createSupabaseServerClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -1108,3 +1032,164 @@ export async function getAllUsersAction() {
     }
     return { success: true, users: data }
 }
+
+// ===== ADMIN DASHBOARD ACTIONS =====
+async function getAdminDashboardDataAction(): Promise<{ success: boolean; data?: AdminDashboardData, error?: string }> {
+  const supabase = createSupabaseServerClient();
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { success: false, error: "Tidak terautentikasi." };
+
+    const today = new Date();
+    const oneWeekAgo = subDays(today, 7).toISOString();
+    const thirtyDaysAgo = subDays(today, 30).toISOString();
+    const oneMonthAgo = subMonths(today, 1).toISOString();
+
+    const { count: totalUsers } = await supabase.from('profiles').select('*', { count: 'exact', head: true });
+    const { count: activeUsers } = await supabase.from('profiles').select('id', { count: 'exact', head: true }).gt('updated_at', thirtyDaysAgo);
+    const { count: newUserWeekCount } = await supabase.from('profiles').select('id', { count: 'exact', head: true }).gt('created_at', oneWeekAgo);
+    const { count: newUserMonthCount } = await supabase.from('profiles').select('id', { count: 'exact', head: true }).gt('created_at', oneMonthAgo);
+    const { count: totalBills } = await supabase.from('bills').select('*', { count: 'exact', head: true });
+    const { count: billsLastWeekCount } = await supabase.from('bills').select('id', { count: 'exact', head: true }).gt('created_at', oneWeekAgo);
+    const { count: unverifiedUsers } = await supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('status', 'pending');
+    const { count: blockedUsers } = await supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('status', 'blocked');
+
+    let userGrowthData = [];
+    for (let i = 5; i >= 0; i--) {
+        const month = subMonths(today, i);
+        const { count } = await supabase.from('profiles').select('id', { count: 'exact', head: true }).lte('created_at', endOfMonth(month).toISOString());
+        userGrowthData.push({ month: format(month, 'MMM'), users: count || 0 });
+    }
+
+    const userStatusData = [
+        { name: 'Aktif', value: activeUsers || 0, color: '#10b981' },
+        { name: 'Belum Verifikasi', value: unverifiedUsers || 0, color: '#64748b' },
+        { name: 'Diblokir', value: blockedUsers || 0, color: '#dc2626' },
+    ];
+    
+    let dailyActivityData = [];
+    for (let i = 6; i >= 0; i--) {
+        const day = subDays(today, i);
+        const { count } = await supabase.from('bills').select('id', { count: 'exact', head: true })
+            .gte('created_at', day.toISOString().split('T')[0] + 'T00:00:00')
+            .lte('created_at', day.toISOString().split('T')[0] + 'T23:59:59');
+        dailyActivityData.push({ day: format(day, 'dd/MM'), sessions: count || 0 });
+    }
+
+    return { success: true, data: { totalUsers: totalUsers || 0, activeUsers: activeUsers || 0, newUserWeekCount: newUserWeekCount || 0, newUserMonthCount: newUserMonthCount || 0, totalBills: totalBills || 0, billsLastWeekCount: billsLastWeekCount || 0, userGrowthData, userStatusData, dailyActivityData } };
+  } catch (e: any) {
+    return { success: false, error: e.message };
+  }
+}
+
+async function getRevenueDataAction(): Promise<{ success: boolean; data?: RevenueData, error?: string }> {
+  const supabase = createSupabaseServerClient();
+  try {
+    const { data: settlements } = await supabase.from('settlements').select('amount, service_fee, bill_id, created_at, bills(category_id, bill_categories(name))').eq('status', 'paid');
+    if (!settlements) return { success: false, error: "Tidak ada data settlement." };
+
+    const totalRevenue = settlements.reduce((acc, s) => acc + (s.service_fee || 0), 0);
+    const totalTransactions = new Set(settlements.map(s => s.bill_id)).size;
+    const { count: totalPayingUsers } = await supabase.rpc('count_distinct_paying_users');
+    const averageFeePerTransaction = totalTransactions > 0 ? totalRevenue / totalTransactions : 0;
+
+    let revenueTrend = [];
+    for (let i = 5; i >= 0; i--) {
+      const month = subMonths(new Date(), i);
+      const monthRevenue = settlements.filter(s => parseISO(s.created_at).getMonth() === month.getMonth() && parseISO(s.created_at).getFullYear() === month.getFullYear()).reduce((acc, s) => acc + (s.service_fee || 0), 0);
+      revenueTrend.push({ month: format(month, 'MMM'), revenue: monthRevenue });
+    }
+
+    let transactionTrend = [];
+    for (let i = 5; i >= 0; i--) {
+      const month = subMonths(new Date(), i);
+      const monthTransactions = new Set(settlements.filter(s => parseISO(s.created_at).getMonth() === month.getMonth() && parseISO(s.created_at).getFullYear() === month.getFullYear()).map(s => s.bill_id)).size;
+      transactionTrend.push({ month: format(month, 'MMM'), transactions: monthTransactions });
+    }
+    
+    const revenueByCategoryMap: Record<string, number> = {};
+    settlements.forEach(s => {
+      const categoryName = (s.bills?.bill_categories as any)?.name || 'Lainnya';
+      revenueByCategoryMap[categoryName] = (revenueByCategoryMap[categoryName] || 0) + (s.service_fee || 0);
+    });
+    const revenueByCategory = Object.entries(revenueByCategoryMap).map(([key, value]) => ({ categoryName: key, revenue: value }));
+
+    return { success: true, data: { totalRevenue, totalTransactions, totalPayingUsers: totalPayingUsers || 0, averageFeePerTransaction, revenueTrend, transactionTrend, revenueByCategory } };
+  } catch (e: any) {
+    return { success: false, error: e.message };
+  }
+}
+
+
+async function getSpendingAnalysisAction(): Promise<{ success: boolean; data?: SpendingAnalysisData, error?: string }> {
+  const supabase = createSupabaseServerClient();
+  try {
+    const { data: bills, error: billsError } = await supabase.from('bills').select('id, grand_total, created_at, bill_categories(name)');
+    if (billsError) throw billsError;
+    if (!bills) return { success: false, error: "Tidak ada data tagihan." };
+
+    const totalSpending = bills.reduce((acc, b) => acc + (b.grand_total || 0), 0);
+    const totalBills = bills.length;
+    const averagePerBill = totalBills > 0 ? totalSpending / totalBills : 0;
+
+    const categoryCounts: Record<string, { totalAmount: number, billCount: number }> = {};
+    bills.forEach(b => {
+      const categoryName = b.bill_categories?.name || 'Lainnya';
+      if (!categoryCounts[categoryName]) {
+        categoryCounts[categoryName] = { totalAmount: 0, billCount: 0 };
+      }
+      categoryCounts[categoryName].totalAmount += b.grand_total || 0;
+      categoryCounts[categoryName].billCount++;
+    });
+
+    const spendingByCategory = Object.entries(categoryCounts).map(([key, value]) => ({ categoryName: key, ...value }));
+    const mostPopularCategory = spendingByCategory.sort((a, b) => b.billCount - a.billCount)[0] || { categoryName: '-', billCount: 0 };
+    const topCategories = spendingByCategory.sort((a, b) => b.totalAmount - a.totalAmount).slice(0, 5);
+    
+    let spendingTrendMap: Record<string, Record<string, number>> = {};
+    for (let i = 5; i >= 0; i--) {
+        const month = subMonths(new Date(), i);
+        const monthStr = format(month, 'MMM');
+        spendingTrendMap[monthStr] = { month: monthStr };
+    }
+    bills.forEach(b => {
+        const monthStr = format(parseISO(b.created_at), 'MMM');
+        if (spendingTrendMap[monthStr]) {
+            const categoryName = b.bill_categories?.name || 'Lainnya';
+            spendingTrendMap[monthStr][categoryName] = (spendingTrendMap[monthStr][categoryName] || 0) + (b.grand_total || 0);
+        }
+    });
+    const spendingTrend = Object.values(spendingTrendMap);
+
+    return { success: true, data: { totalSpending, totalBills, averagePerBill, mostPopularCategory, spendingByCategory, spendingTrend, topCategories } };
+  } catch (e: any) {
+    return { success: false, error: e.message };
+  }
+}
+
+// Ensure the functions are properly exported for use in components.
+module.exports = {
+  signupUserAction,
+  loginUserAction,
+  getCurrentUserAction,
+  logoutUserAction,
+  createBillCategoryAction,
+  getUserCategoriesAction,
+  createBillAction,
+  addParticipantAction,
+  removeParticipantAction,
+  handleScanReceiptAction,
+  addBillItemToDbAction,
+  updateBillItemInDbAction,
+  deleteBillItemFromDbAction,
+  handleSummarizeBillAction,
+  markSettlementsAsPaidAction,
+  updateUserProfileAction,
+  removeAvatarAction,
+  getBillsHistoryAction,
+  getBillDetailsAction,
+  getAllUsersAction,
+  getAdminDashboardDataAction,
+  getRevenueDataAction,
+  getSpendingAnalysisAction
+};

@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { formatCurrency } from "@/lib/utils";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { Users, Landmark, Percent, ArrowRight, Wallet, ShoppingBasket, FileText, Hash, Tag, CheckCircle, CreditCard, ShieldCheck } from "lucide-react";
+import { Users, Landmark, Percent, ArrowRight, Wallet, ShoppingBasket, FileText, Hash, Tag, CheckCircle, CreditCard, ShieldCheck, HandCoins, QrCode } from "lucide-react";
 import {
   Accordion,
   AccordionContent,
@@ -18,13 +18,26 @@ import {
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { useToast } from "@/hooks/use-toast";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 interface SummaryDisplayProps {
   summary: DetailedBillSummaryData | null;
-  people: Person[]; 
+  people: Person[];
+  onPayWithQris: (settlement: Settlement) => void;
+  onMarkAsPaidOffline: (settlementId: string, method: 'offline') => void;
 }
 
-export function SummaryDisplay({ summary, people }: SummaryDisplayProps) {
+export function SummaryDisplay({ summary, people, onPayWithQris, onMarkAsPaidOffline }: SummaryDisplayProps) {
   const { toast } = useToast();
 
   if (!summary) {
@@ -88,48 +101,72 @@ export function SummaryDisplay({ summary, people }: SummaryDisplayProps) {
         <Card className="shadow-lg">
           <CardHeader>
             <CardTitle className="flex items-center"><ArrowRight className="mr-2 h-6 w-6 text-primary"/> Penyelesaian Pembayaran</CardTitle>
-            <CardDescription>Berikut adalah siapa yang perlu membayar ke siapa untuk menyelesaikan tagihan ini.</CardDescription>
+            <CardDescription>Selesaikan pembayaran untuk setiap tagihan di bawah ini.</CardDescription>
           </CardHeader>
           <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="min-w-[120px]">Dari</TableHead>
-                  <TableHead className="min-w-[120px]">Ke</TableHead>
-                  <TableHead className="text-right">Jumlah</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {settlements.map((settlement, index) => {
-                  const fromPerson = people.find(p => p.id === settlement.fromId);
-                  const toPerson = people.find(p => p.id === settlement.toId);
-                  
-                  return (
-                    <TableRow key={index}>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                           <Avatar className="h-8 w-8">
-                            <AvatarImage src={fromPerson?.avatar_url || undefined} alt={settlement.from} data-ai-hint="profile avatar small" />
-                            <AvatarFallback>{settlement.from.substring(0,1)}</AvatarFallback>
-                          </Avatar>
-                          {settlement.from}
-                        </div>
-                      </TableCell>
-                       <TableCell>
-                         <div className="flex items-center gap-2">
-                           <Avatar className="h-8 w-8">
-                            <AvatarImage src={toPerson?.avatar_url || undefined} alt={settlement.to} data-ai-hint="profile avatar small" />
-                            <AvatarFallback>{settlement.to.substring(0,1)}</AvatarFallback>
-                          </Avatar>
-                          {settlement.to}
-                        </div>
-                      </TableCell>
-                      <TableCell className="font-semibold text-primary text-right">{formatCurrency(settlement.amount, "IDR")}</TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+            <div className="space-y-4">
+              {settlements.map((settlement, index) => {
+                const fromPerson = people.find(p => p.id === settlement.fromId);
+                const toPerson = people.find(p => p.id === settlement.toId);
+                const isPaid = settlement.status === 'paid';
+
+                return (
+                  <div key={settlement.id || index} className="p-4 border rounded-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                    <div className="flex-grow">
+                      <div className="flex items-center gap-2 font-semibold text-lg">
+                        <Avatar className="h-9 w-9">
+                          <AvatarImage src={fromPerson?.avatar_url || undefined} alt={settlement.from} data-ai-hint="profile avatar small" />
+                          <AvatarFallback>{settlement.from.substring(0,1)}</AvatarFallback>
+                        </Avatar>
+                        <span>{settlement.from}</span>
+                        <ArrowRight className="h-5 w-5 text-muted-foreground mx-1"/>
+                        <Avatar className="h-9 w-9">
+                          <AvatarImage src={toPerson?.avatar_url || undefined} alt={settlement.to} data-ai-hint="profile avatar small" />
+                          <AvatarFallback>{settlement.to.substring(0,1)}</AvatarFallback>
+                        </Avatar>
+                        <span>{settlement.to}</span>
+                      </div>
+                      <p className="font-bold text-primary text-xl mt-1">{formatCurrency(settlement.amount, "IDR")}</p>
+                    </div>
+
+                    <div className="flex flex-shrink-0 gap-2 w-full sm:w-auto">
+                      {isPaid ? (
+                        <Badge variant="secondary" className="bg-green-100 text-green-800 text-sm py-2 px-4 w-full justify-center">
+                          <ShieldCheck className="mr-2 h-5 w-5"/>Lunas
+                        </Badge>
+                      ) : (
+                        <>
+                          <Button variant="default" className="flex-1" onClick={() => onPayWithQris(settlement)}>
+                            <QrCode className="mr-2 h-4 w-4"/>QRIS
+                          </Button>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                               <Button variant="outline" className="flex-1">
+                                <HandCoins className="mr-2 h-4 w-4"/>Offline
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Konfirmasi Pembayaran Offline</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Apakah Anda yakin ingin menandai tagihan dari <strong>{settlement.from}</strong> sebesar <strong>{formatCurrency(settlement.amount)}</strong> sebagai lunas (dibayar tunai/offline)? Biaya layanan tidak akan dikenakan.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Batal</AlertDialogCancel>
+                                <AlertDialogAction onClick={() => onMarkAsPaidOffline(settlement.id, 'offline')}>
+                                  Ya, Tandai Lunas
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </CardContent>
         </Card>
       )}

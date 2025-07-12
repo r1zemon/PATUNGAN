@@ -347,6 +347,7 @@ export async function createBillAction(
     const participantResult = await addParticipantAction(billData.id, creatorName, user.id);
     if (!participantResult.success) {
       console.error("Failed to add creator as participant:", participantResult.error);
+      // Rollback bill creation if participant add fails
       await supabase.from('bills').delete().eq('id', billData.id);
       return { success: false, error: `Gagal menambahkan kreator sebagai partisipan: ${participantResult.error}` };
     }
@@ -649,14 +650,14 @@ export async function handleSummarizeBillAction(
       .filter(p => p.id !== payerParticipantId && (rawSummary[p.name] ?? 0) > 0)
       .map(p => {
         const amount = rawSummary[p.name] ?? 0;
-        const serviceFee = amount * 0.01; // Calculate 1% service fee
+        const serviceFee = amount * 0.01; // Pre-calculate potential 1% service fee
         return {
           bill_id: billId,
           from_participant_id: p.id,
           to_participant_id: payerParticipantId,
           amount: amount,
           status: 'unpaid' as const,
-          service_fee: serviceFee, // Add service fee to the insert object
+          service_fee: serviceFee,
         }
       });
 
@@ -677,38 +678,50 @@ export async function handleSummarizeBillAction(
   }
 }
 
-export async function markSettlementsAsPaidAction(billId: string): Promise<{ success: boolean, error?: string }> {
+export async function markSettlementPaidAction(
+  settlementId: string,
+  method: 'qris' | 'offline'
+): Promise<{ success: boolean, error?: string }> {
   const supabase = createSupabaseServerClient();
-  if (!billId) {
-    return { success: false, error: "Bill ID diperlukan." };
+  if (!settlementId) {
+    return { success: false, error: "Settlement ID is required." };
   }
 
   try {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
-      return { success: false, error: "Pengguna tidak terautentikasi." };
+      return { success: false, error: "User not authenticated." };
+    }
+
+    let updateData: Partial<Database['public']['Tables']['settlements']['Update']> = {
+      status: 'paid'
+    };
+
+    if (method === 'offline') {
+      updateData.service_fee = 0; // Nullify service fee for offline payments
     }
     
     const { error: updateError } = await supabase
       .from('settlements')
-      .update({ status: 'paid' })
-      .eq('bill_id', billId)
-      .eq('status', 'unpaid');
+      .update(updateData)
+      .eq('id', settlementId);
 
     if (updateError) {
       throw updateError;
     }
 
-    revalidatePath('/', 'page');
-    revalidatePath('/app/history', 'page');
-    revalidatePath('/app', 'page');
-    revalidatePath('/admin/revenue', 'page');
+    revalidatePath('/', 'page'); // For dashboard
+    revalidatePath('/app', 'page'); // For bill page
+    revalidatePath('/app/history', 'page'); // For history page
+    revalidatePath('/admin/revenue', 'page'); // For revenue page
     return { success: true };
+
   } catch (e: any) {
-    console.error("Error marking settlements as paid:", e);
-    return { success: false, error: e.message || "Gagal menandai lunas." };
+    console.error("Error marking settlement as paid:", e);
+    return { success: false, error: e.message || "Failed to mark as paid." };
   }
 }
+
 
 // ... existing user profile actions ...
 export async function updateUserProfileAction(
@@ -944,13 +957,16 @@ export async function getBillDetailsAction(billId: string): Promise<{ success: b
     if (isSummarized) {
        const { data: settlementsData, error: settlementsError } = await supabase
           .from('settlements')
-          .select('amount, status, from_participant:bill_participants!from_participant_id(id, name), to_participant:bill_participants!to_participant_id(id, name)')
+          .select('id, amount, status, service_fee, from_participant:bill_participants!from_participant_id(id, name), to_participant:bill_participants!to_participant_id(id, name)')
           .eq('bill_id', billId);
 
         const settlements: Settlement[] = (settlementsData || []).map(s => ({
+            id: s.id, // Pass settlement ID
             fromId: (s.from_participant as any)?.id, from: (s.from_participant as any)?.name,
             toId: (s.to_participant as any)?.id, to: (s.to_participant as any)?.name,
-            amount: s.amount, status: s.status as SettlementStatus,
+            amount: s.amount, 
+            status: s.status as SettlementStatus,
+            serviceFee: s.service_fee || 0,
         }));
         
         const totalTaxTip = (bill.tax_amount || 0) + (bill.tip_amount || 0);

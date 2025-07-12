@@ -32,12 +32,14 @@ export interface BillDetails {
 export type SettlementStatus = 'unpaid' | 'paid' | 'pending' | 'failed';
 
 export interface Settlement {
+  id: string; // The settlement's own unique ID from the database
   fromId: string;
   from: string; // Person name
   toId: string;   // Person name (usually the payer)
   to: string;   // Person name (usually the payer)
   amount: number;
   status: SettlementStatus;
+  serviceFee: number; // The potential service fee
 }
 
 export interface PersonalItemDetail {

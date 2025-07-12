@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
-import type { SplitItem, Person, BillDetails, TaxTipSplitStrategy, DetailedBillSummaryData, BillCategory, ScannedItem } from "@/lib/types";
+import type { SplitItem, Person, BillDetails, TaxTipSplitStrategy, DetailedBillSummaryData, BillCategory, ScannedItem, Settlement } from "@/lib/types";
 import type { User as SupabaseUser } from "@supabase/supabase-js";
 import { 
   handleScanReceiptAction, 
@@ -18,7 +18,7 @@ import {
   updateBillItemInDbAction, 
   deleteBillItemFromDbAction,
   getBillDetailsAction,
-  markSettlementsAsPaidAction,
+  markSettlementPaidAction,
 } from "@/lib/actions";
 import { supabase } from "@/lib/supabaseClient";
 import { ReceiptUploader } from "@/components/receipt-uploader";
@@ -33,7 +33,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useToast } from "@/hooks/use-toast";
 import { Separator } from "@/components/ui/separator";
-import { UserCheck, Loader2, UserPlus, ArrowRight, Trash2, Users, ScanLine, PlusCircle, Edit2, ListChecks, FilePlus, FileText, CalendarClock, FolderPlus, Tag, Percent, Landmark, Power, User, Clock, QrCode } from "lucide-react"; 
+import { UserCheck, Loader2, UserPlus, ArrowRight, Trash2, Users, ScanLine, PlusCircle, Edit2, ListChecks, FilePlus, FileText, CalendarClock, FolderPlus, Tag, Percent, Landmark, Power, User, Clock, QrCode, CreditCard, HandCoins } from "lucide-react"; 
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { format } from 'date-fns';
 import { id as IndonesianLocale } from 'date-fns/locale';
@@ -41,6 +41,14 @@ import { LandingHeader } from "@/components/landing-header";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { formatCurrency } from "@/lib/utils";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 
 
 const DEFAULT_CATEGORIES = ["Makanan", "Transportasi", "Hiburan", "Penginapan", "Lainnya"];
@@ -89,6 +97,10 @@ export default function SplitBillAppPage() {
   const [showNewCategoryInput, setShowNewCategoryInput] = useState(false);
   
   const [tipInputDisplayValue, setTipInputDisplayValue] = useState<string>(billDetails.tipAmount.toString());
+
+  // Payment Dialog State
+  const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false);
+  const [selectedSettlementForPayment, setSelectedSettlementForPayment] = useState<Settlement | null>(null);
 
   // ===== DATA FETCHING & SESSION MANAGEMENT =====
 
@@ -148,6 +160,7 @@ export default function SplitBillAppPage() {
         setCurrentBillName(billName || "");
         setPeople(participants);
         setSplitItems(items);
+        setDetailedBillSummary(summaryData);
         setBillDetails({
             payerId: summaryData?.payerId || null,
             taxAmount: summaryData?.taxAmount || 0,
@@ -157,10 +170,8 @@ export default function SplitBillAppPage() {
 
         // Determine step based on whether the bill has been summarized (grandTotal > 0)
         if (summaryData && summaryData.grandTotal > 0) {
-            setDetailedBillSummary(summaryData);
             setCurrentStep(2);
         } else {
-            setDetailedBillSummary(null);
             setCurrentStep(1);
         }
         } else {
@@ -470,7 +481,7 @@ export default function SplitBillAppPage() {
 
     if (result.success) {
       toast({ title: "Tagihan Diringkas & Disimpan" });
-      loadBillSession(currentBillId); // Force a reload to get final summary state
+      await loadBillSession(currentBillId); // Force a reload to get final summary state
     } else {
       setError(result.error || "Gagal meringkas tagihan.");
       toast({ variant: "destructive", title: "Ringkasan Gagal", description: result.error });
@@ -478,22 +489,34 @@ export default function SplitBillAppPage() {
     setIsCalculating(false);
   };
 
-  const handleMarkAsPaid = async () => {
-    if (!currentBillId) {
-      toast({ variant: "destructive", title: "Gagal", description: "Tidak ada tagihan untuk dibayar." });
-      return;
-    }
+  const handleMarkSettlementAsPaid = async (settlementId: string, method: 'qris' | 'offline') => {
     setIsPaying(true);
-    const result = await markSettlementsAsPaidAction(currentBillId);
+    const result = await markSettlementPaidAction(settlementId, method);
     if (result.success) {
-      toast({ title: "Pembayaran Berhasil", description: "Semua tagihan telah ditandai lunas." });
-      router.push('/');
+      toast({ title: "Pembayaran Berhasil", description: `Tagihan telah ditandai lunas (${method}).` });
+      
+      // Update local state to reflect the change without a full reload
+      setDetailedBillSummary(prev => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          settlements: prev.settlements.map(s => s.id === settlementId ? { ...s, status: 'paid' } : s)
+        }
+      });
+      setIsPaymentDialogOpen(false);
+      setSelectedSettlementForPayment(null);
+
     } else {
       toast({ variant: "destructive", title: "Pembayaran Gagal", description: result.error });
     }
     setIsPaying(false);
   };
   
+  const handleOpenPaymentDialog = (settlement: Settlement) => {
+    setSelectedSettlementForPayment(settlement);
+    setIsPaymentDialogOpen(true);
+  };
+
 
   if (isLoading || !authUser) {
     return (
@@ -845,30 +868,61 @@ export default function SplitBillAppPage() {
                 </Button>
               </CardHeader>
               <CardContent className="p-6">
-                <SummaryDisplay summary={detailedBillSummary} people={people} />
-                {detailedBillSummary.settlements && detailedBillSummary.settlements.length > 0 && (
-                  <div className="mt-6 border-t pt-6 text-center">
-                    <h3 className="text-lg font-semibold flex items-center justify-center mb-4"><QrCode className="mr-2 h-6 w-6"/>Selesaikan Pembayaran</h3>
-                    <div className="flex justify-center mb-4">
-                        <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/d/d0/QR_code_for_mobile_English_Wikipedia.svg/375px-QR_code_for_mobile_English_Wikipedia.svg.png" alt="QR Code" width="250" height="250" data-ai-hint="qr code" />
-                    </div>
-                    <Alert className="max-w-md mx-auto text-left">
-                      <AlertTitle>Perhatian!</AlertTitle>
-                      <AlertDescription>
-                        Akan dikenakan biaya layanan sebesar 1% untuk setiap transaksi yang diselesaikan melalui metode pembayaran ini.
-                      </AlertDescription>
-                    </Alert>
-                    <Button onClick={handleMarkAsPaid} disabled={isPaying} size="lg" className="mt-4">
-                      {isPaying ? <Loader2 className="animate-spin mr-2"/> : null}
-                      {isPaying ? "Memproses..." : "Konfirmasi Semua Pembayaran Lunas"}
-                    </Button>
-                  </div>
-                )}
+                <SummaryDisplay summary={detailedBillSummary} people={people} onPayWithQris={handleOpenPaymentDialog} onMarkAsPaidOffline={handleMarkSettlementAsPaid} />
               </CardContent>
             </Card>
           )}
         </div>
       </main>
+      
+      {/* Payment Dialog */}
+      <Dialog open={isPaymentDialogOpen} onOpenChange={setIsPaymentDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="flex items-center"><QrCode className="mr-2"/>Bayar dengan QRIS</DialogTitle>
+              <DialogDescription>
+                Pindai QR code di bawah ini untuk membayar bagian Anda.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="py-4 text-center">
+              <div className="flex justify-center mb-4">
+                <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/d/d0/QR_code_for_mobile_English_Wikipedia.svg/375px-QR_code_for_mobile_English_Wikipedia.svg.png" alt="QR Code" width="250" height="250" data-ai-hint="qr code" />
+              </div>
+              {selectedSettlementForPayment && (
+                <div className="space-y-2 text-sm max-w-xs mx-auto">
+                    <div className="flex justify-between">
+                        <span className="text-muted-foreground">Tagihan untuk:</span>
+                        <span className="font-medium">{selectedSettlementForPayment.from}</span>
+                    </div>
+                     <div className="flex justify-between">
+                        <span className="text-muted-foreground">Jumlah Tagihan:</span>
+                        <span className="font-medium">{formatCurrency(selectedSettlementForPayment.amount)}</span>
+                    </div>
+                     <div className="flex justify-between">
+                        <span className="text-muted-foreground">Biaya Layanan (1%):</span>
+                        <span className="font-medium">{formatCurrency(selectedSettlementForPayment.serviceFee)}</span>
+                    </div>
+                     <Separator className="my-2"/>
+                     <div className="flex justify-between font-bold text-base">
+                        <span>Total Pembayaran:</span>
+                        <span>{formatCurrency(selectedSettlementForPayment.amount + selectedSettlementForPayment.serviceFee)}</span>
+                    </div>
+                </div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsPaymentDialogOpen(false)}>Batal</Button>
+              <Button 
+                onClick={() => selectedSettlementForPayment && handleMarkSettlementAsPaid(selectedSettlementForPayment.id, 'qris')}
+                disabled={isPaying || !selectedSettlementForPayment}
+              >
+                {isPaying ? <Loader2 className="animate-spin mr-2"/> : null}
+                Konfirmasi Pembayaran
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+      </Dialog>
+
 
       <footer className="relative z-10 mt-12 pt-8 border-t text-center text-sm text-muted-foreground">
         <p>&copy; {new Date().getFullYear()} Patungan. Hak cipta dilindungi.</p>

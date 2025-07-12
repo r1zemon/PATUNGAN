@@ -1,14 +1,17 @@
+
 "use client"
 
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts"
 
-const data = [
-  { name: "Aktif", value: 165, color: "#10b981" },
-  { name: "Belum Verifikasi", value: 58, color: "#f59e0b" },
-  { name: "Diblokir", value: 24, color: "#ef4444" },
-]
+interface UserStatusChartProps {
+    data: { name: string; value: number; color: string }[];
+}
 
-export function UserStatusChart() {
+export function UserStatusChart({ data }: UserStatusChartProps) {
+  if (!data || data.length === 0) {
+    return <div className="h-[300px] flex items-center justify-center text-muted-foreground">Tidak ada data status.</div>
+  }
+
   return (
     <div className="h-[300px]">
       <ResponsiveContainer width="100%" height="100%">

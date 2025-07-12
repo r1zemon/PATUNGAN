@@ -1,5 +1,4 @@
 
-
 export interface Person {
   id: string; // This is the bill_participants.id
   name: string;
@@ -143,4 +142,38 @@ export interface FetchedBillDetails {
 
 export interface FetchedBillDetailsWithItems extends FetchedBillDetails {
   items: SplitItem[];
+}
+
+// ===== ADMIN DASHBOARD TYPES =====
+
+export interface AdminDashboardData {
+  totalUsers: number;
+  activeUsers: number;
+  newUserWeekCount: number;
+  newUserMonthCount: number;
+  totalBills: number;
+  billsLastWeekCount: number;
+  userGrowthData: { month: string; users: number }[];
+  userStatusData: { name: string; value: number; color: string }[];
+  dailyActivityData: { day: string; sessions: number }[];
+}
+
+export interface RevenueData {
+    totalRevenue: number;
+    totalTransactions: number;
+    totalPayingUsers: number;
+    averageFeePerTransaction: number;
+    revenueTrend: { month: string; revenue: number }[];
+    transactionTrend: { month: string; transactions: number }[];
+    revenueByCategory: { categoryName: string; revenue: number }[];
+}
+
+export interface SpendingAnalysisData {
+    totalSpending: number;
+    totalBills: number;
+    averagePerBill: number;
+    mostPopularCategory: { categoryName: string; billCount: number };
+    spendingByCategory: { categoryName: string; totalAmount: number; billCount: number }[];
+    spendingTrend: { month: string; [key: string]: number | string }[]; // e.g. { month: 'Jan', Makanan: 500, Transportasi: 200 }
+    topCategories: { categoryName: string; totalAmount: number; billCount: number }[];
 }

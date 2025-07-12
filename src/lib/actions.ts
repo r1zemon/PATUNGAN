@@ -1034,6 +1034,101 @@ export async function getAllUsersAction() {
     return { success: true, users: data }
 }
 
+// ===== Dashboard Actions =====
+
+export async function getDashboardDataAction(): Promise<{ success: boolean; data?: DashboardData, error?: string }> {
+  const supabase = createSupabaseServerClient();
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+  if (authError || !user) {
+    return { success: false, error: "Pengguna tidak terautentikasi." };
+  }
+
+  try {
+    const today = new Date();
+    const startOfCurrentMonth = startOfMonth(today);
+    
+    // Fetch user's categories
+    const { data: categories, error: catError } = await supabase
+        .from('bill_categories').select('id, name');
+    if(catError) throw new Error("Gagal mengambil kategori: " + catError.message);
+
+    // Fetch bills for the current month
+    const { data: billsThisMonth, error: billsError } = await supabase
+      .from('bills')
+      .select('category_id, grand_total, scheduled_at, created_at, id, name')
+      .eq('user_id', user.id)
+      .gte('created_at', startOfCurrentMonth.toISOString());
+    if (billsError) throw new Error("Gagal mengambil tagihan bulan ini: " + billsError.message);
+
+    // Fetch all user bills for history/scheduled list
+    const { data: allBills, error: allBillsError } = await supabase
+      .from('bills')
+      .select('id, name, created_at, grand_total, scheduled_at, category_id')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false });
+    if(allBillsError) throw new Error("Gagal mengambil semua tagihan: " + allBillsError.message);
+
+
+    // Process Monthly Expenses
+    const monthlyExpensesMap: Map<string, { totalAmount: number, icon?: string, color?: string }> = new Map();
+    billsThisMonth?.filter(b => b.grand_total).forEach(bill => {
+      const category = categories?.find(c => c.id === bill.category_id);
+      const categoryName = category?.name || 'Lainnya';
+      const current = monthlyExpensesMap.get(categoryName) || { totalAmount: 0 };
+      monthlyExpensesMap.set(categoryName, {
+        totalAmount: current.totalAmount + (bill.grand_total || 0),
+      });
+    });
+
+    const monthlyExpenses: MonthlyExpenseByCategory[] = Array.from(monthlyExpensesMap.entries()).map(([name, data]) => ({
+      categoryName: name,
+      ...data
+    }));
+
+    const expenseChartData: ExpenseChartDataPoint[] = monthlyExpenses.map(e => ({
+      name: e.categoryName,
+      total: e.totalAmount,
+    }));
+
+    // Process Recent and Scheduled Bills for Display
+    const recentBills: RecentBillDisplayItem[] = [];
+    const scheduledBills: ScheduledBillDisplayItem[] = [];
+    
+    for (const bill of (allBills || [])) {
+      if (bill.scheduled_at && isFuture(parseISO(bill.scheduled_at))) {
+        if (scheduledBills.length < 5) { // Limit to 5 for display
+          const { count } = await supabase.from('bill_participants').select('*', { count: 'exact', head: true }).eq('bill_id', bill.id);
+          scheduledBills.push({
+            id: bill.id,
+            name: bill.name,
+            scheduled_at: bill.scheduled_at,
+            categoryName: categories?.find(c => c.id === bill.category_id)?.name,
+            participantCount: count || 0,
+          });
+        }
+      } else if (bill.grand_total !== null && bill.grand_total > 0) {
+        if (recentBills.length < 3) { // Limit to 3 for display
+           const { count } = await supabase.from('bill_participants').select('*', { count: 'exact', head: true }).eq('bill_id', bill.id);
+           recentBills.push({
+            id: bill.id,
+            name: bill.name,
+            createdAt: bill.created_at,
+            grandTotal: bill.grand_total,
+            categoryName: categories?.find(c => c.id === bill.category_id)?.name,
+            participantCount: count || 0,
+           });
+        }
+      }
+    }
+    
+    return { success: true, data: { monthlyExpenses, expenseChartData, recentBills, scheduledBills } };
+
+  } catch (e: any) {
+    return { success: false, error: e.message };
+  }
+}
+
 // ===== ADMIN DASHBOARD ACTIONS =====
 export async function getAdminDashboardDataAction(): Promise<{ success: boolean; data?: AdminDashboardData, error?: string }> {
   const supabase = createSupabaseServerClient();
@@ -1095,10 +1190,7 @@ export async function getRevenueDataAction(): Promise<{ success: boolean; data?:
 
     if (!settlements || settlements.length === 0) {
       // It's not an error if there's no revenue yet, just return empty state.
-      return { success: true, data: {
-        totalRevenue: 0, totalTransactions: 0, totalPayingUsers: 0, averageFeePerTransaction: 0, 
-        revenueTrend: [], transactionTrend: [], revenueByCategory: []
-      }};
+      return { success: false, error: "Tidak ada data settlement." };
     }
 
     const totalRevenue = settlements.reduce((acc, s) => acc + (s.service_fee || 0), 0);

@@ -1034,7 +1034,7 @@ export async function getAllUsersAction() {
 }
 
 // ===== ADMIN DASHBOARD ACTIONS =====
-async function getAdminDashboardDataAction(): Promise<{ success: boolean; data?: AdminDashboardData, error?: string }> {
+export async function getAdminDashboardDataAction(): Promise<{ success: boolean; data?: AdminDashboardData, error?: string }> {
   const supabase = createSupabaseServerClient();
   try {
     const { data: { user } } = await supabase.auth.getUser();
@@ -1082,7 +1082,7 @@ async function getAdminDashboardDataAction(): Promise<{ success: boolean; data?:
   }
 }
 
-async function getRevenueDataAction(): Promise<{ success: boolean; data?: RevenueData, error?: string }> {
+export async function getRevenueDataAction(): Promise<{ success: boolean; data?: RevenueData, error?: string }> {
   const supabase = createSupabaseServerClient();
   try {
     const { data: settlements } = await supabase.from('settlements').select('amount, service_fee, bill_id, created_at, bills(category_id, bill_categories(name))').eq('status', 'paid');
@@ -1121,7 +1121,7 @@ async function getRevenueDataAction(): Promise<{ success: boolean; data?: Revenu
 }
 
 
-async function getSpendingAnalysisAction(): Promise<{ success: boolean; data?: SpendingAnalysisData, error?: string }> {
+export async function getSpendingAnalysisAction(): Promise<{ success: boolean; data?: SpendingAnalysisData, error?: string }> {
   const supabase = createSupabaseServerClient();
   try {
     const { data: bills, error: billsError } = await supabase.from('bills').select('id, grand_total, created_at, bill_categories(name)');
@@ -1167,29 +1167,4 @@ async function getSpendingAnalysisAction(): Promise<{ success: boolean; data?: S
   }
 }
 
-// Ensure the functions are properly exported for use in components.
-module.exports = {
-  signupUserAction,
-  loginUserAction,
-  getCurrentUserAction,
-  logoutUserAction,
-  createBillCategoryAction,
-  getUserCategoriesAction,
-  createBillAction,
-  addParticipantAction,
-  removeParticipantAction,
-  handleScanReceiptAction,
-  addBillItemToDbAction,
-  updateBillItemInDbAction,
-  deleteBillItemFromDbAction,
-  handleSummarizeBillAction,
-  markSettlementsAsPaidAction,
-  updateUserProfileAction,
-  removeAvatarAction,
-  getBillsHistoryAction,
-  getBillDetailsAction,
-  getAllUsersAction,
-  getAdminDashboardDataAction,
-  getRevenueDataAction,
-  getSpendingAnalysisAction
-};
+    

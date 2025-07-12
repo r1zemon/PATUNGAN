@@ -702,6 +702,7 @@ export async function markSettlementsAsPaidAction(billId: string): Promise<{ suc
     revalidatePath('/', 'page');
     revalidatePath('/app/history', 'page');
     revalidatePath('/app', 'page');
+    revalidatePath('/admin/revenue', 'page');
     return { success: true };
   } catch (e: any) {
     console.error("Error marking settlements as paid:", e);
@@ -1085,8 +1086,20 @@ export async function getAdminDashboardDataAction(): Promise<{ success: boolean;
 export async function getRevenueDataAction(): Promise<{ success: boolean; data?: RevenueData, error?: string }> {
   const supabase = createSupabaseServerClient();
   try {
-    const { data: settlements } = await supabase.from('settlements').select('amount, service_fee, bill_id, created_at, bills(category_id, bill_categories(name))').eq('status', 'paid');
-    if (!settlements) return { success: false, error: "Tidak ada data settlement." };
+    const { data: settlements, error: settlementError } = await supabase.from('settlements').select('amount, service_fee, bill_id, created_at, bills(category_id, bill_categories(name))').eq('status', 'paid');
+    
+    if(settlementError) {
+      console.error("Error fetching settlements for revenue: ", settlementError);
+      return { success: false, error: "Gagal mengambil data transaksi: " + settlementError.message };
+    }
+
+    if (!settlements || settlements.length === 0) {
+      // It's not an error if there's no revenue yet, just return empty state.
+      return { success: true, data: {
+        totalRevenue: 0, totalTransactions: 0, totalPayingUsers: 0, averageFeePerTransaction: 0, 
+        revenueTrend: [], transactionTrend: [], revenueByCategory: []
+      }};
+    }
 
     const totalRevenue = settlements.reduce((acc, s) => acc + (s.service_fee || 0), 0);
     const totalTransactions = new Set(settlements.map(s => s.bill_id)).size;
@@ -1166,5 +1179,3 @@ export async function getSpendingAnalysisAction(): Promise<{ success: boolean; d
     return { success: false, error: e.message };
   }
 }
-
-    

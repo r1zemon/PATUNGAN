@@ -850,7 +850,7 @@ export default function SplitBillAppPage() {
                   <div className="mt-6 border-t pt-6 text-center">
                     <h3 className="text-lg font-semibold flex items-center justify-center mb-4"><QrCode className="mr-2 h-6 w-6"/>Selesaikan Pembayaran</h3>
                     <div className="flex justify-center mb-4">
-                        <img src="https://placehold.co/250x250.png" alt="QR Code" width="250" height="250" data-ai-hint="qr code" />
+                        <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/d/d0/QR_code_for_mobile_English_Wikipedia.svg/375px-QR_code_for_mobile_English_Wikipedia.svg.png" alt="QR Code" width="250" height="250" data-ai-hint="qr code" />
                     </div>
                     <Alert className="max-w-md mx-auto text-left">
                       <AlertTitle>Perhatian!</AlertTitle>

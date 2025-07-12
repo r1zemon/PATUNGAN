@@ -645,16 +645,18 @@ export async function handleSummarizeBillAction(
 
     await supabase.from('settlements').delete().eq('bill_id', billId);
 
-    const settlementInserts: Omit<SettlementInsert, 'service_fee'>[] = people
+    const settlementInserts: SettlementInsert[] = people
       .filter(p => p.id !== payerParticipantId && (rawSummary[p.name] ?? 0) > 0)
       .map(p => {
         const amount = rawSummary[p.name] ?? 0;
+        const serviceFee = amount * 0.01; // Calculate 1% service fee
         return {
           bill_id: billId,
           from_participant_id: p.id,
           to_participant_id: payerParticipantId,
           amount: amount,
           status: 'unpaid' as const,
+          service_fee: serviceFee, // Add service fee to the insert object
         }
       });
 

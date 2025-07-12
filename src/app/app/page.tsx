@@ -366,7 +366,7 @@ export default function SplitBillAppPage() {
     setDetailedBillSummary(null); 
     const result = await handleScanReceiptAction(currentBillId, receiptDataUri);
 
-    if (!result) { // Added guard
+    if (!result) { 
       toast({ variant: "destructive", title: "Pemindaian Gagal", description: "Terjadi kesalahan tak terduga pada server." });
       setIsScanning(false);
       return;

@@ -10,6 +10,7 @@ import type { PostgrestSingleResponse, User as SupabaseUser } from "@supabase/su
 import type { Database } from '@/lib/database.types';
 import { format, startOfMonth, endOfMonth, parseISO, isFuture } from 'date-fns';
 import { id as IndonesianLocale } from 'date-fns/locale';
+import { formatCurrency } from "./utils";
 
 
 type SettlementInsert = Database['public']['Tables']['settlements']['Insert'];
@@ -345,9 +346,7 @@ export async function createBillAction(
 
     const participantResult = await addParticipantAction(billData.id, creatorName, user.id);
     if (!participantResult.success) {
-      // Rollback or notify about failed participant creation
       console.error("Failed to add creator as participant:", participantResult.error);
-      // Optional: Delete the created bill to avoid orphaned bills
       await supabase.from('bills').delete().eq('id', billData.id);
       return { success: false, error: `Gagal menambahkan kreator sebagai partisipan: ${participantResult.error}` };
     }
@@ -357,7 +356,6 @@ export async function createBillAction(
       revalidatePath('/app/history', 'page');
     }
     
-    // We only need to return the billId, the frontend will redirect.
     return { success: true, billId: billData.id };
   } catch (e: any) {
     return { success: false, error: e.message || "Kesalahan server saat membuat tagihan." };
@@ -433,7 +431,7 @@ export async function removeParticipantAction(participantId: string): Promise<{ 
 export async function handleScanReceiptAction(
   billId: string,
   receiptDataUri: string
-): Promise<{ success: boolean; data?: { items: ScannedItem[], taxAmount: number }; error?: string }> {
+): Promise<{ success: boolean; data?: { items: ScannedItem[], taxAmount: number }; error?: string } | undefined> {
   const supabase = createSupabaseServerClient();
   if (!billId) return { success: false, error: "Bill ID tidak disediakan." };
   if (!receiptDataUri) return { success: false, error: "Tidak ada data gambar." };
@@ -647,7 +645,7 @@ export async function handleSummarizeBillAction(
 
     await supabase.from('settlements').delete().eq('bill_id', billId);
 
-    const settlementInserts: SettlementInsert[] = people
+    const settlementInserts: Omit<SettlementInsert, 'service_fee'>[] = people
       .filter(p => p.id !== payerParticipantId && (rawSummary[p.name] ?? 0) > 0)
       .map(p => {
         const amount = rawSummary[p.name] ?? 0;
@@ -657,7 +655,6 @@ export async function handleSummarizeBillAction(
           to_participant_id: payerParticipantId,
           amount: amount,
           status: 'unpaid' as const,
-          service_fee: amount * 0.01, // Calculate 1% service fee
         }
       });
 
@@ -1109,5 +1106,3 @@ export async function getAllUsersAction() {
     }
     return { success: true, users: data }
 }
-
-    

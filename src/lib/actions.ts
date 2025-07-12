@@ -348,7 +348,7 @@ export async function createBillAction(
       // Rollback or notify about failed participant creation
       console.error("Failed to add creator as participant:", participantResult.error);
       // Optional: Delete the created bill to avoid orphaned bills
-      // await supabase.from('bills').delete().eq('id', billData.id);
+      await supabase.from('bills').delete().eq('id', billData.id);
       return { success: false, error: `Gagal menambahkan kreator sebagai partisipan: ${participantResult.error}` };
     }
 
@@ -1109,3 +1109,5 @@ export async function getAllUsersAction() {
     }
     return { success: true, users: data }
 }
+
+    

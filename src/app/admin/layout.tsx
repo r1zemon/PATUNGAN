@@ -1,6 +1,5 @@
 import "./globals.css"
 import { Inter } from "next/font/google"
-import { TopNav } from "@/components/admin/top-nav"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { SettingsProvider } from "@/contexts/settings-context"
 import type React from "react"
@@ -24,12 +23,9 @@ export default function RootLayout({
       <TooltipProvider delayDuration={0}>
         <div className="flex h-screen bg-slate-50">
           <Sidebar />
-          <div className="flex-1 flex flex-col overflow-hidden">
-            <TopNav />
-            <main className="flex-1 overflow-x-hidden overflow-y-auto bg-slate-50 p-6">
+          <main className="flex-1 overflow-x-hidden overflow-y-auto bg-slate-50 p-6">
               <div className="container mx-auto max-w-7xl">{children}</div>
-            </main>
-          </div>
+          </main>
         </div>
       </TooltipProvider>
     </SettingsProvider>

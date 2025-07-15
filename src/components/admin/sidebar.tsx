@@ -1,9 +1,12 @@
 "use client"
 
 import Link from "next/link"
-import { usePathname } from "next/navigation"
-import { Home, Users, DollarSign, BarChart2, Settings, LifeBuoy } from "lucide-react"
+import { usePathname, useRouter } from "next/navigation"
+import { Home, Users, DollarSign, BarChart2, LogOut } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { Button } from "@/components/ui/button"
+import { useToast } from "@/hooks/use-toast"
+import { logoutUserAction } from "@/lib/actions"
 
 const navItems = [
   { href: "/admin", label: "Dashboard", icon: Home },
@@ -16,13 +19,21 @@ const navItems = [
   },
 ]
 
-const bottomNavItems = [
-  { href: "/admin/settings", label: "Settings", icon: Settings },
-  { href: "/admin/support", label: "Support", icon: LifeBuoy },
-]
-
 export function Sidebar() {
   const pathname = usePathname()
+  const router = useRouter()
+  const { toast } = useToast()
+
+  const handleLogout = async () => {
+    const { success, error } = await logoutUserAction()
+    if (success) {
+      toast({ title: "Logout Berhasil" })
+      router.push("/login")
+      router.refresh()
+    } else {
+      toast({ variant: "destructive", title: "Logout Gagal", description: error })
+    }
+  }
 
   const renderNavItem = (item: {
     href: string
@@ -55,7 +66,14 @@ export function Sidebar() {
         <nav className="px-4 space-y-2">{navItems.map(renderNavItem)}</nav>
       </div>
       <div className="p-4 border-t">
-        <nav className="space-y-2">{bottomNavItems.map(renderNavItem)}</nav>
+        <Button
+          onClick={handleLogout}
+          variant="ghost"
+          className="w-full justify-start text-gray-600 hover:bg-gray-100"
+        >
+          <LogOut className="mr-3 h-5 w-5" />
+          <span>Logout</span>
+        </Button>
       </div>
     </div>
   )

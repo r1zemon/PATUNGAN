@@ -14,7 +14,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Laptop, Smartphone, Tablet } from "lucide-react"
 import { useState } from "react"
-import { toast } from "sonner"
+import { toast } from "@/hooks/use-toast"
 
 const defaultAvatars = [
   "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/9439775.jpg-4JVJWOjPksd3DtnBYJXoWHA5lc1DU9.jpeg",
@@ -41,17 +41,17 @@ export default function SettingsPage() {
       phone: settings.phone,
       timezone: settings.timezone,
     })
-    toast.success("Account settings saved successfully")
+    toast({ title: "Account settings saved successfully" })
   }
 
   const handleSaveNotifications = () => {
     updateNotificationSettings(settings.notifications)
-    toast.success("Notification settings saved successfully")
+    toast({ title: "Notification settings saved successfully" })
   }
 
   const handleSavePrivacy = () => {
     updatePrivacySettings(settings.privacy)
-    toast.success("Privacy settings saved successfully")
+    toast({ title: "Privacy settings saved successfully" })
   }
 
   return (
@@ -364,9 +364,9 @@ export default function SettingsPage() {
                   <div className="flex items-center space-x-2">
                     <Checkbox
                       id="email-notifications"
-                      defaultChecked={settings.notifications.email}
-                      onChange={(e) =>
-                        updateNotificationSettings({ ...settings.notifications, email: e.target.checked })
+                      checked={settings.notifications.email}
+                      onCheckedChange={(checked) =>
+                        updateNotificationSettings({ ...settings.notifications, email: Boolean(checked) })
                       }
                     />
                     <Label htmlFor="email-notifications">Email Notifications</Label>
@@ -374,9 +374,9 @@ export default function SettingsPage() {
                   <div className="flex items-center space-x-2">
                     <Checkbox
                       id="push-notifications"
-                      defaultChecked={settings.notifications.push}
-                      onChange={(e) =>
-                        updateNotificationSettings({ ...settings.notifications, push: e.target.checked })
+                      checked={settings.notifications.push}
+                      onCheckedChange={(checked) =>
+                        updateNotificationSettings({ ...settings.notifications, push: Boolean(checked) })
                       }
                     />
                     <Label htmlFor="push-notifications">Push Notifications</Label>
@@ -384,8 +384,8 @@ export default function SettingsPage() {
                   <div className="flex items-center space-x-2">
                     <Checkbox
                       id="sms-notifications"
-                      defaultChecked={settings.notifications.sms}
-                      onChange={(e) => updateNotificationSettings({ ...settings.notifications, sms: e.target.checked })}
+                      checked={settings.notifications.sms}
+                      onCheckedChange={(checked) => updateNotificationSettings({ ...settings.notifications, sms: Boolean(checked) })}
                     />
                     <Label htmlFor="sms-notifications">SMS Notifications</Label>
                   </div>
@@ -395,9 +395,9 @@ export default function SettingsPage() {
                   <div className="flex items-center space-x-2">
                     <Checkbox
                       id="account-activity"
-                      defaultChecked={settings.notifications.accountActivity}
-                      onChange={(e) =>
-                        updateNotificationSettings({ ...settings.notifications, accountActivity: e.target.checked })
+                      checked={settings.notifications.accountActivity}
+                      onCheckedChange={(checked) =>
+                        updateNotificationSettings({ ...settings.notifications, accountActivity: Boolean(checked) })
                       }
                     />
                     <Label htmlFor="account-activity">Account Activity</Label>
@@ -405,9 +405,9 @@ export default function SettingsPage() {
                   <div className="flex items-center space-x-2">
                     <Checkbox
                       id="new-features"
-                      defaultChecked={settings.notifications.newFeatures}
-                      onChange={(e) =>
-                        updateNotificationSettings({ ...settings.notifications, newFeatures: e.target.checked })
+                      checked={settings.notifications.newFeatures}
+                      onCheckedChange={(checked) =>
+                        updateNotificationSettings({ ...settings.notifications, newFeatures: Boolean(checked) })
                       }
                     />
                     <Label htmlFor="new-features">New Features and Updates</Label>
@@ -415,9 +415,9 @@ export default function SettingsPage() {
                   <div className="flex items-center space-x-2">
                     <Checkbox
                       id="marketing"
-                      defaultChecked={settings.notifications.marketing}
-                      onChange={(e) =>
-                        updateNotificationSettings({ ...settings.notifications, marketing: e.target.checked })
+                      checked={settings.notifications.marketing}
+                      onCheckedChange={(checked) =>
+                        updateNotificationSettings({ ...settings.notifications, marketing: Boolean(checked) })
                       }
                     />
                     <Label htmlFor="marketing">Marketing and Promotions</Label>
@@ -473,8 +473,8 @@ export default function SettingsPage() {
                       <Switch
                         id="analytics-sharing"
                         checked={settings.privacy.analyticsSharing}
-                        onChange={(e) =>
-                          updatePrivacySettings({ ...settings.privacy, analyticsSharing: e.target.checked })
+                        onCheckedChange={(checked) =>
+                          updatePrivacySettings({ ...settings.privacy, analyticsSharing: Boolean(checked) })
                         }
                       />
                     </div>
@@ -483,8 +483,8 @@ export default function SettingsPage() {
                       <Switch
                         id="personalized-ads"
                         checked={settings.privacy.personalizedAds}
-                        onChange={(e) =>
-                          updatePrivacySettings({ ...settings.privacy, personalizedAds: e.target.checked })
+                        onCheckedChange={(checked) =>
+                          updatePrivacySettings({ ...settings.privacy, personalizedAds: Boolean(checked) })
                         }
                       />
                     </div>

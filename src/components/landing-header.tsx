@@ -58,7 +58,8 @@ export function LandingHeader() {
       setAuthUser(null);
       setUserProfile(null);
       setIsMobileMenuOpen(false);
-      router.refresh(); // This forces a server-side data re-fetch for the current route.
+       // Force a full page reload to clear all client-side state and update header correctly
+      window.location.href = "/login";
     } else {
       toast({ variant: "destructive", title: "Logout Gagal", description: error });
     }
@@ -122,7 +123,7 @@ export function LandingHeader() {
         </Link>
 
         <nav className="hidden md:flex items-center space-x-6">
-          {navLinks.map((link) => (
+          {authUser && navLinks.map((link) => (
             <Link
               key={link.label}
               href={link.href}
@@ -210,7 +211,7 @@ export function LandingHeader() {
                 </SheetTitle>
               </SheetHeader>
               <nav className="flex flex-col space-y-1 p-4 pt-2">
-                {navLinks.map((link) => {
+                {authUser && navLinks.map((link) => {
                   const IconComponent = link.icon;
                   return (
                     <Link

@@ -1,3 +1,4 @@
+
 "use client"
 
 import Link from "next/link"
@@ -28,8 +29,8 @@ export function Sidebar() {
     const { success, error } = await logoutUserAction()
     if (success) {
       toast({ title: "Logout Berhasil" })
-      router.push("/login")
-      router.refresh()
+      // Force a full page reload to clear all client-side state
+      window.location.href = "/login";
     } else {
       toast({ variant: "destructive", title: "Logout Gagal", description: error })
     }

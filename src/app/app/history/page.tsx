@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
-import { Power, FilePlus, Loader2, History as HistoryIconLucide, Users, Coins, CalendarDays, BarChart2, Star, Zap, ShoppingBag, Tag, ListChecks } from "lucide-react"; 
+import { Power, FilePlus, Loader2, History as HistoryIconLucide, Users, Coins, CalendarDays, BarChart2, Star, Zap, ShoppingBag, Tag, ListChecks, ChevronRight, Clock } from "lucide-react"; 
 import {
   Dialog,
   DialogContent,
@@ -152,74 +152,52 @@ export default function HistoryPage() {
         )}
 
         {displayedBills.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {displayedBills.map((bill) => (
-              <Card key={bill.id} className="shadow-lg hover:shadow-xl transition-shadow duration-300 ease-in-out flex flex-col">
-                <CardHeader>
-                  <CardTitle className="truncate text-xl">{bill.name || "Tagihan Tanpa Nama"}</CardTitle>
-                  <CardDescription className="flex items-center text-sm">
-                    <CalendarDays className="mr-2 h-4 w-4 text-muted-foreground" />
-                    {bill.scheduled_at ? 
-                        `Dijadwalkan: ${format(parseISO(bill.scheduled_at), "dd MMMM yyyy, HH:mm", { locale: IndonesianLocale })}` :
-                        format(parseISO(bill.createdAt), "dd MMMM yyyy, HH:mm", { locale: IndonesianLocale })
-                    }
-                  </CardDescription>
-                  {bill.categoryName && (
-                     <Badge variant="outline" className="mt-1 w-fit text-xs">
-                        <Tag className="mr-1.5 h-3 w-3"/>
-                        {bill.categoryName}
-                    </Badge>
-                  )}
-                </CardHeader>
-                <CardContent className="space-y-3 flex-grow">
-                   {bill.grandTotal !== null ? (
-                    <>
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-muted-foreground flex items-center"><Coins className="mr-2 h-4 w-4"/>Total Tagihan:</span>
-                        <span className="font-semibold text-primary">{formatCurrency(bill.grandTotal || 0, "IDR")}</span>
+          <div className="bg-card rounded-lg shadow-lg border">
+            <ul className="divide-y divide-border">
+              {displayedBills.map((bill) => (
+                <li key={bill.id} className="p-4 hover:bg-muted/50 transition-colors">
+                  <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-lg font-semibold text-foreground truncate">{bill.name || "Tagihan Tanpa Nama"}</p>
+                      <div className="flex items-center text-sm text-muted-foreground mt-1 flex-wrap gap-x-4 gap-y-1">
+                        <span className="flex items-center">
+                          <CalendarDays className="mr-1.5 h-4 w-4" />
+                          {bill.scheduled_at ? 
+                              `Jadwal: ${format(parseISO(bill.scheduled_at), "dd MMM yyyy, HH:mm", { locale: IndonesianLocale })}` :
+                              format(parseISO(bill.createdAt), "dd MMM yyyy, HH:mm", { locale: IndonesianLocale })
+                          }
+                        </span>
+                        {bill.categoryName && (
+                          <span className="flex items-center">
+                            <Tag className="mr-1.5 h-4 w-4" />
+                            {bill.categoryName}
+                          </span>
+                        )}
+                         <span className="flex items-center">
+                            <Users className="mr-1.5 h-4 w-4" />
+                            {bill.participantCount} orang
+                        </span>
                       </div>
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-muted-foreground flex items-center"><Users className="mr-2 h-4 w-4"/>Dibayar Oleh:</span>
-                        <span className="font-medium truncate">{bill.payerName || "-"}</span>
-                      </div>
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-muted-foreground flex items-center"><Users className="mr-2 h-4 w-4"/>Partisipan:</span>
-                        <span className="font-medium">{bill.participantCount} orang</span>
-                      </div>
-                    </>
-                   ) : (
-                    <div className="text-sm text-muted-foreground flex items-center">
-                        <ShoppingBag className="mr-2 h-4 w-4 text-amber-500" />
-                        Tagihan ini dijadwalkan dan detailnya belum diisi.
                     </div>
-                   )}
-                </CardContent>
-                <CardFooter>
-                  <Button variant="outline" className="w-full" onClick={() => handleViewDetails(bill.id)}>
-                    Lihat Detail
-                  </Button>
-                </CardFooter>
-              </Card>
-            ))}
+                    <div className="flex sm:flex-col items-end sm:items-end justify-between sm:justify-center flex-shrink-0 sm:text-right gap-2">
+                       {bill.grandTotal !== null && bill.grandTotal > 0 ? (
+                         <span className="text-lg font-bold text-primary">{formatCurrency(bill.grandTotal, "IDR")}</span>
+                       ) : (
+                         <Badge variant="outline" className="py-1 px-2 text-xs">
+                           <Clock className="mr-1.5 h-3 w-3 text-amber-500" />
+                           Terjadwal
+                         </Badge>
+                       )}
+                       <Button variant="outline" size="sm" onClick={() => handleViewDetails(bill.id)}>
+                         Lihat Detail <ChevronRight className="ml-1 h-4 w-4" />
+                       </Button>
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
           </div>
         )}
-
-        <Card className="shadow-lg mt-10 mb-8">
-            <CardHeader>
-              <CardTitle className="flex items-center"><BarChart2 className="mr-2 h-5 w-5 text-primary"/> Ringkasan Finansial</CardTitle>
-              <CardDescription>Statistik penggunaan aplikasi Patungan Anda.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <h4 className="font-medium">Total Pengeluaran Bulan Ini:</h4>
-                <p className="text-muted-foreground">Segera hadir! (Fitur grafik pengeluaran bulanan sedang dikembangkan).</p>
-              </div>
-              <div>
-                <h4 className="font-medium">Total Tagihan Dibuat:</h4>
-                <p className="text-muted-foreground">Segera hadir! (Jumlah tagihan yang pernah Anda inisiasi).</p>
-              </div>
-            </CardContent>
-        </Card>
       </main>
 
       <Dialog open={isDetailDialogOpen} onOpenChange={setIsDetailDialogOpen}>
@@ -254,6 +232,8 @@ export default function HistoryPage() {
                 <SummaryDisplay 
                   summary={selectedBillForDetail.summaryData} 
                   people={selectedBillForDetail.participants} 
+                  onPayWithQris={() => {}} // Dummy functions for now
+                  onMarkAsPaidOffline={() => {}}
                 />
               </div>
             ) : (

@@ -138,27 +138,7 @@ export default function LoginPage() {
             </CardContent>
           )}
           <CardFooter className="flex flex-col space-y-4">
-            <div className="relative w-full">
-              <Separator />
-              <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-card px-2 text-xs text-muted-foreground">
-                Atau masuk dengan
-              </span>
-            </div>
-            <div className="grid grid-cols-3 gap-3 w-full">
-              <Button variant="outline" className="py-6" onClick={() => toast({ title: "Info", description: "Login dengan Google belum diimplementasikan."})}>
-                <GoogleIcon className="h-5 w-5" />
-                <span className="sr-only">Masuk dengan Google</span>
-              </Button>
-              <Button variant="outline" className="py-6" onClick={() => toast({ title: "Info", description: "Login dengan Facebook belum diimplementasikan."})}>
-                <FacebookIcon className="h-5 w-5" />
-                <span className="sr-only">Masuk dengan Facebook</span>
-              </Button>
-              <Button variant="outline" className="py-6" onClick={() => toast({ title: "Info", description: "Login dengan Apple belum diimplementasikan."})}>
-                <AppleIcon className="h-5 w-5" />
-                <span className="sr-only">Masuk dengan Apple</span>
-              </Button>
-            </div>
-            <p className="text-center text-sm text-muted-foreground">
+            <p className="text-center text-sm text-muted-foreground pt-4 border-t w-full">
               Belum punya akun?{" "}
               <Link href="/signup" className="font-semibold text-primary hover:underline">
                 Daftar di sini

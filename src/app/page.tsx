@@ -12,17 +12,29 @@ import type { User as SupabaseUser } from "@supabase/supabase-js";
 import { getCurrentUserAction } from '@/lib/actions';
 import { LandingPageContent } from '@/components/landing-page-content'; // Komponen baru
 import { DashboardClient } from '@/components/dashboard/dashboard-client'; // Komponen baru
+import { useRouter } from 'next/navigation';
+import type { UserProfileBasic } from '@/lib/types';
+
 
 export default function HomePage() {
   const [authUser, setAuthUser] = useState<SupabaseUser | null>(null);
+  const [userProfile, setUserProfile] = useState<UserProfileBasic | null>(null);
   const [isLoadingUser, setIsLoadingUser] = useState(true);
+  const router = useRouter();
 
   const fetchUser = useCallback(async () => {
     setIsLoadingUser(true);
-    const { user } = await getCurrentUserAction();
+    const { user, profile } = await getCurrentUserAction();
     setAuthUser(user);
-    setIsLoadingUser(false);
-  }, []);
+    setUserProfile(profile);
+
+    // Role-based redirection logic
+    if (user && profile?.role === 'admin') {
+      router.replace('/admin');
+    } else {
+      setIsLoadingUser(false);
+    }
+  }, [router]);
 
   useEffect(() => {
     fetchUser();
@@ -33,7 +45,7 @@ export default function HomePage() {
       <LandingHeader />
       <main className="relative z-[1] flex-grow">
         {isLoadingUser ? (
-          <div className="flex flex-col items-center justify-center flex-grow p-4 min-h-[calc(100vh-14rem)]"> {/* Adjust min-height as needed */}
+          <div className="flex flex-col items-center justify-center flex-grow p-4 min-h-[calc(100vh-14rem)]">
             <Loader2 className="h-12 w-12 animate-spin text-primary" />
             <p className="mt-4 text-lg text-foreground">Memuat data pengguna...</p>
           </div>

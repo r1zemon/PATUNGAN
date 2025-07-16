@@ -1,15 +1,17 @@
 
+
 "use server";
 
 import { scanReceipt, ScanReceiptOutput, ReceiptItem as AiReceiptItem } from "@/ai/flows/scan-receipt";
 import { summarizeBill, SummarizeBillInput } from "@/ai/flows/summarize-bill";
-import type { SplitItem, Person, RawBillSummary, TaxTipSplitStrategy, ScannedItem, BillHistoryEntry, BillCategory, DashboardData, MonthlyExpenseByCategory, ExpenseChartDataPoint, RecentBillDisplayItem, ScheduledBillDisplayItem, DetailedBillSummaryData, Settlement, FetchedBillDetails, PersonalShareDetail, UserProfileBasic, FriendRequestDisplay, FriendDisplay, SettlementStatus, BillInvitation } from "./types";
+import type { SplitItem, Person, RawBillSummary, TaxTipSplitStrategy, ScannedItem, BillHistoryEntry, BillCategory, DashboardData, MonthlyExpenseByCategory, ExpenseChartDataPoint, RecentBillDisplayItem, ScheduledBillDisplayItem, FetchedBillDetails, Settlement, FetchedBillDetailsWithItems, PersonalShareDetail, SettlementStatus, PersonalItemDetail, AdminDashboardData, RevenueData, SpendingAnalysisData } from "./types";
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
 import type { PostgrestSingleResponse, User as SupabaseUser } from "@supabase/supabase-js";
 import type { Database } from '@/lib/database.types';
-import { format, startOfMonth, endOfMonth, parseISO, isFuture } from 'date-fns';
+import { format, startOfMonth, endOfMonth, parseISO, isFuture, subMonths, subDays } from 'date-fns';
 import { id as IndonesianLocale } from 'date-fns/locale';
+import { formatCurrency } from "./utils";
 
 
 type SettlementInsert = Database['public']['Tables']['settlements']['Insert'];
@@ -141,22 +143,42 @@ export async function loginUserAction(formData: FormData) {
     return { success: false, error: "Email dan password wajib diisi." };
   }
 
-  const { data, error } = await supabase.auth.signInWithPassword({
+  const { data: loginData, error: loginError } = await supabase.auth.signInWithPassword({
     email,
     password,
   });
 
-  if (error) {
-    return { success: false, error: error.message };
+  if (loginError) {
+    return { success: false, error: loginError.message };
   }
+
+  if (!loginData.user) {
+    return { success: false, error: "Gagal mendapatkan data pengguna setelah login." };
+  }
+
+  // Fetch the user's profile to get their role
+  const { data: profileData, error: profileError } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', loginData.user.id)
+    .single();
+  
+  if (profileError) {
+    // Log out the user if their profile can't be fetched, to be safe
+    await supabase.auth.signOut();
+    return { success: false, error: "Login berhasil, tetapi gagal mengambil profil pengguna." };
+  }
+
+  const role = profileData.role;
 
   revalidatePath('/', 'layout');
   revalidatePath('/', 'page');
-  return { success: true, user: data.user };
+  
+  return { success: true, user: loginData.user, role };
 }
 
 
-export async function getCurrentUserAction(): Promise<{ user: SupabaseUser | null; profile: UserProfileBasic | null; error?: string }> {
+export async function getCurrentUserAction(): Promise<{ user: SupabaseUser | null; profile: any | null; error?: string }> {
   const supabase = createSupabaseServerClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
 
@@ -171,7 +193,7 @@ export async function getCurrentUserAction(): Promise<{ user: SupabaseUser | nul
   try {
     const { data: profileData, error: profileError } = await supabase
       .from('profiles')
-      .select('id, username, full_name, avatar_url')
+      .select('id, username, full_name, avatar_url, role')
       .eq('id', user.id)
       .single();
 
@@ -179,7 +201,7 @@ export async function getCurrentUserAction(): Promise<{ user: SupabaseUser | nul
       console.error("Error fetching profile for user:", user.id, profileError.message);
       return { user: user, profile: null, error: "Gagal mengambil profil: " + profileError.message };
     }
-    return { user: user, profile: profileData as UserProfileBasic | null };
+    return { user: user, profile: profileData as any | null };
   } catch (e: any) {
     console.error("Exception fetching profile in getCurrentUserAction:", e);
     return { user: user, profile: null, error: "Terjadi kesalahan server saat mengambil profil: " + e.message };
@@ -293,22 +315,17 @@ export async function getUserCategoriesAction(): Promise<{ success: boolean; cat
 export async function createBillAction(
   billName: string,
   categoryId: string | null,
-  scheduledAt?: string | null
+  scheduledAt: string | null | undefined,
+  creatorName: string
 ): Promise<{ success: boolean; billId?: string; error?: string }> {
+  const supabase = createSupabaseServerClient();
+  const { data: { user } , error: authError } = await supabase.auth.getUser();
+
+  if (authError || !user) {
+    return { success: false, error: "Pengguna tidak terautentikasi." };
+  }
+
   try {
-    const supabase = createSupabaseServerClient();
-    const { data: { user } , error: authError } = await supabase.auth.getUser();
-
-    if (authError) {
-      console.error("createBillAction - authError:", authError.message);
-      return { success: false, error: "Gagal mendapatkan sesi pengguna (authError): " + authError.message };
-    }
-
-    if (!user) {
-       console.warn("createBillAction: User object is null. Cannot create bill.");
-       return { success: false, error: "Pengguna tidak terautentikasi. Tidak dapat membuat tagihan." };
-    }
-
     const billInsertData: Database['public']['Tables']['bills']['Insert'] = {
       name: billName || "Tagihan Baru",
       user_id: user.id,
@@ -319,24 +336,32 @@ export async function createBillAction(
     const { data: billData, error: billInsertError } = await supabase
       .from('bills')
       .insert([billInsertData])
-      .select('id')
+      .select('id, name')
       .single();
 
     if (billInsertError) {
-      console.error("Error creating bill:", billInsertError);
-      return { success: false, error: "Gagal membuat tagihan di database: " + billInsertError.message };
+        throw new Error("Gagal membuat tagihan: " + billInsertError.message);
     }
     if (!billData || !billData.id) {
-      return { success: false, error: "Gagal membuat tagihan atau mengambil ID tagihan setelah insert." };
+        throw new Error("Gagal mendapatkan ID tagihan setelah pembuatan.");
     }
-     if (scheduledAt) {
+
+    const participantResult = await addParticipantAction(billData.id, creatorName, user.id);
+    if (!participantResult.success) {
+      console.error("Failed to add creator as participant:", participantResult.error);
+      // Rollback bill creation if participant add fails
+      await supabase.from('bills').delete().eq('id', billData.id);
+      return { success: false, error: `Gagal menambahkan kreator sebagai partisipan: ${participantResult.error}` };
+    }
+
+    if (scheduledAt) {
       revalidatePath('/', 'page');
       revalidatePath('/app/history', 'page');
     }
+    
     return { success: true, billId: billData.id };
   } catch (e: any) {
-    console.error("Exception in createBillAction:", e);
-    return { success: false, error: e.message || "Terjadi kesalahan server saat membuat tagihan." };
+    return { success: false, error: e.message || "Kesalahan server saat membuat tagihan." };
   }
 }
 
@@ -346,44 +371,42 @@ export async function addParticipantAction(billId: string, personName: string, p
     return { success: false, error: "ID Tagihan dan nama orang diperlukan." };
   }
   try {
-    const status: 'invited' | 'joined' = profileId ? 'invited' : 'joined';
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+        return { success: false, error: "Pengguna tidak terautentikasi." };
+    }
+
     const insertData: Database['public']['Tables']['bill_participants']['Insert'] = {
       bill_id: billId,
       name: personName.trim(),
       profile_id: profileId || null,
-      status: status,
     };
 
     const { data, error } = await supabase
       .from('bill_participants')
       .insert([insertData])
-      .select('id, name, profile_id, status, created_at')
+      .select('id, name, profile_id, created_at, profiles(avatar_url)')
       .single();
 
     if (error) {
       if (error.code === '23505') { // unique constraint violation
         return { success: false, error: "Pengguna ini sudah diundang atau ditambahkan ke tagihan." };
       }
-      console.error("Error adding participant:", error);
       return { success: false, error: error.message };
     }
     if (!data) {
       return { success: false, error: "Gagal menambahkan partisipan atau mengambil data." };
     }
     
-    // Construct the Person object for the client
     const person: Person = { 
       id: data.id, 
       name: data.name,
       profile_id: data.profile_id,
-      status: data.status as 'joined' | 'invited',
-      // avatar_url will be added on the client-side for invited friends, or fetched in getBillDetails
+      avatar_url: (data.profiles as any)?.avatar_url || null,
     };
 
-    revalidatePath(`/app/notifications`); // Revalidate a conceptual path for notifications
     return { success: true, person };
   } catch (e: any) {
-    console.error("Exception in addParticipantAction:", e);
     return { success: false, error: e.message || "Terjadi kesalahan server saat menambahkan partisipan." };
   }
 }
@@ -400,12 +423,10 @@ export async function removeParticipantAction(participantId: string): Promise<{ 
       .eq('id', participantId);
 
     if (error) {
-      console.error("Error removing participant:", error);
       return { success: false, error: error.message };
     }
     return { success: true };
   } catch (e: any) {
-    console.error("Exception in removeParticipantAction:", e);
     return { success: false, error: e.message || "Terjadi kesalahan server saat menghapus partisipan." };
   }
 }
@@ -414,19 +435,10 @@ export async function removeParticipantAction(participantId: string): Promise<{ 
 export async function handleScanReceiptAction(
   billId: string,
   receiptDataUri: string
-): Promise<{ success: boolean; data?: { items: ScannedItem[] }; error?: string }> {
+): Promise<{ success: boolean; data?: { items: ScannedItem[], taxAmount: number }; error?: string }> {
   const supabase = createSupabaseServerClient();
-  if (!billId) {
-    return { success: false, error: "Bill ID tidak disediakan untuk menyimpan item struk." };
-  }
-  if (!receiptDataUri) {
-    return { success: false, error: "Tidak ada data gambar struk." };
-  }
-  if (!receiptDataUri.startsWith("data:image/")) {
-    return { success: false, error: "Format data gambar tidak valid." };
-  }
-
-  console.log("handleScanReceiptAction (server): Received data URI for bill", billId);
+  if (!billId) return { success: false, error: "Bill ID tidak disediakan." };
+  if (!receiptDataUri) return { success: false, error: "Tidak ada data gambar." };
 
   try {
     const aiResult: ScanReceiptOutput = await scanReceipt({ receiptDataUri });
@@ -439,53 +451,40 @@ export async function handleScanReceiptAction(
         quantity: (typeof item.quantity === 'number' && item.quantity > 0) ? item.quantity : 1,
       }));
 
-      if (itemsToInsert.length === 0) {
-        return { success: true, data: { items: [] } };
+      let insertedDbItems: ScannedItem[] = [];
+      if (itemsToInsert.length > 0) {
+        const { data, error: insertError } = await supabase
+          .from('bill_items')
+          .insert(itemsToInsert)
+          .select('id, name, unit_price, quantity');
+
+        if (insertError) {
+          return { success: false, error: "Gagal menyimpan item ke database: " + insertError.message };
+        }
+        if (!data) {
+          return { success: false, error: "Gagal mendapatkan data item setelah disimpan." };
+        }
+        insertedDbItems = data.map(dbItem => ({
+          id: dbItem.id,
+          name: dbItem.name,
+          unitPrice: dbItem.unit_price,
+          quantity: dbItem.quantity,
+        }));
+      }
+      
+      const taxAmountFromAI = aiResult.taxAmount || 0;
+      if (taxAmountFromAI > 0) {
+         await supabase.from('bills').update({ tax_amount: taxAmountFromAI }).eq('id', billId);
       }
 
-      const { data: insertedDbItems, error: insertError } = await supabase
-        .from('bill_items')
-        .insert(itemsToInsert)
-        .select('id, name, unit_price, quantity');
-
-      if (insertError) {
-        console.error("handleScanReceiptAction (server): Error inserting scanned items to DB:", insertError);
-        return { success: false, error: "Gagal menyimpan item struk ke database: " + insertError.message };
-      }
-
-      if (!insertedDbItems) {
-        console.error("handleScanReceiptAction (server): No data returned after inserting scanned items.");
-        return { success: false, error: "Gagal mendapatkan data item setelah disimpan ke database." };
-      }
-
-      const appItems: ScannedItem[] = insertedDbItems.map(dbItem => ({
-        id: dbItem.id,
-        name: dbItem.name,
-        unitPrice: dbItem.unit_price,
-        quantity: dbItem.quantity,
-      }));
-
-      console.log("handleScanReceiptAction (server): Scan successful, " + appItems.length + " items mapped and saved to DB.");
-      return { success: true, data: { items: appItems } };
+      return { success: true, data: { items: insertedDbItems, taxAmount: taxAmountFromAI } };
     } else {
-      console.error("handleScanReceiptAction (server): scanReceipt returned an unexpected structure:", aiResult);
-      return { success: false, error: "Menerima data tak terduga dari pemindai. Silakan coba lagi." };
+      return { success: false, error: "Menerima data tak terduga dari pemindai." };
     }
   } catch (error) {
-    console.error("handleScanReceiptAction (server): Critical error during scanReceipt call or DB operation:", error);
-    let errorMessage = "Gagal memindai struk karena kesalahan server tak terduga. Silakan coba lagi.";
-    if (error instanceof Error) {
-        errorMessage = "Pemindaian gagal: " + error.message;
-        if (error.cause) {
-          try {
-            const causeString = String(error.cause);
-            errorMessage += " (Penyebab: " + causeString.substring(0, 200) + (causeString.length > 200 ? '...' : '') + ")";
-          } catch (e) {
-              errorMessage += " (Penyebab: Tidak dapat di-string-kan)";
-          }
-        }
-    }
-    return { success: false, error: errorMessage };
+    const message = error instanceof Error ? error.message : "Kesalahan server tak terduga.";
+    console.error("Error in handleScanReceiptAction:", error);
+    return { success: false, error: `Pemindaian gagal: ${message}` };
   }
 }
 
@@ -494,32 +493,19 @@ export async function addBillItemToDbAction(
   newItemData: { name: string; unitPrice: number; quantity: number }
 ): Promise<{ success: boolean; item?: ScannedItem; error?: string }> {
   const supabase = createSupabaseServerClient();
-  if (!billId) {
-    return { success: false, error: "Bill ID is required to add an item." };
-  }
-  if (!newItemData.name.trim()) {
-    return { success: false, error: "Item name cannot be empty." };
-  }
+  if (!billId) return { success: false, error: "Bill ID is required." };
+  if (!newItemData.name.trim()) return { success: false, error: "Item name cannot be empty." };
 
   try {
     const { data: insertedItem, error } = await supabase
       .from('bill_items')
-      .insert({
-        bill_id: billId,
-        name: newItemData.name,
-        unit_price: newItemData.unitPrice,
-        quantity: newItemData.quantity,
-      })
+      .insert({ bill_id: billId, ...newItemData })
       .select('id, name, unit_price, quantity')
       .single();
 
-    if (error) {
-      console.error("Error adding bill item to DB:", error);
-      return { success: false, error: "Failed to add item to database: " + error.message };
-    }
-    if (!insertedItem) {
-      return { success: false, error: "Failed to retrieve item data after insert." };
-    }
+    if (error) return { success: false, error: "Gagal menambah item: " + error.message };
+    if (!insertedItem) return { success: false, error: "Gagal mengambil data item setelah insert." };
+    
     return {
       success: true,
       item: {
@@ -530,92 +516,71 @@ export async function addBillItemToDbAction(
       },
     };
   } catch (e: any) {
-    console.error("Exception in addBillItemToDbAction:", e);
-    return { success: false, error: e.message || "Server error while adding bill item." };
+    return { success: false, error: e.message || "Server error while adding item." };
   }
 }
 
 export async function updateBillItemInDbAction(
-  itemId: string,
-  updates: Partial<Omit<ScannedItem, 'id'>>
+  updatedItem: SplitItem
 ): Promise<{ success: boolean; item?: ScannedItem; error?: string }> {
   const supabase = createSupabaseServerClient();
-  if (!itemId) {
-    return { success: false, error: "Item ID is required to update an item." };
-  }
-  if (updates.name !== undefined && !updates.name.trim()) {
-    return { success: false, error: "Item name cannot be empty." };
-  }
+  if (!updatedItem.id) return { success: false, error: "Item ID is required." };
+  if (!updatedItem.name.trim()) return { success: false, error: "Item name cannot be empty." };
 
   try {
-    const { data: updatedItem, error } = await supabase
+    // Update item details
+    const { data, error: itemUpdateError } = await supabase
       .from('bill_items')
       .update({
-        name: updates.name,
-        unit_price: updates.unitPrice,
-        quantity: updates.quantity,
+        name: updatedItem.name,
+        unit_price: updatedItem.unitPrice,
+        quantity: updatedItem.quantity,
       })
-      .eq('id', itemId)
+      .eq('id', updatedItem.id)
       .select('id, name, unit_price, quantity')
       .single();
+    
+    if (itemUpdateError) throw new Error("Gagal memperbarui detail item: " + itemUpdateError.message);
+    if (!data) throw new Error("Gagal mengambil data item setelah diperbarui.");
 
-    if (error) {
-      console.error("Error updating bill item in DB:", error);
-      return { success: false, error: "Failed to update item in database: " + error.message };
+    // Update assignments: delete existing and insert new ones
+    await supabase.from('item_assignments').delete().eq('bill_item_id', updatedItem.id);
+    
+    const newAssignments = updatedItem.assignedTo
+      .filter(a => a.count > 0)
+      .map(a => ({
+        bill_item_id: updatedItem.id,
+        participant_id: a.personId,
+        assigned_quantity: a.count,
+      }));
+
+    if (newAssignments.length > 0) {
+      const { error: assignmentError } = await supabase.from('item_assignments').insert(newAssignments);
+      if (assignmentError) throw new Error("Gagal menyimpan alokasi item: " + assignmentError.message);
     }
-     if (!updatedItem) {
-      return { success: false, error: "Failed to retrieve updated item data." };
-    }
+    
     return {
       success: true,
-      item: {
-        id: updatedItem.id,
-        name: updatedItem.name,
-        unitPrice: updatedItem.unit_price,
-        quantity: updatedItem.quantity,
-      },
+      item: { id: data.id, name: data.name, unitPrice: data.unit_price, quantity: data.quantity },
     };
   } catch (e: any) {
-    console.error("Exception in updateBillItemInDbAction:", e);
-    return { success: false, error: e.message || "Server error while updating bill item." };
+    return { success: false, error: e.message || "Server error while updating item." };
   }
 }
+
 
 export async function deleteBillItemFromDbAction(
   itemId: string
 ): Promise<{ success: boolean; error?: string }> {
   const supabase = createSupabaseServerClient();
-  if (!itemId) {
-    return { success: false, error: "Item ID is required to delete an item." };
-  }
+  if (!itemId) return { success: false, error: "Item ID is required." };
 
   try {
-    // First, delete any assignments related to this item
-    const { error: deleteAssignmentsError } = await supabase
-      .from('item_assignments')
-      .delete()
-      .eq('bill_item_id', itemId);
-
-    if (deleteAssignmentsError) {
-      console.error("Error deleting item assignments for item ID:", itemId, deleteAssignmentsError);
-      return { success: false, error: "Failed to delete related item assignments: " + deleteAssignmentsError.message };
-    }
-
-    // Then, delete the item itself
-    const { error: deleteItemError } = await supabase
-      .from('bill_items')
-      .delete()
-      .eq('id', itemId);
-
-    if (deleteItemError) {
-      console.error("Error deleting bill item from DB:", deleteItemError);
-      return { success: false, error: "Failed to delete item from database: " + deleteItemError.message };
-    }
-
+    await supabase.from('item_assignments').delete().eq('bill_item_id', itemId);
+    await supabase.from('bill_items').delete().eq('id', itemId);
     return { success: true };
   } catch (e: any) {
-    console.error("Exception in deleteBillItemFromDbAction:", e);
-    return { success: false, error: e.message || "Server error while deleting bill item." };
+    return { success: false, error: e.message || "Server error while deleting item." };
   }
 }
 
@@ -630,116 +595,25 @@ export async function handleSummarizeBillAction(
   taxTipSplitStrategy: TaxTipSplitStrategy
 ): Promise<{ success: boolean; data?: RawBillSummary; error?: string }> {
   const supabase = createSupabaseServerClient();
-  if (!billId) {
-    return { success: false, error: "Bill ID tidak disediakan." };
-  }
-  if (!payerParticipantId) {
-    return { success: false, error: "ID Pembayar tidak disediakan." };
+  if (!billId || !payerParticipantId) {
+    return { success: false, error: "Bill ID dan Payer ID diperlukan." };
   }
 
-  const joinedPeople = people.filter(p => p.status === 'joined');
-  if (joinedPeople.length < 2) {
-    return { success: false, error: "Minimal dua orang (yang sudah bergabung) diperlukan untuk membagi tagihan." };
+  if (people.length < 1) {
+    return { success: false, error: "Minimal satu partisipan diperlukan." };
   }
   
-  if (splitItems.length === 0 && taxAmount === 0 && tipAmount === 0) {
-    const zeroSummary: RawBillSummary = {};
-    joinedPeople.forEach(p => zeroSummary[p.name] = 0);
-
-    for (const person of joinedPeople) {
-        const { error: updateError } = await supabase.from('bill_participants').update({ total_share_amount: 0 }).eq('id', person.id);
-        if (updateError) console.warn("Error setting share to 0 for " + person.name + ": " + updateError.message);
-    }
-
-    await supabase.from('bills').update({
-        grand_total: 0,
-        tax_amount:0,
-        tip_amount:0,
-        payer_participant_id: payerParticipantId,
-        tax_tip_split_strategy: taxTipSplitStrategy
-    }).eq('id', billId);
-    revalidatePath('/', 'page');
-    revalidatePath('/app/history', 'page');
-    return { success: true, data: zeroSummary };
-  }
-
-  const payer = joinedPeople.find(p => p.id === payerParticipantId);
+  const payer = people.find(p => p.id === payerParticipantId);
   if (!payer) {
-    return { success: false, error: "Data pembayar tidak valid atau tidak ditemukan dalam daftar partisipan yang sudah bergabung." };
+    return { success: false, error: "Data pembayar tidak valid." };
   }
-  const payerName = payer.name;
-
-  // --- Start: Persist Item Assignments ---
-  try {
-    const { data: billItemsForThisBill, error: fetchBillItemsError } = await supabase
-      .from('bill_items')
-      .select('id')
-      .eq('bill_id', billId);
-
-    if (fetchBillItemsError) {
-      console.error("Error fetching bill_items for assignment processing:", fetchBillItemsError);
-      return { success: false, error: "Gagal mengambil item tagihan untuk alokasi: " + fetchBillItemsError.message };
-    }
-
-    const billItemIdsForThisBill = (billItemsForThisBill || []).map(bi => bi.id);
-
-    if (billItemIdsForThisBill.length > 0) {
-      const { error: deleteAssignmentsError } = await supabase
-        .from('item_assignments')
-        .delete()
-        .in('bill_item_id', billItemIdsForThisBill);
-
-      if (deleteAssignmentsError) {
-        console.error("Error deleting old item assignments:", deleteAssignmentsError);
-        return { success: false, error: "Gagal menghapus alokasi item lama: " + deleteAssignmentsError.message };
-      }
-    }
-
-    const newAssignments: ItemAssignmentInsert[] = [];
-    for (const item of splitItems) {
-      if (!billItemIdsForThisBill.includes(item.id)) {
-          console.warn("Item with id " + item.id + " (name: " + item.name + ") from client-side splitItems is not found in the database's bill_items for bill " + billId + ". Skipping assignments for this item.");
-          continue;
-      }
-      for (const assignment of item.assignedTo) {
-        if (assignment.count > 0) {
-          const participantExists = joinedPeople.some(p => p.id === assignment.personId);
-          if (!participantExists) {
-              console.warn("Participant with id " + assignment.personId + " for item " + item.name + " assignment is not found in the current bill's joined participants. Skipping this assignment.");
-              continue;
-          }
-          newAssignments.push({
-            bill_item_id: item.id,
-            participant_id: assignment.personId,
-            assigned_quantity: assignment.count,
-          });
-        }
-      }
-    }
-
-    if (newAssignments.length > 0) {
-      const { error: insertAssignmentsError } = await supabase
-        .from('item_assignments')
-        .insert(newAssignments);
-
-      if (insertAssignmentsError) {
-        console.error("Error inserting new item assignments:", insertAssignmentsError);
-        return { success: false, error: "Gagal menyimpan alokasi item baru: " + insertAssignmentsError.message };
-      }
-    }
-  } catch (e: any) {
-    console.error("Exception during item assignment persistence:", e);
-    return { success: false, error: "Kesalahan server saat menyimpan alokasi item: " + e.message };
-  }
-  // --- End: Persist Item Assignments ---
-
 
   const itemsForAI: SummarizeBillInput["items"] = splitItems.map(item => ({
     name: item.name,
     unitPrice: item.unitPrice,
     quantity: item.quantity,
     assignedTo: item.assignedTo.map(assignment => {
-      const participant = joinedPeople.find(p => p.id === assignment.personId);
+      const participant = people.find(p => p.id === assignment.personId);
       return {
         personName: participant?.name || "Unknown Person",
         count: assignment.count,
@@ -747,115 +621,112 @@ export async function handleSummarizeBillAction(
     }).filter(a => a.personName !== "Unknown Person" && a.count > 0),
   })).filter(item => item.quantity > 0 && item.unitPrice >= 0);
 
-  const peopleNamesForAI: SummarizeBillInput["people"] = joinedPeople.map(p => p.name);
-
   const summarizeBillInput: SummarizeBillInput = {
     items: itemsForAI,
-    people: peopleNamesForAI,
-    payerName: payerName,
-    taxAmount: taxAmount,
-    tipAmount: tipAmount,
-    taxTipSplitStrategy: taxTipSplitStrategy,
+    people: people.map(p => p.name),
+    payerName: payer.name,
+    taxAmount, tipAmount, taxTipSplitStrategy,
   };
 
   try {
     const rawSummary: RawBillSummary = await summarizeBill(summarizeBillInput);
 
     let calculatedGrandTotal = 0;
-    const participantSharePromises = joinedPeople.map(async (person) => {
-      const share = rawSummary[person.name];
-      if (typeof share === 'number') {
-        calculatedGrandTotal += share;
-        const { error: updateError } = await supabase.from('bill_participants').update({ total_share_amount: share }).eq('id', person.id);
-        if (updateError) return { personId: person.id, error: updateError, success: false as const };
-      } else if (rawSummary[person.name] === undefined) {
-        const { error: updateError } = await supabase.from('bill_participants').update({ total_share_amount: 0 }).eq('id', person.id);
-        if (updateError) return { personId: person.id, error: updateError, success: false as const };
-      }
-      return { personId: person.id, error: null, success: true as const };
+    const participantUpdatePromises = people.map(async (person) => {
+      const share = rawSummary[person.name] ?? 0;
+      calculatedGrandTotal += share;
+      return supabase.from('bill_participants').update({ total_share_amount: share }).eq('id', person.id);
     });
+    await Promise.all(participantUpdatePromises);
 
-    const participantUpdateResults = await Promise.all(participantSharePromises);
-    for (const result of participantUpdateResults) {
-      if (!result.success && result.error) {
-        const personNameFound = joinedPeople.find(p=>p.id === result.personId)?.name || result.personId;
-        console.error("Error updating participant share for " + personNameFound + " in DB:", result.error.message);
-        return { success: false, error: "Gagal memperbarui bagian untuk partisipan " + personNameFound + " di database: " + result.error.message };
-      }
-    }
-
-    const { error: billUpdateError } = await supabase
-        .from('bills')
-        .update({
+    await supabase.from('bills').update({
         payer_participant_id: payerParticipantId,
         tax_amount: taxAmount,
         tip_amount: tipAmount,
         tax_tip_split_strategy: taxTipSplitStrategy,
-        grand_total: calculatedGrandTotal
-        })
-        .eq('id', billId);
+        grand_total: calculatedGrandTotal,
+    }).eq('id', billId);
 
-    if (billUpdateError) {
-        console.error("Error updating bill details in DB:", billUpdateError);
-        return { success: false, error: "Gagal memperbarui detail tagihan (grand_total, etc.) di database: " + billUpdateError.message };
-    }
+    await supabase.from('settlements').delete().eq('bill_id', billId);
 
-    const { error: deleteSettlementsError } = await supabase.from('settlements').delete().eq('bill_id', billId);
-    if (deleteSettlementsError) {
-        console.error("Error deleting old settlements from DB:", deleteSettlementsError);
-        return { success: false, error: "Gagal menghapus penyelesaian lama dari database: " + deleteSettlementsError.message };
-    }
-
-    const settlementPromises: Promise<PostgrestSingleResponse<any>>[] = [];
-    for (const person of joinedPeople) {
-      const share = rawSummary[person.name];
-      if (person.id !== payerParticipantId && typeof share === 'number' && share > 0) {
-        const settlementData: SettlementInsert = {
+    const settlementInserts: SettlementInsert[] = people
+      .filter(p => p.id !== payerParticipantId && (rawSummary[p.name] ?? 0) > 0)
+      .map(p => {
+        const amount = rawSummary[p.name] ?? 0;
+        const serviceFee = amount * 0.01; // Pre-calculate potential 1% service fee
+        return {
           bill_id: billId,
-          from_participant_id: person.id,
+          from_participant_id: p.id,
           to_participant_id: payerParticipantId,
-          amount: share,
-          status: 'unpaid' // Default status
-        };
-        settlementPromises.push(
-          supabase.from('settlements').insert(settlementData).select().single()
-        );
-      }
-    }
-    if (settlementPromises.length > 0) {
-        const settlementInsertResults = await Promise.all(settlementPromises);
-        for (const result of settlementInsertResults) {
-          if (result.error) {
-            console.error("Error inserting settlement to DB:", result.error);
-            return { success: false, error: "Gagal menyimpan penyelesaian ke database: " + result.error.message };
-          }
+          amount: amount,
+          status: 'unpaid' as const,
+          service_fee: serviceFee,
         }
+      });
+
+    if (settlementInserts.length > 0) {
+      const { error: insertError } = await supabase.from('settlements').insert(settlementInserts);
+       if (insertError) {
+        console.error("Error inserting settlements:", insertError);
+        throw new Error("Gagal menyimpan data penyelesaian pembayaran: " + insertError.message);
+      }
     }
 
     revalidatePath('/', 'page');
     revalidatePath('/app/history', 'page');
     return { success: true, data: rawSummary };
   } catch (error) {
-    console.error("Error summarizing bill with AI or saving summary:", error);
-    let errorMessage = "Gagal meringkas tagihan. Silakan coba lagi.";
-     if (error instanceof Error) {
-        errorMessage = "Ringkasan tagihan gagal: " + error.message;
-         if (error.cause) {
-            try {
-                if (typeof error.cause === 'object' && error.cause !== null && 'message' in error.cause) {
-                     errorMessage += " (Penyebab: " + (error.cause as Error).message + ")";
-                } else {
-                    errorMessage += " (Penyebab: " + String(error.cause) + ")";
-                }
-            } catch (e) {
-                errorMessage += " (Penyebab: " + String(error.cause) + ")";
-            }
-        }
-    }
-    return { success: false, error: errorMessage };
+    const message = error instanceof Error ? error.message : "Kesalahan server tak terduga.";
+    return { success: false, error: `Gagal meringkas tagihan: ${message}` };
   }
 }
 
+export async function markSettlementPaidAction(
+  settlementId: string,
+  method: 'qris' | 'offline'
+): Promise<{ success: boolean, error?: string }> {
+  const supabase = createSupabaseServerClient();
+  if (!settlementId) {
+    return { success: false, error: "Settlement ID is required." };
+  }
+
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return { success: false, error: "User not authenticated." };
+    }
+
+    let updateData: Partial<Database['public']['Tables']['settlements']['Update']> = {
+      status: 'paid'
+    };
+
+    if (method === 'offline') {
+      updateData.service_fee = 0; // Nullify service fee for offline payments
+    }
+    
+    const { error: updateError } = await supabase
+      .from('settlements')
+      .update(updateData)
+      .eq('id', settlementId);
+
+    if (updateError) {
+      throw updateError;
+    }
+
+    revalidatePath('/', 'page'); // For dashboard
+    revalidatePath('/app', 'page'); // For bill page
+    revalidatePath('/app/history', 'page'); // For history page
+    revalidatePath('/admin/revenue', 'page'); // For revenue page
+    return { success: true };
+
+  } catch (e: any) {
+    console.error("Error marking settlement as paid:", e);
+    return { success: false, error: e.message || "Failed to mark as paid." };
+  }
+}
+
+
+// ... existing user profile actions ...
 export async function updateUserProfileAction(
   userId: string,
   profileUpdates: Partial<Database['public']['Tables']['profiles']['Update']>,
@@ -872,70 +743,25 @@ export async function updateUserProfileAction(
       .single();
 
     if (fetchError && fetchError.code !== 'PGRST116') {
-      console.error("Error fetching current profile:", fetchError);
       return { success: false, error: "Gagal mengambil profil saat ini: " + fetchError.message };
     }
-    if (!currentProfileData && fetchError?.code === 'PGRST116') {
-        console.error("Profile not found for user ID:", userId);
+    if (!currentProfileData) {
         return { success: false, error: "Profil pengguna tidak ditemukan." };
     }
-    if (!currentProfileData) {
-        console.error("Profile data is unexpectedly null for user ID:", userId);
-        return { success: false, error: "Data profil pengguna tidak valid." };
-    }
-
-    const updatesForDB: Partial<Database['public']['Tables']['profiles']['Update']> = {};
-    let hasProfileDetailChanges = false;
-
-    if (profileUpdates.username !== undefined) {
-        const newUsernameTrimmed = profileUpdates.username === null ? "" : profileUpdates.username.trim();
-        const currentUsername = currentProfileData.username || "";
-        if (newUsernameTrimmed !== currentUsername) {
-            if (!newUsernameTrimmed) {
-                 errorMessages.push("Username tidak boleh kosong.");
-            } else {
-                const { data: existingUser, error: usernameCheckErr } = await supabase
-                    .from('profiles')
-                    .select('id')
-                    .eq('username', newUsernameTrimmed)
-                    .neq('id', userId)
-                    .single();
-
-                if (usernameCheckErr && usernameCheckErr.code !== 'PGRST116') {
-                    console.error("Error checking new username uniqueness:", usernameCheckErr);
-                    errorMessages.push("Gagal memverifikasi username baru. Silakan coba lagi.");
-                } else if (existingUser) {
-                    errorMessages.push("Username tersebut sudah digunakan oleh pengguna lain.");
-                } else {
-                    updatesForDB.username = newUsernameTrimmed;
-                    hasProfileDetailChanges = true;
-                }
-            }
-        }
-    }
-
-    if (profileUpdates.full_name !== undefined) {
-        const newFullNameTrimmed = profileUpdates.full_name === null ? "" : profileUpdates.full_name.trim();
-        const currentFullName = currentProfileData.full_name || "";
-        if (newFullNameTrimmed !== currentFullName) {
-             if (!newFullNameTrimmed) {
-                errorMessages.push("Nama lengkap tidak boleh kosong.");
-            } else {
-                updatesForDB.full_name = newFullNameTrimmed;
-                hasProfileDetailChanges = true;
-            }
-        }
-    }
-
-    if (profileUpdates.phone_number !== undefined) {
-        const newPhoneNumber = profileUpdates.phone_number === null ? null : String(profileUpdates.phone_number).trim();
-        const currentPhoneNumber = currentProfileData.phone_number ? String(currentProfileData.phone_number) : null;
-        if (newPhoneNumber !== currentPhoneNumber) {
-            updatesForDB.phone_number = newPhoneNumber === "" ? null : newPhoneNumber;
-            hasProfileDetailChanges = true;
-        }
-    }
     
+    const updatesForDB: Partial<Database['public']['Tables']['profiles']['Update']> = {};
+    const errorMessages: string[] = [];
+    
+    if (profileUpdates.username !== undefined) {
+        updatesForDB.username = profileUpdates.username;
+    }
+    if (profileUpdates.full_name !== undefined) {
+        updatesForDB.full_name = profileUpdates.full_name;
+    }
+    if (profileUpdates.phone_number !== undefined) {
+        updatesForDB.phone_number = profileUpdates.phone_number;
+    }
+
     let avatarUrlToUpdate: string | null | undefined = undefined;
 
     if (avatarFile) {
@@ -946,32 +772,23 @@ export async function updateUserProfileAction(
             .upload(filePath, avatarFile, { cacheControl: '3600', upsert: true });
 
         if (uploadError) {
-            console.error("Error uploading avatar:", uploadError);
             errorMessages.push("Gagal mengunggah avatar: " + uploadError.message);
         } else {
             const { data: publicUrlData } = supabase.storage.from('avatars').getPublicUrl(filePath);
             if (publicUrlData && publicUrlData.publicUrl) {
                 avatarUrlToUpdate = publicUrlData.publicUrl;
             } else {
-                errorMessages.push('Gagal mendapatkan URL publik avatar setelah unggah.');
+                errorMessages.push('Gagal mendapatkan URL publik avatar.');
             }
         }
-    } else if (profileUpdates.avatar_url === null && currentProfileData.avatar_url !== null) {
-        avatarUrlToUpdate = null;
     }
 
     if (avatarUrlToUpdate !== undefined) {
         updatesForDB.avatar_url = avatarUrlToUpdate;
     }
 
-    const hasAvatarDBChange = updatesForDB.avatar_url !== undefined;
-
     if (errorMessages.length > 0) {
-        return { success: false, data: currentProfileData, error: errorMessages };
-    }
-
-    if (!hasProfileDetailChanges && !hasAvatarDBChange) {
-      return { success: true, data: currentProfileData, error: "Tidak ada perubahan untuk disimpan." };
+        return { success: false, error: errorMessages };
     }
 
     if (Object.keys(updatesForDB).length > 0) {
@@ -983,24 +800,19 @@ export async function updateUserProfileAction(
         .single();
 
       if (dbUpdateError) {
-        console.error("Error updating profile in DB:", dbUpdateError);
-        return { success: false, data: currentProfileData, error: ["Gagal memperbarui profil di database: " + dbUpdateError.message] };
+        return { success: false, error: ["Gagal memperbarui profil: " + dbUpdateError.message] };
       }
-
+      
       revalidatePath('/app', 'layout');
       revalidatePath('/app/profile', 'page');
-      revalidatePath('/app/history', 'page');
       revalidatePath('/', 'layout');
-      revalidatePath('/', 'page');
-
       return { success: true, data: updatedProfile };
     }
 
-    return { success: true, data: currentProfileData, error: "Operasi selesai, kemungkinan tidak ada perubahan data." };
+    return { success: true, data: currentProfileData };
 
   } catch (e: any) {
-    console.error("Unhandled exception in updateUserProfileAction:", e);
-    return { success: false, error: "Kesalahan server tidak terduga: " + (e.message || "Unknown error") };
+    return { success: false, error: "Kesalahan server: " + (e.message || "Unknown error") };
   }
 }
 
@@ -1010,9 +822,9 @@ export async function removeAvatarAction(userId: string): Promise<{ success: boo
         return { success: false, error: "User ID diperlukan." };
     }
     try {
-        const { data: { user }, error: authError } = await supabase.auth.getUser();
-        if (authError || !user || user.id !== userId) {
-            return { success: false, error: "Tidak terautentikasi atau tidak diizinkan." };
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user || user.id !== userId) {
+            return { success: false, error: "Tidak diizinkan." };
         }
 
         const { data: currentProfile, error: fetchProfileError } = await supabase
@@ -1022,95 +834,36 @@ export async function removeAvatarAction(userId: string): Promise<{ success: boo
             .single();
 
         if (fetchProfileError) {
-            console.error("Error fetching profile for avatar removal:", fetchProfileError);
             return { success: false, error: "Gagal mengambil profil: " + fetchProfileError.message };
         }
-
         if (!currentProfile?.avatar_url) {
-            return { success: true, data: { avatar_url: null }, error: "Tidak ada foto profil untuk dihapus." };
+            return { success: true, data: { avatar_url: null } };
         }
-
+        
         const storagePathPrefix = "/storage/v1/object/public/avatars/";
-        let filePathInBucket = "";
+        const filePathInBucket = currentProfile.avatar_url.split(storagePathPrefix)[1];
 
-        if (currentProfile.avatar_url.includes(storagePathPrefix)) {
-            filePathInBucket = currentProfile.avatar_url.split(storagePathPrefix)[1];
-        } else {
-            console.warn("Could not parse avatar_url to get storage path with standard prefix:", currentProfile.avatar_url);
-            const { error: dbOnlyError } = await supabase
-                .from('profiles')
-                .update({ avatar_url: null })
-                .eq('id', userId);
-            if (dbOnlyError) {
-                return { success: false, error: "Format URL avatar tidak dikenali dan gagal menghapus dari database: " + dbOnlyError.message };
-            }
-            revalidatePath('/app/profile', 'page');
-            revalidatePath('/', 'layout');
-            revalidatePath('/', 'page');
-            return { success: true, data: { avatar_url: null } };
+        if (filePathInBucket) {
+            await supabase.storage.from('avatars').remove([filePathInBucket]);
         }
-
-        if (!filePathInBucket) {
-             console.warn("filePathInBucket is empty after parsing, attempting to clear DB link only for URL:", currentProfile.avatar_url);
-            const { error: dbOnlyError } = await supabase
-                .from('profiles')
-                .update({ avatar_url: null })
-                .eq('id', userId);
-            if (dbOnlyError) {
-                return { success: false, error: "Path file avatar kosong setelah parsing dan gagal menghapus dari database: " + dbOnlyError.message };
-            }
-            revalidatePath('/app/profile', 'page');
-            revalidatePath('/', 'layout');
-            revalidatePath('/', 'page');
-            return { success: true, data: { avatar_url: null } };
-        }
-
-
-        const { error: storageError } = await supabase.storage
-            .from('avatars')
-            .remove([filePathInBucket]);
-
-        if (storageError) {
-            if (storageError.message.toLowerCase().includes('not found')) {
-                console.warn("Avatar file not found in storage at path " + filePathInBucket + ", but proceeding to clear DB link.");
-            } else {
-                console.error("Error deleting avatar from storage:", storageError);
-                return { success: false, error: "Gagal menghapus file avatar dari storage: " + storageError.message };
-            }
-        }
-
-        const { success: updateSuccess, error: dbUpdateError, data: updatedData } = await updateUserProfileAction(
-            userId,
-            { avatar_url: null },
-            null
-        );
-
-
-        if (!updateSuccess) {
-            console.error("Error clearing avatar_url in DB via updateUserProfileAction:", dbUpdateError);
-            return { success: false, error: "Gagal mengosongkan URL avatar di database: " + (Array.isArray(dbUpdateError) ? dbUpdateError.join(", ") : dbUpdateError) };
-        }
-
+        
+        await supabase.from('profiles').update({ avatar_url: null }).eq('id', userId);
+        
         revalidatePath('/app/profile', 'page');
         revalidatePath('/', 'layout');
-        revalidatePath('/', 'page');
-        revalidatePath('/app', 'layout');
-        revalidatePath('/app/history', 'page');
-
         return { success: true, data: { avatar_url: null } };
     } catch (e: any) {
-        console.error("Unhandled exception in removeAvatarAction:", e);
-        return { success: false, error: "Kesalahan server tidak terduga saat menghapus avatar: " + (e.message || "Unknown error") };
+        return { success: false, error: "Kesalahan server saat menghapus avatar: " + (e.message || "Unknown error") };
     }
 }
 
 
 export async function getBillsHistoryAction(): Promise<{ success: boolean; data?: BillHistoryEntry[]; error?: string }> {
   const supabase = createSupabaseServerClient();
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  const { data: { user } } = await supabase.auth.getUser();
 
-  if (authError || !user) {
-    return { success: false, error: "Pengguna tidak terautentikasi atau sesi tidak valid." };
+  if (!user) {
+    return { success: false, error: "Pengguna tidak terautentikasi." };
   }
 
   try {
@@ -1118,48 +871,31 @@ export async function getBillsHistoryAction(): Promise<{ success: boolean; data?
       .from('bills')
       .select('id, name, created_at, grand_total, payer_participant_id, scheduled_at, category_id, bill_categories(name)')
       .eq('user_id', user.id)
-      .or('grand_total.not.is.null,scheduled_at.not.is.null')
       .order('created_at', { ascending: false });
 
     if (billsError) {
-      console.error("Error fetching bills history:", billsError);
-      return { success: false, error: "Gagal mengambil riwayat tagihan: " + billsError.message };
+      return { success: false, error: "Gagal mengambil riwayat: " + billsError.message };
     }
-
     if (!bills) {
       return { success: true, data: [] };
     }
 
     const historyEntries: BillHistoryEntry[] = [];
-
     for (const bill of bills) {
       let payerName: string | null = null;
       if (bill.payer_participant_id) {
-        const { data: payerData, error: payerError } = await supabase
+        const { data: payerData } = await supabase
           .from('bill_participants')
           .select('name')
           .eq('id', bill.payer_participant_id)
           .single();
-        if (payerError) {
-          console.warn("Could not fetch payer name for bill " + bill.id + ": " + payerError.message);
-        } else {
-          payerName = payerData?.name || null;
-        }
+        payerName = payerData?.name || null;
       }
-
-      const { count: participantCount, error: countError } = await supabase
+      const { count: participantCount } = await supabase
         .from('bill_participants')
         .select('*', { count: 'exact', head: true })
-        .eq('bill_id', bill.id)
-        .eq('status', 'joined');
-
-
-      if (countError) {
-        console.warn("Could not fetch participant count for bill " + bill.id + ": " + countError.message);
-      }
-
-      const categoryName = (bill.bill_categories as any)?.name || null;
-
+        .eq('bill_id', bill.id);
+      
       historyEntries.push({
         id: bill.id,
         name: bill.name,
@@ -1168,539 +904,160 @@ export async function getBillsHistoryAction(): Promise<{ success: boolean; data?
         payerName: payerName,
         participantCount: participantCount || 0,
         scheduled_at: bill.scheduled_at,
-        categoryName: categoryName,
+        categoryName: (bill.bill_categories as any)?.name || null,
       });
     }
-
     return { success: true, data: historyEntries };
   } catch (e:any) {
-    console.error("Exception in getBillsHistoryAction:", e);
-    return { success: false, error: e.message || "Terjadi kesalahan server saat mengambil riwayat tagihan." };
+    return { success: false, error: e.message || "Kesalahan server saat mengambil riwayat." };
   }
 }
 
-// ===== DASHBOARD ACTIONS =====
-
-const CATEGORY_ICON_KEYS: { [key: string]: string } = {
-  "Makanan": "Utensils",
-  "Transportasi": "Car",
-  "Hiburan": "Gamepad2",
-  "Penginapan": "BedDouble",
-  "Belanja Online": "ShoppingBag",
-  "Lainnya": "Shapes",
-};
-
-const PREDEFINED_CATEGORY_COLORS: { [key: string]: string } = {
-  "Makanan": "hsl(var(--chart-1))",
-  "Transportasi": "hsl(var(--chart-2))",
-  "Hiburan": "hsl(var(--chart-3))",
-  "Penginapan": "hsl(var(--chart-4))",
-  "Belanja Online": "hsl(var(--chart-5))",
-  "Lainnya": "hsl(var(--chart-5))",
-};
-
-const DEFAULT_CATEGORY_ORDER_FOR_DASHBOARD = ["Makanan", "Transportasi", "Hiburan", "Penginapan"];
-const OTHERS_CATEGORY_NAME_FOR_DASHBOARD = "Lainnya";
-
-
-export async function getDashboardDataAction(): Promise<{ success: boolean; data?: DashboardData; error?: string }> {
+export async function getBillDetailsAction(billId: string): Promise<{ success: boolean; data?: FetchedBillDetailsWithItems; error?: string }> {
   const supabase = createSupabaseServerClient();
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-  if (authError || !user) {
-    return { success: false, error: "Pengguna tidak terautentikasi." };
-  }
-
-  try {
-    const { data: userCategories, error: categoriesError } = await supabase
-      .from('bill_categories')
-      .select('id, name')
-      .eq('user_id', user.id);
-
-    if (categoriesError) {
-      console.error("Error fetching user categories for dashboard:", categoriesError);
-      return { success: false, error: "Gagal mengambil kategori pengguna: " + categoriesError.message };
-    }
-
-    const now = new Date();
-    const startDate = format(startOfMonth(now), "yyyy-MM-dd'T'HH:mm:ss.SSSxxx");
-    const endDate = format(endOfMonth(now), "yyyy-MM-dd'T'HH:mm:ss.SSSxxx");
-
-    const { data: monthlyBillData, error: billsError } = await supabase
-      .from('bills')
-      .select('category_id, grand_total')
-      .eq('user_id', user.id)
-      .not('grand_total', 'is', null)
-      .not('payer_participant_id', 'is', null)
-      .gte('created_at', startDate)
-      .lte('created_at', endDate);
-
-    if (billsError) {
-      console.error("Error fetching monthly bills for dashboard:", billsError);
-      return { success: false, error: "Gagal mengambil data tagihan bulanan: " + billsError.message };
-    }
-
-    const spendingPerCategory: Record<string, number> = {};
-    if (monthlyBillData) {
-      for (const bill of monthlyBillData) {
-        if (bill.category_id && bill.grand_total !== null) {
-          spendingPerCategory[bill.category_id] = (spendingPerCategory[bill.category_id] || 0) + bill.grand_total;
-        }
-      }
-    }
-
-    let allMonthlyExpensesRaw: MonthlyExpenseByCategory[] = (userCategories || []).map(category => {
-      const totalAmount = spendingPerCategory[category.id] || 0;
-      return {
-        categoryName: category.name,
-        totalAmount: totalAmount,
-        icon: CATEGORY_ICON_KEYS[category.name] || CATEGORY_ICON_KEYS["Lainnya"] || "Shapes",
-        color: PREDEFINED_CATEGORY_COLORS[category.name] || PREDEFINED_CATEGORY_COLORS["Lainnya"] || "hsl(var(--chart-1))",
-      };
-    });
-
-    if (!allMonthlyExpensesRaw.find(cat => cat.categoryName === OTHERS_CATEGORY_NAME_FOR_DASHBOARD)) {
-        const lainnyaDefault = (userCategories || []).find(cat => cat.name === OTHERS_CATEGORY_NAME_FOR_DASHBOARD);
-        if (lainnyaDefault){
-             allMonthlyExpensesRaw.push({
-                categoryName: OTHERS_CATEGORY_NAME_FOR_DASHBOARD,
-                totalAmount: spendingPerCategory[lainnyaDefault.id] || 0,
-                icon: CATEGORY_ICON_KEYS[OTHERS_CATEGORY_NAME_FOR_DASHBOARD] || "Shapes",
-                color: PREDEFINED_CATEGORY_COLORS[OTHERS_CATEGORY_NAME_FOR_DASHBOARD] || "hsl(var(--chart-1))",
-            });
-        } else {
-            let totalForLainnyaCat = 0;
-            const lainnyaCatFromDb = (userCategories || []).find(c => c.name === OTHERS_CATEGORY_NAME_FOR_DASHBOARD);
-            if (lainnyaCatFromDb) {
-                totalForLainnyaCat = spendingPerCategory[lainnyaCatFromDb.id] || 0;
-            }
-            allMonthlyExpensesRaw.push({
-                categoryName: OTHERS_CATEGORY_NAME_FOR_DASHBOARD,
-                totalAmount: totalForLainnyaCat,
-                icon: CATEGORY_ICON_KEYS[OTHERS_CATEGORY_NAME_FOR_DASHBOARD] || "Shapes",
-                color: PREDEFINED_CATEGORY_COLORS[OTHERS_CATEGORY_NAME_FOR_DASHBOARD] || "hsl(var(--chart-1))",
-            });
-        }
-    }
-    allMonthlyExpensesRaw = allMonthlyExpensesRaw.filter((value, index, self) =>
-        index === self.findIndex((t) => (
-            t.categoryName === value.categoryName
-        ))
-    );
-
-    const predefinedExpenses: MonthlyExpenseByCategory[] = [];
-    const customExpenses: MonthlyExpenseByCategory[] = [];
-    let othersExpense: MonthlyExpenseByCategory | null = null;
-
-    allMonthlyExpensesRaw.forEach(expense => {
-      if (expense.categoryName === OTHERS_CATEGORY_NAME_FOR_DASHBOARD) {
-        othersExpense = expense;
-      } else if (DEFAULT_CATEGORY_ORDER_FOR_DASHBOARD.includes(expense.categoryName)) {
-        predefinedExpenses.push(expense);
-      } else {
-        customExpenses.push(expense);
-      }
-    });
-
-    predefinedExpenses.sort((a, b) => DEFAULT_CATEGORY_ORDER_FOR_DASHBOARD.indexOf(a.categoryName) - DEFAULT_CATEGORY_ORDER_FOR_DASHBOARD.indexOf(b.categoryName));
-    customExpenses.sort((a, b) => a.categoryName.localeCompare(b.categoryName));
-
-    let monthlyExpenses: MonthlyExpenseByCategory[] = [...predefinedExpenses, ...customExpenses];
-    if (othersExpense) {
-      monthlyExpenses.push(othersExpense);
-    }
-
-    const expenseChartData: ExpenseChartDataPoint[] = monthlyExpenses
-      .filter(e => e.totalAmount > 0)
-      .map(e => ({ name: e.categoryName, total: e.totalAmount }));
-
-    const { data: dbRecentBills, error: recentBillsError } = await supabase
-        .from('bills')
-        .select('id, name, created_at, grand_total, bill_categories ( name )')
-        .eq('user_id', user.id)
-        .not('grand_total', 'is', null)
-        .not('payer_participant_id', 'is', null)
-        .order('created_at', { ascending: false })
-        .limit(3);
-
-    if (recentBillsError) {
-        console.error("Error fetching recent bills for dashboard:", recentBillsError);
-        return { success: false, error: "Gagal mengambil tagihan terbaru: " + recentBillsError.message };
-    }
-
-    const recentBills: RecentBillDisplayItem[] = [];
-    if (dbRecentBills) {
-        for (const bill of dbRecentBills) {
-            const { count: participantCount, error: countError } = await supabase
-                .from('bill_participants')
-                .select('*', { count: 'exact', head: true })
-                .eq('bill_id', bill.id);
-
-            recentBills.push({
-                id: bill.id,
-                name: bill.name,
-                createdAt: bill.created_at || new Date().toISOString(),
-                grandTotal: bill.grand_total || 0,
-                categoryName: (bill.bill_categories as any)?.name || null,
-                participantCount: countError ? 0 : participantCount || 0,
-            });
-        }
-    }
-
-    const { data: dbScheduledBills, error: scheduledBillsError } = await supabase
-        .from('bills')
-        .select('id, name, scheduled_at, bill_categories ( name )')
-        .eq('user_id', user.id)
-        .is('grand_total', null)
-        .not('scheduled_at', 'is', null)
-        .gt('scheduled_at', new Date().toISOString())
-        .order('scheduled_at', { ascending: true })
-        .limit(3);
-
-    if (scheduledBillsError) {
-        console.error("Error fetching scheduled bills for dashboard:", scheduledBillsError);
-        return { success: false, error: "Gagal mengambil tagihan terjadwal: " + scheduledBillsError.message };
-    }
-
-    const scheduledBills: ScheduledBillDisplayItem[] = [];
-    if (dbScheduledBills) {
-        for (const bill of dbScheduledBills) {
-             const { count: participantCount, error: countError } = await supabase
-                .from('bill_participants')
-                .select('*', { count: 'exact', head: true })
-                .eq('bill_id', bill.id);
-
-            scheduledBills.push({
-                id: bill.id,
-                name: bill.name,
-                scheduled_at: bill.scheduled_at || new Date().toISOString(),
-                categoryName: (bill.bill_categories as any)?.name || null,
-                participantCount: countError ? 0 : participantCount || 0,
-            });
-        }
-    }
-
-    revalidatePath('/', 'page');
-
-    return {
-      success: true,
-      data: {
-        monthlyExpenses,
-        expenseChartData,
-        recentBills,
-        scheduledBills,
-      },
-    };
-
-  } catch (e: any) {
-    console.error("Exception in getDashboardDataAction:", e);
-    return { success: false, error: e.message || "Terjadi kesalahan server saat mengambil data dashboard." };
-  }
-}
-
-
-export async function getBillDetailsAction(billId: string): Promise<{ success: boolean; data?: FetchedBillDetails; error?: string }> {
-  const supabase = createSupabaseServerClient();
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-  if (authError || !user) {
-    return { success: false, error: "Pengguna tidak terautentikasi." };
-  }
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { success: false, error: "Pengguna tidak terautentikasi." };
 
   try {
     const { data: bill, error: billError } = await supabase
       .from('bills')
-      .select('id, name, created_at, grand_total, tax_amount, tip_amount, payer_participant_id, tax_tip_split_strategy, scheduled_at')
+      .select('id, name, user_id, created_at, grand_total, tax_amount, tip_amount, payer_participant_id, tax_tip_split_strategy, scheduled_at, category_id')
       .eq('id', billId)
       .single();
+    if (billError) return { success: false, error: "Gagal mengambil detail tagihan: " + billError.message };
 
-    if (billError) {
-      console.error("Error fetching bill details:", billError);
-      return { success: false, error: "Gagal mengambil detail tagihan: " + billError.message };
-    }
-    if (!bill) {
-      return { success: false, error: "Tagihan tidak ditemukan atau Anda tidak memiliki akses." };
-    }
+    const { data: participantsRaw, error: pError } = await supabase.from('bill_participants').select('id, name, profile_id, total_share_amount, profiles ( avatar_url )').eq('bill_id', billId);
+    if (pError) return { success: false, error: "Gagal mengambil partisipan: " + pError.message };
 
-    if (bill.grand_total === null && bill.scheduled_at && isFuture(parseISO(bill.scheduled_at))) {
-        const emptySummary: DetailedBillSummaryData = {
-            payerName: "Belum Ditentukan",
-            taxAmount: 0,
-            tipAmount: 0,
-            personalTotalShares: {},
-            detailedPersonalShares: [],
-            settlements: [],
-            grandTotal: 0,
-        };
-         return {
-            success: true,
-            data: {
-                billName: bill.name,
-                createdAt: bill.created_at || new Date().toISOString(),
-                summaryData: emptySummary,
-                participants: []
-            }
-        };
-    }
+    const { data: itemsRaw, error: iError } = await supabase.from('bill_items').select('id, name, unit_price, quantity').eq('bill_id', billId);
+    if (iError) return { success: false, error: "Gagal mengambil item: " + iError.message };
 
-    const { data: participantsRawData, error: participantsFetchError } = await supabase
-      .from('bill_participants')
-      .select('id, name, total_share_amount, profile_id, status')
-      .eq('bill_id', billId);
-
-    if (participantsFetchError) {
-      console.error("Error fetching participants for bill (raw):", participantsFetchError);
-      return { success: false, error: "Gagal mengambil partisipan: " + participantsFetchError.message };
-    }
-    if (!participantsRawData) {
-        return { success: false, error: "Tidak ada data partisipan yang ditemukan." };
-    }
-
-    const profileIds = participantsRawData.map(p => p.profile_id).filter((id): id is string => !!id);
-    let profilesData: { id: string; avatar_url: string | null }[] = [];
-    if (profileIds.length > 0) {
-      const { data: fetchedProfiles, error: profilesError } = await supabase
-        .from('profiles')
-        .select('id, avatar_url')
-        .in('id', profileIds);
-
-      if (profilesError) {
-        console.warn("Could not fetch profiles for participants:", profilesError.message);
-      } else if (fetchedProfiles) {
-        profilesData = fetchedProfiles;
-      }
-    }
+    const { data: assignmentsRaw, error: aError } = await supabase.from('item_assignments').select('bill_item_id, participant_id, assigned_quantity').in('bill_item_id', itemsRaw.map(i => i.id));
+    if (aError) return { success: false, error: "Gagal mengambil alokasi: " + aError.message };
     
-    const participants: Person[] = participantsRawData.map(p_raw => {
-        const profile = profilesData.find(p => p.id === p_raw.profile_id);
-        return {
-            id: p_raw.id,
-            name: p_raw.name,
-            profile_id: p_raw.profile_id,
-            avatar_url: profile?.avatar_url || null,
-            status: p_raw.status as 'joined' | 'invited'
-        };
-    });
-
-
-    const { data: allBillItems, error: billItemsError } = await supabase
-      .from('bill_items')
-      .select('id, name, unit_price')
-      .eq('bill_id', billId);
-
-    if (billItemsError) {
-      console.error("Error fetching bill items:", billItemsError);
-      return { success: false, error: "Gagal mengambil item tagihan: " + billItemsError.message };
-    }
-
-    const { data: allItemAssignments, error: assignmentsError } = await supabase
-      .from('item_assignments')
-      .select('bill_item_id, participant_id, assigned_quantity')
-      .in('bill_item_id', (allBillItems || []).map(item => item.id));
-
-    if (assignmentsError) {
-      console.error("Error fetching item assignments:", assignmentsError);
-      return { success: false, error: "Gagal mengambil alokasi item: " + assignmentsError.message };
-    }
-
-    let payerName = "Tidak Diketahui";
-    if (bill.payer_participant_id) {
-      const payerRaw = participantsRawData.find(p => p.id === bill.payer_participant_id);
-      if (payerRaw) payerName = payerRaw.name;
-    }
-
-    const personalTotalSharesFromDB: RawBillSummary = {};
-    participantsRawData.forEach(p_raw => {
-      personalTotalSharesFromDB[p_raw.name] = p_raw.total_share_amount ?? 0;
-    });
-
-    const detailedPersonalSharesData: PersonalShareDetail[] = [];
-    const numParticipants = participantsRawData.filter(p => p.status === 'joined').length;
-
-    for (const participantRaw of participantsRawData.filter(p => p.status === 'joined')) {
-      const personDetail: PersonalShareDetail = {
-          personId: participantRaw.id,
-          personName: participantRaw.name,
-          items: [],
-          taxShare: 0,
-          tipShare: 0,
-          subTotalFromItems: 0,
-          totalShare: participantRaw.total_share_amount || 0,
-      };
-
-      const assignmentsForPerson = (allItemAssignments || []).filter(as => as.participant_id === participantRaw.id);
-      for (const assignment of assignmentsForPerson) {
-          const billItemData = (allBillItems || []).find(bi => bi.id === assignment.bill_item_id);
-          if (billItemData) {
-              const itemCost = (billItemData.unit_price || 0) * (assignment.assigned_quantity || 0);
-              personDetail.items.push({
-                  itemName: billItemData.name,
-                  quantityConsumed: assignment.assigned_quantity || 0,
-                  unitPrice: billItemData.unit_price || 0,
-                  totalItemCost: itemCost,
-              });
-              personDetail.subTotalFromItems += itemCost;
-          }
-      }
-
-      if (bill.tax_tip_split_strategy === "SPLIT_EQUALLY" && numParticipants > 0) {
-          personDetail.taxShare = (bill.tax_amount || 0) / numParticipants;
-          personDetail.tipShare = (bill.tip_amount || 0) / numParticipants;
-      } else if (bill.tax_tip_split_strategy === "PAYER_PAYS_ALL") {
-          if (participantRaw.id === bill.payer_participant_id) {
-              personDetail.taxShare = bill.tax_amount || 0;
-              personDetail.tipShare = bill.tip_amount || 0;
-          }
-      }
-      detailedPersonalSharesData.push(personDetail);
-    }
+    const participants: Person[] = participantsRaw.map(p => ({
+        id: p.id,
+        name: p.name,
+        profile_id: p.profile_id,
+        avatar_url: p.profiles?.avatar_url || null,
+    }));
     
-    const { data: settlementsData, error: settlementsError } = await supabase
-      .from('settlements')
-      .select(`
-        amount,
-        status,
-        from_participant:bill_participants!from_participant_id(id, name),
-        to_participant:bill_participants!to_participant_id(id, name)
-      `)
-      .eq('bill_id', billId);
-
-
-    if (settlementsError) {
-      console.error("Error fetching settlements for bill:", settlementsError);
-      return { success: false, error: "Gagal mengambil penyelesaian: " + settlementsError.message };
-    }
-
-    const settlements: Settlement[] = (settlementsData || []).map(s => ({
-      fromId: (s.from_participant as any)?.id || "unknown",
-      from: (s.from_participant as any)?.name || "Tidak Diketahui",
-      toId: (s.to_participant as any)?.id || "unknown",
-      to: (s.to_participant as any)?.name || "Tidak Diketahui",
-      amount: s.amount,
-      status: s.status as SettlementStatus
+    const items: SplitItem[] = itemsRaw.map(item => ({
+        id: item.id,
+        name: item.name,
+        unitPrice: item.unit_price,
+        quantity: item.quantity,
+        assignedTo: assignmentsRaw
+            .filter(a => a.bill_item_id === item.id)
+            .map(a => ({ personId: a.participant_id, count: a.assigned_quantity }))
     }));
 
-    const summaryData: DetailedBillSummaryData = {
-      payerName: payerName,
-      taxAmount: bill.tax_amount || 0,
-      tipAmount: bill.tip_amount || 0,
-      personalTotalShares: personalTotalSharesFromDB,
-      detailedPersonalShares: detailedPersonalSharesData,
-      settlements: settlements,
-      grandTotal: bill.grand_total || 0,
-    };
+    const payerName = participants.find(p => p.id === bill.payer_participant_id)?.name || "Belum ditentukan";
+    
+    let summaryData: FetchedBillDetails['summaryData'] | null = null;
+    const isSummarized = bill.grand_total !== null;
 
-    return {
-      success: true,
-      data: {
-        billName: bill.name,
-        createdAt: bill.created_at || new Date().toISOString(),
-        summaryData,
-        participants
-      }
-    };
+    if (isSummarized) {
+       const { data: settlementsData, error: settlementsError } = await supabase
+          .from('settlements')
+          .select('id, amount, status, service_fee, from_participant:bill_participants!from_participant_id(id, name), to_participant:bill_participants!to_participant_id(id, name)')
+          .eq('bill_id', billId);
 
-  } catch (e: any) {
-    console.error("Exception in getBillDetailsAction:", e);
-    return { success: false, error: e.message || "Terjadi kesalahan server saat mengambil detail tagihan." };
-  }
-}
-
-// ===== FRIENDSHIP ACTIONS =====
-
-export async function searchUsersAction(query: string): Promise<{ success: boolean; users?: UserProfileBasic[]; error?: string }> {
-  const supabase = createSupabaseServerClient();
-  const { data: { user: currentUser }, error: authError } = await supabase.auth.getUser();
-
-  if (authError || !currentUser) {
-    return { success: false, error: "Pengguna tidak terautentikasi." };
-  }
-
-  if (!query.trim()) {
-    return { success: true, users: [] };
-  }
-
-  try {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('id, username, full_name, avatar_url')
-      .or(`username.ilike.%${query}%,full_name.ilike.%${query}%`)
-      .neq('id', currentUser.id) // Exclude current user
-      .limit(10);
-
-    if (error) throw error;
-    return { success: true, users: data as UserProfileBasic[] };
-  } catch (e: any) {
-    console.error("Error searching users:", e);
-    return { success: false, error: e.message || "Gagal mencari pengguna." };
-  }
-}
-
-export async function sendFriendRequestAction(receiverId: string): Promise<{ success: boolean; error?: string }> {
-  const supabase = createSupabaseServerClient();
-  const { data: { user: requester }, error: authError } = await supabase.auth.getUser();
-
-  if (authError || !requester) {
-    return { success: false, error: "Pengguna tidak terautentikasi." };
-  }
-  if (requester.id === receiverId) {
-    return { success: false, error: "Anda tidak dapat mengirim permintaan pertemanan ke diri sendiri." };
-  }
-
-  try {
-    const { data: existingFriendship, error: friendshipCheckError } = await supabase
-      .from('friendships')
-      .select('id')
-      .or(`and(user1_id.eq.${requester.id},user2_id.eq.${receiverId}),and(user1_id.eq.${receiverId},user2_id.eq.${requester.id})`)
-      .maybeSingle();
-
-    if (friendshipCheckError) throw friendshipCheckError;
-    if (existingFriendship) return { success: false, error: "Anda sudah berteman dengan pengguna ini." };
-
-
-    const { data: existingRequest, error: requestCheckError } = await supabase
-        .from('friend_requests')
-        .select('id, status, requester_id')
-        .or(`and(requester_id.eq.${requester.id},receiver_id.eq.${receiverId}),and(requester_id.eq.${receiverId},receiver_id.eq.${requester.id})`)
-        .in('status', ['pending', 'accepted']) 
-        .maybeSingle();
-
-
-    if (requestCheckError) throw requestCheckError;
-
-    if (existingRequest) {
-        if (existingRequest.status === 'pending') {
-            if (existingRequest.requester_id === requester.id) {
-                return { success: false, error: "Anda sudah mengirim permintaan ke pengguna ini." };
-            } else {
-                return { success: false, error: "Pengguna ini sudah mengirim permintaan kepada Anda. Silakan cek permintaan masuk." };
+        const settlements: Settlement[] = (settlementsData || []).map(s => ({
+            id: s.id, // Pass settlement ID
+            fromId: (s.from_participant as any)?.id, from: (s.from_participant as any)?.name,
+            toId: (s.to_participant as any)?.id, to: (s.to_participant as any)?.name,
+            amount: s.amount, 
+            status: s.status as SettlementStatus,
+            serviceFee: s.service_fee || 0,
+        }));
+        
+        const totalTaxTip = (bill.tax_amount || 0) + (bill.tip_amount || 0);
+        
+        const personalShares: PersonalShareDetail[] = participantsRaw.map(p => {
+          let subTotalFromItems = 0;
+          const personalItems: PersonalItemDetail[] = [];
+          
+          items.forEach(item => {
+            const assignment = item.assignedTo.find(a => a.personId === p.id);
+            if (assignment && assignment.count > 0) {
+              const totalItemCost = assignment.count * item.unitPrice;
+              subTotalFromItems += totalItemCost;
+              personalItems.push({
+                itemName: item.name,
+                quantityConsumed: assignment.count,
+                unitPrice: item.unitPrice,
+                totalItemCost,
+              });
             }
-        }
-        if (existingRequest.status === 'accepted') {
-             return { success: false, error: "Anda sudah berteman (berdasarkan status permintaan sebelumnya)." };
-        }
+          });
+
+          let taxShare = 0;
+          let tipShare = 0;
+
+          if (bill.tax_tip_split_strategy === 'SPLIT_EQUALLY') {
+              taxShare = (bill.tax_amount || 0) / participants.length;
+              tipShare = (bill.tip_amount || 0) / participants.length;
+          } else if (bill.tax_tip_split_strategy === 'PAYER_PAYS_ALL' && p.id === bill.payer_participant_id) {
+              taxShare = bill.tax_amount || 0;
+              tipShare = bill.tip_amount || 0;
+          }
+
+          return {
+            personId: p.id,
+            personName: p.name,
+            items: personalItems,
+            subTotalFromItems,
+            taxShare,
+            tipShare,
+            totalShare: p.total_share_amount || 0,
+          }
+        });
+
+        summaryData = {
+            payerId: bill.payer_participant_id,
+            payerName: payerName,
+            taxAmount: bill.tax_amount || 0,
+            tipAmount: bill.tip_amount || 0,
+            taxTipSplitStrategy: bill.tax_tip_split_strategy as TaxTipSplitStrategy,
+            settlements: settlements,
+            grandTotal: bill.grand_total || 0,
+            personalShares: personalShares,
+        };
+    } else {
+        // Bill is still being edited
+        summaryData = {
+            payerId: bill.payer_participant_id, payerName,
+            taxAmount: bill.tax_amount || 0, tipAmount: bill.tip_amount || 0,
+            taxTipSplitStrategy: bill.tax_tip_split_strategy as TaxTipSplitStrategy,
+            settlements: [], grandTotal: 0,
+            personalShares: [],
+        };
     }
 
-
-    const { error: insertError } = await supabase
-      .from('friend_requests')
-      .insert({ requester_id: requester.id, receiver_id: receiverId, status: 'pending' });
-
-    if (insertError) {
-        if (insertError.code === '23505') { 
-            return { success: false, error: "Permintaan pertemanan sudah ada atau Anda sudah berteman." };
-        }
-        throw insertError;
-    }
-    revalidatePath('/app/social', 'page');
-    return { success: true };
+    return { success: true, data: { billName: bill.name, createdAt: bill.created_at!, participants, items, summaryData, ownerId: bill.user_id, scheduledAt: bill.scheduled_at, categoryId: bill.category_id } };
   } catch (e: any) {
-    console.error("Error sending friend request:", e);
-    return { success: false, error: e.message || "Gagal mengirim permintaan pertemanan." };
+    return { success: false, error: e.message || "Kesalahan server saat mengambil detail." };
   }
 }
 
-export async function getFriendRequestsAction(): Promise<{ success: boolean; requests?: FriendRequestDisplay[]; error?: string }> {
+export async function getAllUsersAction() {
+    const supabase = createSupabaseServerClient();
+    const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .neq('role', 'admin')
+        .neq('status', 'deleted');
+
+    if (error) {
+        return { success: false, error: error.message };
+    }
+    return { success: true, users: data };
+}
+
+// ===== Dashboard Actions =====
+
+export async function getDashboardDataAction(): Promise<{ success: boolean; data?: DashboardData, error?: string }> {
   const supabase = createSupabaseServerClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
 
@@ -1709,365 +1066,337 @@ export async function getFriendRequestsAction(): Promise<{ success: boolean; req
   }
 
   try {
-    const { data, error } = await supabase
-      .from('friend_requests')
-      .select(`
-        id, 
-        created_at, 
-        status, 
-        profile:requester_id(id, username, full_name, avatar_url)
-      `)
-      .eq('receiver_id', user.id)
-      .eq('status', 'pending') // Only fetch pending requests for the "incoming" list
+    const today = new Date();
+    const startOfCurrentMonth = startOfMonth(today);
+    
+    // Fetch user's categories
+    const { data: categories, error: catError } = await supabase
+        .from('bill_categories').select('id, name');
+    if(catError) throw new Error("Gagal mengambil kategori: " + catError.message);
+
+    // Fetch bills for the current month
+    const { data: billsThisMonth, error: billsError } = await supabase
+      .from('bills')
+      .select('category_id, grand_total, scheduled_at, created_at, id, name')
+      .eq('user_id', user.id)
+      .gte('created_at', startOfCurrentMonth.toISOString());
+    if (billsError) throw new Error("Gagal mengambil tagihan bulan ini: " + billsError.message);
+
+    // Fetch all user bills for history/scheduled list
+    const { data: allBills, error: allBillsError } = await supabase
+      .from('bills')
+      .select('id, name, created_at, grand_total, scheduled_at, category_id')
+      .eq('user_id', user.id)
       .order('created_at', { ascending: false });
+    if(allBillsError) throw new Error("Gagal mengambil semua tagihan: " + allBillsError.message);
 
-    if (error) throw error;
-    if (!data) return { success: true, requests: [] };
 
-    const requests: FriendRequestDisplay[] = data
-      .filter(req => req.profile) // Filter out requests where profile is null
-      .map(req => {
-        const profile = req.profile as UserProfileBasic;
-        return {
-            requestId: req.id,
-            id: profile.id, // Requester's ID
-            username: profile.username,
-            full_name: profile.full_name,
-            avatar_url: profile.avatar_url,
-            requestedAt: req.created_at,
-            status: req.status as FriendRequestDisplay['status'],
-        }
-    });
-    return { success: true, requests };
-  } catch (e: any) {
-    console.error("Error fetching friend requests:", e);
-    return { success: false, error: e.message || "Gagal mengambil permintaan pertemanan." };
-  }
-}
-
-export async function acceptFriendRequestAction(requestId: string): Promise<{ success: boolean; error?: string }> {
-  const supabase = createSupabaseServerClient();
-  const { data: { user: currentUser }, error: authError } = await supabase.auth.getUser();
-
-  if (authError || !currentUser) {
-    return { success: false, error: "Pengguna tidak terautentikasi." };
-  }
-
-  try {
-    const { data: request, error: requestError } = await supabase
-      .from('friend_requests')
-      .select('requester_id, receiver_id, status')
-      .eq('id', requestId)
-      .single();
-
-    if (requestError || !request) {
-      throw new Error(requestError?.message || "Permintaan tidak ditemukan.");
-    }
-    if (request.receiver_id !== currentUser.id) {
-      return { success: false, error: "Anda tidak berhak menerima permintaan ini." };
-    }
-    if (request.status !== 'pending') {
-      return { success: false, error: "Permintaan ini sudah tidak pending." };
-    }
-
-    const { error: updateError } = await supabase
-      .from('friend_requests')
-      .update({ status: 'accepted', updated_at: new Date().toISOString() })
-      .eq('id', requestId);
-    if (updateError) throw updateError;
-
-    const { error: friendshipError } = await supabase
-      .from('friendships')
-      .insert({ 
-        user1_id: request.requester_id,
-        user2_id: request.receiver_id
+    // Process Monthly Expenses
+    const monthlyExpensesMap: Map<string, { totalAmount: number, icon?: string, color?: string }> = new Map();
+    billsThisMonth?.filter(b => b.grand_total).forEach(bill => {
+      const category = categories?.find(c => c.id === bill.category_id);
+      const categoryName = category?.name || 'Lainnya';
+      const current = monthlyExpensesMap.get(categoryName) || { totalAmount: 0 };
+      monthlyExpensesMap.set(categoryName, {
+        totalAmount: current.totalAmount + (bill.grand_total || 0),
       });
-    if (friendshipError) {
-        if (friendshipError.code === '23505') { 
-             console.warn("Friendship already exists, but request was pending. Proceeding.");
-        } else {
-            console.error("Error creating friendship after accepting request:", friendshipError);
-            await supabase.from('friend_requests').update({ status: 'pending' }).eq('id', requestId);
-            return { success: false, error: "Gagal membuat pertemanan: " + friendshipError.message };
-        }
-    }
-    revalidatePath('/app/social', 'page');
-    return { success: true };
-  } catch (e: any) {
-    console.error("Error accepting friend request:", e);
-    return { success: false, error: e.message || "Gagal menerima permintaan pertemanan." };
-  }
-}
-
-export async function declineOrCancelFriendRequestAction(requestId: string, actionType: 'decline' | 'cancel'): Promise<{ success: boolean; error?: string }> {
-  const supabase = createSupabaseServerClient();
-  const { data: { user: currentUser }, error: authError } = await supabase.auth.getUser();
-
-  if (authError || !currentUser) {
-    return { success: false, error: "Pengguna tidak terautentikasi." };
-  }
-  try {
-    const { data: request, error: requestError } = await supabase
-        .from('friend_requests')
-        .select('requester_id, receiver_id, status')
-        .eq('id', requestId)
-        .single();
-
-    if (requestError || !request) throw new Error(requestError?.message || "Permintaan tidak ditemukan.");
-
-    let newStatus: 'declined' | 'cancelled';
-    if (actionType === 'decline') {
-        if (request.receiver_id !== currentUser.id) return { success: false, error: "Anda tidak berhak menolak permintaan ini." };
-        newStatus = 'declined';
-    } else { // cancel
-        if (request.requester_id !== currentUser.id) return { success: false, error: "Anda tidak berhak membatalkan permintaan ini." };
-        newStatus = 'cancelled';
-    }
-
-    if (request.status !== 'pending') return { success: false, error: "Permintaan ini sudah tidak tertunda." };
-
-    const { error: updateError } = await supabase
-      .from('friend_requests')
-      .update({ status: newStatus, updated_at: new Date().toISOString() })
-      .eq('id', requestId);
-
-    if (updateError) throw updateError;
-    revalidatePath('/app/social', 'page');
-    return { success: true };
-  } catch (e: any) {
-    console.error(`Error ${actionType}ing friend request:`, e);
-    return { success: false, error: e.message || `Gagal ${actionType === 'decline' ? 'menolak' : 'membatalkan'} permintaan.` };
-  }
-}
-
-export async function getFriendsAction(): Promise<{ success: boolean; friends?: FriendDisplay[]; error?: string }> {
-  const supabase = createSupabaseServerClient();
-  const { data: { user: currentUser }, error: authError } = await supabase.auth.getUser();
-
-  if (authError || !currentUser) {
-    return { success: false, error: "Pengguna tidak terautentikasi." };
-  }
-  try {
-    const { data, error } = await supabase
-        .from('friendships')
-        .select(`
-            id, 
-            created_at,
-            user1:user1_id(id, username, full_name, avatar_url),
-            user2:user2_id(id, username, full_name, avatar_url)
-        `)
-        .or(`user1_id.eq.${currentUser.id},user2_id.eq.${currentUser.id}`)
-        .order('created_at', { ascending: false });
-
-    if (error) throw error;
-    if (!data) return { success: true, friends: [] };
-
-    const friends: FriendDisplay[] = data
-        .filter(f => f.user1 && f.user2) // Ensure both user profiles were fetched
-        .map(f => {
-            const friendProfile = (f.user1 as UserProfileBasic).id === currentUser.id 
-                ? f.user2 as UserProfileBasic 
-                : f.user1 as UserProfileBasic;
-            return {
-                friendshipId: f.id,
-                id: friendProfile.id,
-                username: friendProfile.username,
-                full_name: friendProfile.full_name,
-                avatar_url: friendProfile.avatar_url,
-                since: f.created_at,
-            };
     });
-    return { success: true, friends };
+
+    const monthlyExpenses: MonthlyExpenseByCategory[] = Array.from(monthlyExpensesMap.entries()).map(([name, data]) => ({
+      categoryName: name,
+      ...data
+    }));
+
+    const expenseChartData: ExpenseChartDataPoint[] = monthlyExpenses.map(e => ({
+      name: e.categoryName,
+      total: e.totalAmount,
+    }));
+
+    // Process Recent and Scheduled Bills for Display
+    const recentBills: RecentBillDisplayItem[] = [];
+    const scheduledBills: ScheduledBillDisplayItem[] = [];
+    
+    for (const bill of (allBills || [])) {
+      if (bill.scheduled_at && isFuture(parseISO(bill.scheduled_at))) {
+        if (scheduledBills.length < 5) { // Limit to 5 for display
+          const { count } = await supabase.from('bill_participants').select('*', { count: 'exact', head: true }).eq('bill_id', bill.id);
+          scheduledBills.push({
+            id: bill.id,
+            name: bill.name,
+            scheduled_at: bill.scheduled_at,
+            categoryName: categories?.find(c => c.id === bill.category_id)?.name,
+            participantCount: count || 0,
+          });
+        }
+      } else if (bill.grand_total !== null && bill.grand_total > 0) {
+        if (recentBills.length < 3) { // Limit to 3 for display
+           const { count } = await supabase.from('bill_participants').select('*', { count: 'exact', head: true }).eq('bill_id', bill.id);
+           recentBills.push({
+            id: bill.id,
+            name: bill.name,
+            createdAt: bill.created_at,
+            grandTotal: bill.grand_total,
+            categoryName: categories?.find(c => c.id === bill.category_id)?.name,
+            participantCount: count || 0,
+           });
+        }
+      }
+    }
+    
+    return { success: true, data: { monthlyExpenses, expenseChartData, recentBills, scheduledBills } };
+
   } catch (e: any) {
-    console.error("Error fetching friends:", e);
-    return { success: false, error: e.message || "Gagal mengambil daftar teman." };
+    return { success: false, error: e.message };
   }
 }
 
-export async function removeFriendAction(friendshipId: string): Promise<{ success: boolean; error?: string }> {
+// ===== ADMIN DASHBOARD ACTIONS =====
+export async function getAdminDashboardDataAction(): Promise<{ success: boolean; data?: AdminDashboardData, error?: string }> {
   const supabase = createSupabaseServerClient();
-  const { data: { user: currentUser }, error: authError } = await supabase.auth.getUser();
-
-  if (authError || !currentUser) {
-    return { success: false, error: "Pengguna tidak terautentikasi." };
+  const { data: { user } , error: authError } = await supabase.auth.getUser();
+  if (authError || !user) {
+    return { success: false, error: "Tidak terautentikasi." };
   }
+  
   try {
-    const { data: friendship, error: fetchError } = await supabase
-        .from('friendships')
-        .select('user1_id, user2_id')
-        .eq('id', friendshipId)
-        .or(`user1_id.eq.${currentUser.id},user2_id.eq.${currentUser.id}`)
-        .single();
-    
-    if (fetchError || !friendship) {
-        throw new Error(fetchError?.message || "Pertemanan tidak ditemukan atau Anda tidak berhak menghapusnya.");
-    }
-    
-    const { error: deleteError } = await supabase
-      .from('friendships')
-      .delete()
-      .eq('id', friendshipId);
+    const today = new Date();
+    const oneWeekAgo = subDays(today, 7).toISOString();
+    const thirtyDaysAgo = subDays(today, 30).toISOString();
+    const oneMonthAgo = subMonths(today, 1).toISOString();
 
-    if (deleteError) throw deleteError;
+    const { count: totalUsers } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).neq('role', 'admin');
+    const { count: activeUsers } = await supabase.from('profiles').select('id', { count: 'exact', head: true }).gt('updated_at', thirtyDaysAgo).neq('role', 'admin').neq('status', 'deleted');
+    const { count: newUserWeekCount } = await supabase.from('profiles').select('id', { count: 'exact', head: true }).gt('created_at', oneWeekAgo).neq('role', 'admin');
+    const { count: newUserMonthCount } = await supabase.from('profiles').select('id', { count: 'exact', head: true }).gt('created_at', oneMonthAgo).neq('role', 'admin');
+    const { count: totalBills } = await supabase.from('bills').select('*', { count: 'exact', head: true });
+    const { count: billsLastWeekCount } = await supabase.from('bills').select('id', { count: 'exact', head: true }).gt('created_at', oneWeekAgo);
     
-    const { data: requestToUpdate, error: findRequestError } = await supabase
-        .from('friend_requests')
-        .select('id')
-        .or(
-            `and(requester_id.eq.${friendship.user1_id},receiver_id.eq.${friendship.user2_id},status.eq.accepted),` +
-            `and(requester_id.eq.${friendship.user2_id},receiver_id.eq.${friendship.user1_id},status.eq.accepted)`
-        )
-        .maybeSingle();
+    const { count: activeChartUsers } = await supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('status', 'active').neq('role', 'admin');
+    const { count: deletedUsers } = await supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('status', 'deleted').neq('role', 'admin');
 
-    if (findRequestError) {
-        console.warn("Error finding associated friend request for cleanup after removing friend:", findRequestError.message);
-    } else if (requestToUpdate) {
-        const { error: updateRequestError } = await supabase
-            .from('friend_requests')
-            .update({ status: 'cancelled', updated_at: new Date().toISOString() })
-            .eq('id', requestToUpdate.id);
-        if (updateRequestError) {
-            console.warn("Error updating associated friend request status after removing friend:", updateRequestError.message);
-        }
+    let userGrowthData = [];
+    for (let i = 5; i >= 0; i--) {
+        const month = subMonths(today, i);
+        const { count } = await supabase.from('profiles').select('id', { count: 'exact', head: true }).lte('created_at', endOfMonth(month).toISOString()).neq('role', 'admin');
+        userGrowthData.push({ month: format(month, 'MMM'), users: count || 0 });
     }
 
-    revalidatePath('/app/social', 'page');
-    return { success: true };
+    const userStatusData = [
+        { name: 'Aktif', value: activeChartUsers || 0, color: '#10b981' },
+        { name: 'Dihapus', value: deletedUsers || 0, color: '#dc2626' },
+    ];
+    
+    let dailyActivityData = [];
+    for (let i = 6; i >= 0; i--) {
+        const day = subDays(today, i);
+        const { count } = await supabase.from('bills').select('id', { count: 'exact', head: true })
+            .gte('created_at', day.toISOString().split('T')[0] + 'T00:00:00')
+            .lte('created_at', day.toISOString().split('T')[0] + 'T23:59:59');
+        dailyActivityData.push({ day: format(day, 'dd/MM'), sessions: count || 0 });
+    }
+
+    return { success: true, data: { totalUsers: totalUsers || 0, activeUsers: activeUsers || 0, newUserWeekCount: newUserWeekCount || 0, newUserMonthCount: newUserMonthCount || 0, totalBills: totalBills || 0, billsLastWeekCount: billsLastWeekCount || 0, userGrowthData, userStatusData, dailyActivityData } };
   } catch (e: any) {
-    console.error("Error removing friend:", e);
-    return { success: false, error: e.message || "Gagal menghapus teman." };
+    return { success: false, error: e.message };
   }
 }
 
-// ===== BILL INVITATION ACTIONS =====
+export async function getRevenueDataAction(): Promise<{ success: boolean; data?: RevenueData, error?: string }> {
+  const supabase = createSupabaseServerClient();
+  try {
+    const { data: settlements, error: settlementError } = await supabase.from('settlements').select('amount, service_fee, bill_id, created_at, bills(category_id, bill_categories(name))').eq('status', 'paid');
+    
+    if(settlementError) {
+      console.error("Error fetching settlements for revenue: ", settlementError);
+      return { success: false, error: "Gagal mengambil data transaksi: " + settlementError.message };
+    }
 
-export async function getPendingInvitationsAction(): Promise<{ success: boolean; invitations?: BillInvitation[]; error?: string }> {
-    const supabase = createSupabaseServerClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (!settlements || settlements.length === 0) {
+      return { success: true, data: { totalRevenue: 0, totalTransactions: 0, averageFeePerTransaction: 0, revenueTrend: [], transactionTrend: [], revenueByCategory: [] } };
+    }
 
-    if (authError || !user) {
-        return { success: false, error: "Pengguna tidak terautentikasi." };
+    const totalRevenue = settlements.reduce((acc, s) => acc + (s.service_fee || 0), 0);
+    const totalTransactions = settlements.filter(s => s.service_fee && s.service_fee > 0).length;
+    const averageFeePerTransaction = totalTransactions > 0 ? totalRevenue / totalTransactions : 0;
+
+    let revenueTrend = [];
+    for (let i = 5; i >= 0; i--) {
+      const month = subMonths(new Date(), i);
+      const monthRevenue = settlements.filter(s => parseISO(s.created_at).getMonth() === month.getMonth() && parseISO(s.created_at).getFullYear() === month.getFullYear()).reduce((acc, s) => acc + (s.service_fee || 0), 0);
+      revenueTrend.push({ month: format(month, 'MMM'), revenue: monthRevenue });
+    }
+
+    let transactionTrend = [];
+    for (let i = 5; i >= 0; i--) {
+      const month = subMonths(new Date(), i);
+      const monthTransactions = settlements.filter(s => s.service_fee && s.service_fee > 0 && parseISO(s.created_at).getMonth() === month.getMonth() && parseISO(s.created_at).getFullYear() === month.getFullYear()).length;
+      transactionTrend.push({ month: format(month, 'MMM'), transactions: monthTransactions });
     }
     
-    try {
-        // Step 1: Get pending invitations for the current user
-        const { data: invitationsData, error: invitationsError } = await supabase
-            .from('bill_participants')
-            .select('id, created_at, bill_id')
-            .eq('profile_id', user.id)
-            .eq('status', 'invited');
+    const revenueByCategoryMap: Record<string, number> = {};
+    settlements.forEach(s => {
+      const categoryName = (s.bills?.bill_categories as any)?.name || 'Lainnya';
+      revenueByCategoryMap[categoryName] = (revenueByCategoryMap[categoryName] || 0) + (s.service_fee || 0);
+    });
+    const revenueByCategory = Object.entries(revenueByCategoryMap).map(([key, value]) => ({ categoryName: key, revenue: value }));
 
-        if (invitationsError) {
-            console.error("Error fetching pending invitations (step 1):", invitationsError);
-            return { success: false, error: "Gagal mengambil data undangan: " + invitationsError.message };
-        }
-        
-        if (!invitationsData || invitationsData.length === 0) {
-            return { success: true, invitations: [] };
-        }
-
-        const billIds = invitationsData.map(inv => inv.bill_id);
-
-        // Step 2: Get details for the associated bills
-        const { data: billsData, error: billsError } = await supabase
-            .from('bills')
-            .select('id, name, user_id') // user_id is the inviter's ID
-            .in('id', billIds);
-
-        if (billsError) {
-            console.error("Error fetching bill details (step 2):", billsError);
-            return { success: false, error: "Gagal mengambil detail tagihan untuk undangan: " + billsError.message };
-        }
-
-        const inviterIds = billsData.map(bill => bill.user_id).filter((id): id is string => !!id);
-
-        // Step 3: Get profiles for the inviters
-        let inviterProfiles: Map<string, string> = new Map();
-        if (inviterIds.length > 0) {
-            const { data: profilesData, error: profilesError } = await supabase
-                .from('profiles')
-                .select('id, full_name')
-                .in('id', inviterIds);
-
-            if (profilesError) {
-                console.warn("Could not fetch some inviter profiles (step 3):", profilesError.message);
-            } else if (profilesData){
-                profilesData.forEach(profile => {
-                    inviterProfiles.set(profile.id, profile.full_name || 'Seseorang');
-                });
-            }
-        }
-        
-        // Step 4: Stitch everything together
-        const finalInvitations: BillInvitation[] = invitationsData.map(invitation => {
-            const bill = billsData.find(b => b.id === invitation.bill_id);
-            const inviterName = bill && bill.user_id ? (inviterProfiles.get(bill.user_id) || 'Seseorang') : 'Seseorang';
-
-            return {
-                participantId: invitation.id,
-                billId: invitation.bill_id,
-                billName: bill?.name || 'Tagihan Dihapus',
-                inviterName: inviterName,
-                createdAt: invitation.created_at
-            };
-        }).filter(inv => inv.billId); // Ensure we don't have invitations for deleted bills
-
-        return { success: true, invitations: finalInvitations };
-    } catch (e: any) {
-        console.error("Exception in getPendingInvitationsAction:", e);
-        return { success: false, error: "Terjadi kesalahan server saat mengambil undangan: " + e.message };
-    }
+    return { success: true, data: { totalRevenue, totalTransactions, averageFeePerTransaction, revenueTrend, transactionTrend, revenueByCategory } };
+  } catch (e: any) {
+    return { success: false, error: e.message };
+  }
 }
 
-export async function respondToBillInvitationAction(participantId: string, response: 'accept' | 'decline'): Promise<{ success: boolean; error?: string }> {
+
+export async function getSpendingAnalysisAction(): Promise<{ success: boolean; data?: SpendingAnalysisData, error?: string }> {
+  const supabase = createSupabaseServerClient();
+  try {
+    const { data: bills, error: billsError } = await supabase.from('bills').select('id, grand_total, created_at, bill_categories(name)');
+    if (billsError) throw billsError;
+    if (!bills) return { success: false, error: "Tidak ada data tagihan." };
+
+    const { data: allCategoriesData, error: catError } = await supabase.from('bill_categories').select('name');
+    if(catError) throw catError;
+    
+    const allCategories = allCategoriesData?.map(c => c.name) || [];
+    if (!allCategories.includes('Lainnya')) {
+        allCategories.push('Lainnya');
+    }
+
+    const totalSpending = bills.reduce((acc, b) => acc + (b.grand_total || 0), 0);
+    const totalBills = bills.length;
+    const averagePerBill = totalBills > 0 ? totalSpending / totalBills : 0;
+
+    const categoryCounts: Record<string, { totalAmount: number, billCount: number }> = {};
+    bills.forEach(b => {
+      const categoryName = b.bill_categories?.name || 'Lainnya';
+      if (!categoryCounts[categoryName]) {
+        categoryCounts[categoryName] = { totalAmount: 0, billCount: 0 };
+      }
+      categoryCounts[categoryName].totalAmount += b.grand_total || 0;
+      categoryCounts[categoryName].billCount++;
+    });
+
+    const spendingByCategory = Object.entries(categoryCounts).map(([key, value]) => ({ categoryName: key, ...value }));
+    const mostPopularCategory = spendingByCategory.sort((a, b) => b.billCount - a.billCount)[0] || { categoryName: '-', billCount: 0 };
+    const topCategories = spendingByCategory.sort((a, b) => b.totalAmount - a.totalAmount).slice(0, 5);
+    
+    let spendingTrendMap: Record<string, { month: string, [key: string]: number | string }> = {};
+    for (let i = 5; i >= 0; i--) {
+        const month = subMonths(new Date(), i);
+        const monthStr = format(month, 'MMM');
+        spendingTrendMap[monthStr] = { month: monthStr };
+        allCategories.forEach(cat => {
+          spendingTrendMap[monthStr][cat] = 0;
+        });
+    }
+
+    bills.forEach(b => {
+        const monthStr = format(parseISO(b.created_at), 'MMM');
+        if (spendingTrendMap[monthStr]) {
+            const categoryName = b.bill_categories?.name || 'Lainnya';
+            spendingTrendMap[monthStr][categoryName] = (spendingTrendMap[monthStr][categoryName] as number || 0) + (b.grand_total || 0);
+        }
+    });
+    const spendingTrend = Object.values(spendingTrendMap);
+
+    return { success: true, data: { totalSpending, totalBills, averagePerBill, mostPopularCategory, spendingByCategory, spendingTrend, topCategories } };
+  } catch (e: any) {
+    return { success: false, error: e.message };
+  }
+}
+
+// ===== ADMIN USER CRUD ACTIONS =====
+
+export async function adminCreateUserAction(formData: FormData) {
+  const supabase = createSupabaseServerClient();
+  const { data: { user: adminUser }, error: adminAuthError } = await supabase.auth.getUser();
+  if (adminAuthError || !adminUser) return { success: false, error: "Admin tidak terautentikasi." };
+  
+  // You might want a more robust role check here in a real app
+  const { data: adminProfile } = await supabase.from('profiles').select('role').eq('id', adminUser.id).single();
+  if (adminProfile?.role !== 'admin') return { success: false, error: "Hanya admin yang bisa membuat pengguna." };
+
+  const email = formData.get('email') as string;
+  const password = formData.get('password') as string;
+  const fullName = formData.get('fullName') as string;
+  const username = formData.get('username') as string;
+
+  if (!email || !password || !fullName || !username) {
+    return { success: false, error: "Semua field kecuali nomor telepon wajib diisi." };
+  }
+
+  // Use the admin client to create a user without sending a confirmation email
+  const { data: newAuthUser, error: createAuthError } = await supabase.auth.admin.createUser({
+    email,
+    password,
+    email_confirm: true, // Auto-confirm the user
+    user_metadata: { full_name: fullName, username: username }
+  });
+
+  if (createAuthError) {
+    return { success: false, error: `Gagal membuat pengguna di Auth: ${createAuthError.message}` };
+  }
+  if (!newAuthUser.user) {
+    return { success: false, error: "Gagal mendapatkan data pengguna setelah pembuatan." };
+  }
+
+  const { error: profileError } = await supabase.from('profiles').insert({
+    id: newAuthUser.user.id,
+    full_name: fullName,
+    username: username,
+    email: email,
+    phone_number: formData.get('phoneNumber') as string || null,
+    status: 'active'
+  });
+
+  if (profileError) {
+    // If profile creation fails, delete the auth user to prevent orphans
+    await supabase.auth.admin.deleteUser(newAuthUser.user.id);
+    return { success: false, error: `Gagal membuat profil: ${profileError.message}` };
+  }
+
+  revalidatePath('/admin/users');
+  return { success: true };
+}
+
+export async function adminUpdateUserAction(userId: string, formData: FormData) {
     const supabase = createSupabaseServerClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    const { data: { user: adminUser }, error: adminAuthError } = await supabase.auth.getUser();
+    if (adminAuthError || !adminUser) return { success: false, error: "Admin tidak terautentikasi." };
 
-    if (authError || !user) {
-        return { success: false, error: "Pengguna tidak terautentikasi." };
+    const fullName = formData.get('fullName') as string;
+    const username = formData.get('username') as string;
+    const phoneNumber = formData.get('phoneNumber') as string;
+
+    const profileUpdate: Database['public']['Tables']['profiles']['Update'] = {
+        full_name: fullName,
+        username: username,
+        phone_number: phoneNumber || null,
+        updated_at: new Date().toISOString()
+    };
+    
+    const { error: profileError } = await supabase.from('profiles').update(profileUpdate).eq('id', userId);
+
+    if (profileError) {
+        return { success: false, error: `Gagal memperbarui profil: ${profileError.message}` };
     }
 
-    try {
-        const { data: participant, error: fetchError } = await supabase
-            .from('bill_participants')
-            .select('profile_id')
-            .eq('id', participantId)
-            .eq('status', 'invited')
-            .single();
+    revalidatePath('/admin/users');
+    return { success: true };
+}
 
-        if (fetchError || !participant) {
-            return { success: false, error: "Undangan tidak ditemukan atau sudah ditindaklanjuti." };
-        }
+export async function adminUpdateUserStatusAction(userId: string, status: 'active' | 'blocked' | 'deleted') {
+    const supabase = createSupabaseServerClient();
+    const { data: { user: adminUser }, error: adminAuthError } = await supabase.auth.getUser();
+    if (adminAuthError || !adminUser) return { success: false, error: "Admin tidak terautentikasi." };
 
-        if (participant.profile_id !== user.id) {
-            return { success: false, error: "Anda tidak berhak menanggapi undangan ini." };
-        }
+    const { error } = await supabase.from('profiles').update({ status, updated_at: new Date().toISOString() }).eq('id', userId);
 
-        if (response === 'accept') {
-            const { error: updateError } = await supabase
-                .from('bill_participants')
-                .update({ status: 'joined' })
-                .eq('id', participantId);
-            
-            if (updateError) {
-                return { success: false, error: "Gagal menerima undangan: " + updateError.message };
-            }
-        } else { // decline
-            const { error: deleteError } = await supabase
-                .from('bill_participants')
-                .delete()
-                .eq('id', participantId);
-
-            if (deleteError) {
-                return { success: false, error: "Gagal menolak undangan: " + deleteError.message };
-            }
-        }
-        
-        revalidatePath('/app'); 
-        revalidatePath('/app/notifications'); 
-        return { success: true };
-    } catch (e: any) {
-        console.error("Exception in respondToBillInvitationAction:", e);
-        return { success: false, error: "Terjadi kesalahan server: " + e.message };
+    if (error) {
+        return { success: false, error: `Gagal mengubah status: ${error.message}` };
     }
+
+    revalidatePath('/admin/users');
+    revalidatePath('/admin'); // Revalidate dashboard for pie chart
+    return { success: true };
 }

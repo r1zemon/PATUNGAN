@@ -1,11 +1,9 @@
 
-
 export interface Person {
   id: string; // This is the bill_participants.id
   name: string;
   profile_id?: string | null; // This is the user/profile id, if they are a registered user
   avatar_url?: string | null;
-  status: 'joined' | 'invited'; // Status of the participant
 }
 
 export interface ScannedItem {
@@ -34,12 +32,14 @@ export interface BillDetails {
 export type SettlementStatus = 'unpaid' | 'paid' | 'pending' | 'failed';
 
 export interface Settlement {
+  id: string; // The settlement's own unique ID from the database
   fromId: string;
   from: string; // Person name
-  toId: string;
+  toId: string;   // Person name (usually the payer)
   to: string;   // Person name (usually the payer)
   amount: number;
   status: SettlementStatus;
+  serviceFee: number; // The potential service fee
 }
 
 export interface PersonalItemDetail {
@@ -60,13 +60,14 @@ export interface PersonalShareDetail {
 }
 
 export interface DetailedBillSummaryData {
+  payerId: string | null;
   payerName: string;
   taxAmount: number; // Overall bill tax
   tipAmount: number; // Overall bill tip
-  personalTotalShares: RawBillSummary; // Kept for potential simple overview
-  detailedPersonalShares?: PersonalShareDetail[]; // New detailed breakdown
+  taxTipSplitStrategy: TaxTipSplitStrategy;
   settlements: Settlement[];
   grandTotal: number;
+  personalShares: PersonalShareDetail[];
 }
 
 export interface BillCategory { // New type
@@ -87,30 +88,15 @@ export interface BillHistoryEntry {
   categoryName?: string | null;
 }
 
-export interface Notification {
+// Minimal profile type for header display
+export interface UserProfileBasic {
   id: string;
-  type: 'friend_request' | 'bill_invite' | 'generic' | 'info';
-  title: string;
-  description?: string;
-  createdAt: string; // ISO string date
-  read: boolean;
-  icon?: React.ElementType;
-  link?: string;
-  sender?: {
-    name: string;
-    avatar_url?: string;
-  };
-  payload?: any; // For additional data like invitation IDs
+  username: string | null;
+  full_name: string | null;
+  avatar_url: string | null;
+  role?: 'admin' | 'pengguna';
 }
 
-// ===== INVITATION & NOTIFICATION TYPES =====
-export interface BillInvitation {
-  participantId: string;
-  billId: string;
-  billName: string | null;
-  inviterName: string | null;
-  createdAt: string;
-}
 
 // ===== DASHBOARD TYPES =====
 export interface ScheduledBillDisplayItem {
@@ -152,25 +138,46 @@ export interface DashboardData {
 export interface FetchedBillDetails {
   billName: string | null;
   createdAt: string;
-  summaryData: DetailedBillSummaryData;
+  summaryData: DetailedBillSummaryData | null;
   participants: Person[];
+  ownerId: string | null;
+  scheduledAt: string | null;
+  categoryId: string | null;
 }
 
-// ===== SOCIAL/FRIENDSHIP TYPES =====
-export interface UserProfileBasic {
-  id: string;
-  username: string | null;
-  full_name: string | null;
-  avatar_url: string | null;
+export interface FetchedBillDetailsWithItems extends FetchedBillDetails {
+  items: SplitItem[];
 }
 
-export interface FriendRequestDisplay extends UserProfileBasic {
-  requestId: string;
-  requestedAt: string; // ISO string date
-  status: 'pending' | 'accepted' | 'declined' | 'cancelled';
+// ===== ADMIN DASHBOARD TYPES =====
+
+export interface AdminDashboardData {
+  totalUsers: number;
+  activeUsers: number;
+  newUserWeekCount: number;
+  newUserMonthCount: number;
+  totalBills: number;
+  billsLastWeekCount: number;
+  userGrowthData: { month: string; users: number }[];
+  userStatusData: { name: string; value: number; color: string }[];
+  dailyActivityData: { day: string; sessions: number }[];
 }
 
-export interface FriendDisplay extends UserProfileBasic {
-  friendshipId: string;
-  since: string; // ISO string date
+export interface RevenueData {
+    totalRevenue: number;
+    totalTransactions: number;
+    averageFeePerTransaction: number;
+    revenueTrend: { month: string; revenue: number }[];
+    transactionTrend: { month: string; transactions: number }[];
+    revenueByCategory: { categoryName: string; revenue: number }[];
+}
+
+export interface SpendingAnalysisData {
+    totalSpending: number;
+    totalBills: number;
+    averagePerBill: number;
+    mostPopularCategory: { categoryName: string; billCount: number };
+    spendingByCategory: { categoryName: string; totalAmount: number; billCount: number }[];
+    spendingTrend: { month: string; [key: string]: number | string }[]; // e.g. { month: 'Jan', Makanan: 500, Transportasi: 200 }
+    topCategories: { categoryName: string; totalAmount: number; billCount: number }[];
 }

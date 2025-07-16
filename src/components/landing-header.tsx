@@ -1,3 +1,4 @@
+
 "use client";
 
 import Link from 'next/link';
@@ -19,7 +20,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { NotificationBell } from './notification-bell';
 import type { UserProfileBasic } from '@/lib/types';
 
 
@@ -27,7 +27,6 @@ import type { UserProfileBasic } from '@/lib/types';
 const navLinks = [
   { href: '/', label: 'Beranda', icon: Home },
   { href: '/app/history', label: 'Riwayat', icon: ListChecks },
-  { href: '/app/social', label: 'Teman', icon: Users }, 
 ];
 
 export function LandingHeader() {
@@ -59,7 +58,8 @@ export function LandingHeader() {
       setAuthUser(null);
       setUserProfile(null);
       setIsMobileMenuOpen(false);
-      router.refresh(); // This forces a server-side data re-fetch for the current route.
+       // Force a full page reload to clear all client-side state and update header correctly
+      window.location.href = "/login";
     } else {
       toast({ variant: "destructive", title: "Logout Gagal", description: error });
     }
@@ -90,17 +90,6 @@ export function LandingHeader() {
     }
   };
 
-  const handleFriendsNavigation = () => {
-    setIsMobileMenuOpen(false);
-    if (authUser) {
-      router.push('/app/social');
-    } else {
-      toast({title: "Akses Ditolak", description: "Anda harus login untuk mengakses fitur sosial.", duration: 3000});
-      router.push('/login');
-    }
-  };
-
-
   const handleNavLinkClick = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
     e.preventDefault(); 
     setIsMobileMenuOpen(false);
@@ -115,8 +104,6 @@ export function LandingHeader() {
       handleHistoryClick();
     } else if (href === '/app/profile') { 
       handleProfileClick();
-    } else if (href === '/app/social') { 
-      handleFriendsNavigation();
     }
     else {
       if (href.startsWith('#')) {
@@ -136,7 +123,7 @@ export function LandingHeader() {
         </Link>
 
         <nav className="hidden md:flex items-center space-x-6">
-          {navLinks.map((link) => (
+          {authUser && navLinks.map((link) => (
             <Link
               key={link.label}
               href={link.href}
@@ -153,7 +140,6 @@ export function LandingHeader() {
              <Button variant="ghost" disabled size="sm">Memuat...</Button>
           ) : authUser ? (
             <>
-              <NotificationBell authUser={authUser} />
               <Button variant="default" asChild size="sm">
                 <Link href="/app">
                   <FilePlus className="mr-2 h-4 w-4" /> Tagihan Baru
@@ -185,10 +171,6 @@ export function LandingHeader() {
                     <UserCircle className="mr-2 h-4 w-4" />
                     <span>Profil</span>
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => toast({title: "Info", description: "Pengaturan belum diimplementasikan."})}>
-                    <Settings className="mr-2 h-4 w-4" />
-                    <span>Pengaturan</span>
-                  </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={handleLogout}>
                     <LogOut className="mr-2 h-4 w-4" />
@@ -210,7 +192,6 @@ export function LandingHeader() {
         </div>
 
         <div className="md:hidden flex items-center gap-2">
-          {authUser && <NotificationBell authUser={authUser} />}
           <Sheet open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
             <SheetTrigger asChild>
               <Button variant="ghost" size="icon">
@@ -226,7 +207,7 @@ export function LandingHeader() {
                 </SheetTitle>
               </SheetHeader>
               <nav className="flex flex-col space-y-1 p-4 pt-2">
-                {navLinks.map((link) => {
+                {authUser && navLinks.map((link) => {
                   const IconComponent = link.icon;
                   return (
                     <Link

@@ -1,24 +1,8 @@
 
-import type { Metadata } from 'next';
+import type React from "react";
 
-export const metadata: Metadata = {
-  title: 'Patungan - Aplikasi Pembagi Tagihan',
-  description: 'Pindai struk dan bagi tagihan dengan mudah bersama teman-teman Anda.',
-};
-
-// Separate metadata for history page
-export const historyPageMetadata: Metadata = {
-  title: 'Riwayat Tagihan - Patungan',
-  description: 'Lihat riwayat tagihan yang telah Anda buat sebelumnya.',
-};
-
-// Separate metadata for social page
-export const socialPageMetadata: Metadata = {
-  title: 'Teman - Patungan',
-  description: 'Kelola daftar teman Anda dan temukan teman baru.',
-};
-
-
+// This is the correct, minimal layout for the /app route group.
+// It simply renders the pages within this route.
 export default function AppLayout({
   children,
 }: {
@@ -26,5 +10,3 @@ export default function AppLayout({
 }) {
   return <>{children}</>;
 }
-
-    

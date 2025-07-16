@@ -13,8 +13,6 @@ interface ItemEditorProps {
   onUpdateItem: (updatedItem: SplitItem) => void;
   onAddItem: () => void;
   onDeleteItem: (itemId: string) => void;
-  onCalculateSummary: () => void; // Prop remains, but button is moved to parent
-  isCalculating: boolean; // Prop remains, but button is moved to parent
 }
 
 export function ItemEditor({
@@ -23,8 +21,6 @@ export function ItemEditor({
   onUpdateItem,
   onAddItem,
   onDeleteItem,
-  onCalculateSummary, // Retained for potential future use or if button is moved back
-  isCalculating,    // Retained for potential future use
 }: ItemEditorProps) {
   if (items.length === 0) {
     return (
@@ -55,12 +51,7 @@ export function ItemEditor({
          <Button onClick={onAddItem} variant="outline" className="w-full sm:w-auto">
           <PlusCircle className="mr-2 h-4 w-4" /> Tambah Item Lain
         </Button>
-        {/* Button onCalculateSummary is now in the parent component (SplitBillAppPage) 
-            below the payment details section, to include those details in the calculation.
-        */}
       </div>
     </div>
   );
 }
-
-    

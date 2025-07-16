@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect } from "react"
@@ -10,9 +11,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import {
   Users,
-  UserCheck,
-  UserPlus,
-  Users2,
   Search,
   Filter,
   Download,
@@ -20,44 +18,16 @@ import {
   Edit,
   Ban,
   MoreHorizontal,
+  UserPlus,
 } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { UserGrowthChart } from "@/components/user-growth-chart"
-import { UserActivityChart } from "@/components/user-activity-chart"
-import { UserStatusChart } from "@/components/user-status-chart"
-import { getAllUsersAction } from "@/lib/actions"
+import { getAllUsersAction, adminUpdateUserStatusAction } from "@/lib/actions"
 import { ProfileModal } from "@/components/admin/profile-modal"
+import { UserFormModal } from "@/components/admin/user-form-modal"
+import type { Database } from "@/lib/database.types"
+import { useToast } from "@/hooks/use-toast"
 
-const userMetrics = [
-  {
-    title: "Total Pengguna",
-    value: "247",
-    change: "+12.5%",
-    icon: Users,
-    description: "Semua akun terdaftar",
-  },
-  {
-    title: "Pengguna Aktif",
-    value: "165",
-    change: "+8.2%",
-    icon: UserCheck,
-    description: "Aktif 30 hari terakhir",
-  },
-  {
-    title: "Pengguna Baru",
-    value: "23",
-    change: "+15.8%",
-    icon: UserPlus,
-    description: "Minggu ini",
-  },
-  {
-    title: "Total Grup Dibuat",
-    value: "89",
-    change: "+22.1%",
-    icon: Users2,
-    description: "Sesi patungan dibuat",
-  },
-]
+type UserProfile = Database['public']['Tables']['profiles']['Row'];
 
 const getStatusBadge = (status: string) => {
   switch (status) {
@@ -75,20 +45,27 @@ const getStatusBadge = (status: string) => {
 export default function UsersPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
-  const [users, setUsers] = useState<any[]>([])
+  const [users, setUsers] = useState<UserProfile[]>([])
   const [loading, setLoading] = useState(true)
-  const [modalOpen, setModalOpen] = useState(false)
-  const [selectedUser, setSelectedUser] = useState<any | null>(null)
+  
+  const [detailModalOpen, setDetailModalOpen] = useState(false)
+  const [formModalOpen, setFormModalOpen] = useState(false)
+  const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null)
+  
+  const { toast } = useToast();
+
+  const fetchUsers = async () => {
+    setLoading(true)
+    const res = await getAllUsersAction()
+    if (res.success && res.users) {
+      setUsers(res.users)
+    } else {
+        toast({ variant: "destructive", title: "Gagal Memuat Pengguna", description: res.error });
+    }
+    setLoading(false)
+  }
 
   useEffect(() => {
-    async function fetchUsers() {
-      setLoading(true)
-      const res = await getAllUsersAction()
-      if (res.success && res.users) {
-        setUsers(res.users)
-      }
-      setLoading(false)
-    }
     fetchUsers()
   }, [])
 
@@ -104,24 +81,57 @@ export default function UsersPage() {
     console.log("Exporting user data...")
   }
 
-  const handleShowDetail = (user: any) => {
+  const handleShowDetail = (user: UserProfile) => {
     setSelectedUser(user)
-    setModalOpen(true)
+    setDetailModalOpen(true)
   }
+
+  const handleShowForm = (user: UserProfile | null) => {
+    setSelectedUser(user)
+    setFormModalOpen(true)
+  }
+  
+  const handleToggleBlock = async (user: UserProfile) => {
+    const newStatus = user.status === 'blocked' ? 'active' : 'blocked';
+    const result = await adminUpdateUserStatusAction(user.id, newStatus);
+    if (result.success) {
+      toast({ title: `Pengguna ${newStatus === 'blocked' ? 'Diblokir' : 'Diaktifkan'}` });
+      fetchUsers(); // Refresh user list
+    } else {
+      toast({ variant: "destructive", title: "Gagal Mengubah Status", description: result.error });
+    }
+  };
+
 
   return (
     <div className="space-y-6">
-      <ProfileModal isOpen={modalOpen} onClose={() => setModalOpen(false)} user={{
-        full_name: selectedUser?.full_name,
-        username: selectedUser?.username,
-        email: selectedUser?.email || '-',
-        phone_number: selectedUser?.phone_number || '-',
-        avatar_url: selectedUser?.avatar_url
-      }} />
+      <ProfileModal 
+        isOpen={detailModalOpen} 
+        onClose={() => setDetailModalOpen(false)} 
+        user={selectedUser} 
+      />
+      <UserFormModal 
+        isOpen={formModalOpen} 
+        onClose={() => setFormModalOpen(false)} 
+        user={selectedUser}
+        onSave={() => {
+            setFormModalOpen(false);
+            fetchUsers();
+        }}
+       />
+
       <Card>
         <CardHeader>
-          <CardTitle className="text-slate-800">Daftar Pengguna</CardTitle>
-          <div className="flex items-center space-x-4">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div>
+                <CardTitle className="text-slate-800">Daftar Pengguna</CardTitle>
+                <p className="text-sm text-muted-foreground mt-1">Kelola semua pengguna terdaftar di platform.</p>
+            </div>
+            <Button onClick={() => handleShowForm(null)}>
+                <UserPlus className="mr-2 h-4 w-4"/> Tambah Pengguna Baru
+            </Button>
+          </div>
+          <div className="flex items-center space-x-4 pt-4">
             <div className="relative flex-1 max-w-sm">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 h-4 w-4" />
               <Input
@@ -153,7 +163,7 @@ export default function UsersPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead className="text-slate-800">Pengguna</TableHead>
-                  <TableHead className="text-slate-800">ID</TableHead>
+                  <TableHead className="text-slate-800">Status</TableHead>
                   <TableHead className="text-slate-800">Terakhir Update</TableHead>
                   <TableHead className="text-slate-800">Aksi</TableHead>
                 </TableRow>
@@ -167,16 +177,16 @@ export default function UsersPage() {
                     <TableCell>
                       <div className="flex items-center space-x-3">
                         <Avatar className="h-8 w-8">
-                          <AvatarImage src={user.avatar_url || "/placeholder.svg"} alt={user.full_name || user.username || "-"} />
+                          <AvatarImage src={user.avatar_url || undefined} alt={user.full_name || user.username || "-"} />
                           <AvatarFallback>{(user.full_name || user.username || "-").charAt(0)}</AvatarFallback>
                         </Avatar>
                         <div>
                           <p className="font-medium text-slate-800">{user.full_name || user.username || "-"}</p>
-                          <p className="text-sm text-slate-500">{user.username ? `@${user.username}` : "-"}</p>
+                          <p className="text-sm text-slate-500">{user.email ? `${user.email}` : "-"}</p>
                         </div>
                       </div>
                     </TableCell>
-                    <TableCell className="font-mono text-sm">{user.id}</TableCell>
+                    <TableCell>{getStatusBadge(user.status)}</TableCell>
                     <TableCell>{user.updated_at ? new Date(user.updated_at).toLocaleString("id-ID") : "-"}</TableCell>
                     <TableCell>
                       <DropdownMenu>
@@ -190,13 +200,13 @@ export default function UsersPage() {
                             <Eye className="mr-2 h-4 w-4" />
                             Lihat Detail
                           </DropdownMenuItem>
-                          <DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleShowForm(user)}>
                             <Edit className="mr-2 h-4 w-4" />
                             Edit Pengguna
                           </DropdownMenuItem>
-                          <DropdownMenuItem className="text-white-600">
+                          <DropdownMenuItem onClick={() => handleToggleBlock(user)} className={user.status === 'blocked' ? 'text-green-600' : 'text-red-600'}>
                             <Ban className="mr-2 h-4 w-4" />
-                            Block/Unblock Pengguna
+                            {user.status === 'blocked' ? 'Unblock Pengguna' : 'Block Pengguna'}
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
@@ -216,4 +226,4 @@ export default function UsersPage() {
       </div>
     </div>
   )
-} 
+}

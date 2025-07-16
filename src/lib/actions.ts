@@ -174,6 +174,7 @@ export async function loginUserAction(formData: FormData) {
   revalidatePath('/', 'page');
   if (role === 'admin') {
     revalidatePath('/admin', 'layout');
+    revalidatePath('/admin', 'page');
   } else {
     revalidatePath('/app', 'layout');
   }
@@ -1045,16 +1046,16 @@ export async function getBillDetailsAction(billId: string): Promise<{ success: b
 }
 
 export async function getAllUsersAction() {
-    const supabase = createSupabaseServerClient()
+    const supabase = createSupabaseServerClient();
     const { data, error } = await supabase
         .from('profiles')
         .select('*')
         .neq('role', 'admin'); // Exclude admins from the user list
 
     if (error) {
-        return { success: false, error: error.message }
+        return { success: false, error: error.message };
     }
-    return { success: true, users: data }
+    return { success: true, users: data };
 }
 
 // ===== Dashboard Actions =====
@@ -1155,10 +1156,12 @@ export async function getDashboardDataAction(): Promise<{ success: boolean; data
 // ===== ADMIN DASHBOARD ACTIONS =====
 export async function getAdminDashboardDataAction(): Promise<{ success: boolean; data?: AdminDashboardData, error?: string }> {
   const supabase = createSupabaseServerClient();
+  const { data: { user } , error: authError } = await supabase.auth.getUser();
+  if (authError || !user) {
+    return { success: false, error: "Tidak terautentikasi." };
+  }
+  
   try {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return { success: false, error: "Tidak terautentikasi." };
-
     const today = new Date();
     const oneWeekAgo = subDays(today, 7).toISOString();
     const thirtyDaysAgo = subDays(today, 30).toISOString();
@@ -1216,7 +1219,7 @@ export async function getRevenueDataAction(): Promise<{ success: boolean; data?:
     }
 
     const totalRevenue = settlements.reduce((acc, s) => acc + (s.service_fee || 0), 0);
-    const totalTransactions = new Set(settlements.map(s => s.bill_id)).size;
+    const totalTransactions = settlements.filter(s => s.service_fee && s.service_fee > 0).length;
     const averageFeePerTransaction = totalTransactions > 0 ? totalRevenue / totalTransactions : 0;
 
     let revenueTrend = [];
@@ -1229,7 +1232,7 @@ export async function getRevenueDataAction(): Promise<{ success: boolean; data?:
     let transactionTrend = [];
     for (let i = 5; i >= 0; i--) {
       const month = subMonths(new Date(), i);
-      const monthTransactions = new Set(settlements.filter(s => parseISO(s.created_at).getMonth() === month.getMonth() && parseISO(s.created_at).getFullYear() === month.getFullYear()).map(s => s.bill_id)).size;
+      const monthTransactions = settlements.filter(s => s.service_fee && s.service_fee > 0 && parseISO(s.created_at).getMonth() === month.getMonth() && parseISO(s.created_at).getFullYear() === month.getFullYear()).length;
       transactionTrend.push({ month: format(month, 'MMM'), transactions: monthTransactions });
     }
     
@@ -1254,8 +1257,13 @@ export async function getSpendingAnalysisAction(): Promise<{ success: boolean; d
     if (billsError) throw billsError;
     if (!bills) return { success: false, error: "Tidak ada data tagihan." };
 
-    const allCategories = (await supabase.from('bill_categories').select('name')).data?.map(c => c.name) || [];
-    allCategories.push('Lainnya'); // Ensure 'Lainnya' is included
+    const { data: allCategoriesData, error: catError } = await supabase.from('bill_categories').select('name');
+    if(catError) throw catError;
+    
+    const allCategories = allCategoriesData?.map(c => c.name) || [];
+    if (!allCategories.includes('Lainnya')) {
+        allCategories.push('Lainnya');
+    }
 
     const totalSpending = bills.reduce((acc, b) => acc + (b.grand_total || 0), 0);
     const totalBills = bills.length;
@@ -1280,7 +1288,6 @@ export async function getSpendingAnalysisAction(): Promise<{ success: boolean; d
         const month = subMonths(new Date(), i);
         const monthStr = format(month, 'MMM');
         spendingTrendMap[monthStr] = { month: monthStr };
-        // Initialize all categories with 0 for this month to ensure they appear in the chart
         allCategories.forEach(cat => {
           spendingTrendMap[monthStr][cat] = 0;
         });
@@ -1299,4 +1306,99 @@ export async function getSpendingAnalysisAction(): Promise<{ success: boolean; d
   } catch (e: any) {
     return { success: false, error: e.message };
   }
+}
+
+// ===== ADMIN USER CRUD ACTIONS =====
+
+export async function adminCreateUserAction(formData: FormData) {
+  const supabase = createSupabaseServerClient();
+  const { data: { user: adminUser }, error: adminAuthError } = await supabase.auth.getUser();
+  if (adminAuthError || !adminUser) return { success: false, error: "Admin tidak terautentikasi." };
+  
+  // You might want a more robust role check here in a real app
+  const { data: adminProfile } = await supabase.from('profiles').select('role').eq('id', adminUser.id).single();
+  if (adminProfile?.role !== 'admin') return { success: false, error: "Hanya admin yang bisa membuat pengguna." };
+
+  const email = formData.get('email') as string;
+  const password = formData.get('password') as string;
+  const fullName = formData.get('fullName') as string;
+  const username = formData.get('username') as string;
+
+  if (!email || !password || !fullName || !username) {
+    return { success: false, error: "Semua field kecuali nomor telepon wajib diisi." };
+  }
+
+  // Use the admin client to create a user without sending a confirmation email
+  const { data: newAuthUser, error: createAuthError } = await supabase.auth.admin.createUser({
+    email,
+    password,
+    email_confirm: true, // Auto-confirm the user
+    user_metadata: { full_name: fullName, username: username }
+  });
+
+  if (createAuthError) {
+    return { success: false, error: `Gagal membuat pengguna di Auth: ${createAuthError.message}` };
+  }
+  if (!newAuthUser.user) {
+    return { success: false, error: "Gagal mendapatkan data pengguna setelah pembuatan." };
+  }
+
+  const { error: profileError } = await supabase.from('profiles').insert({
+    id: newAuthUser.user.id,
+    full_name: fullName,
+    username: username,
+    email: email,
+    phone_number: formData.get('phoneNumber') as string || null,
+    status: 'active'
+  });
+
+  if (profileError) {
+    // If profile creation fails, delete the auth user to prevent orphans
+    await supabase.auth.admin.deleteUser(newAuthUser.user.id);
+    return { success: false, error: `Gagal membuat profil: ${profileError.message}` };
+  }
+
+  revalidatePath('/admin/users');
+  return { success: true };
+}
+
+export async function adminUpdateUserAction(userId: string, formData: FormData) {
+    const supabase = createSupabaseServerClient();
+    const { data: { user: adminUser }, error: adminAuthError } = await supabase.auth.getUser();
+    if (adminAuthError || !adminUser) return { success: false, error: "Admin tidak terautentikasi." };
+
+    const fullName = formData.get('fullName') as string;
+    const username = formData.get('username') as string;
+    const phoneNumber = formData.get('phoneNumber') as string;
+
+    const profileUpdate: Database['public']['Tables']['profiles']['Update'] = {
+        full_name: fullName,
+        username: username,
+        phone_number: phoneNumber || null,
+        updated_at: new Date().toISOString()
+    };
+    
+    const { error: profileError } = await supabase.from('profiles').update(profileUpdate).eq('id', userId);
+
+    if (profileError) {
+        return { success: false, error: `Gagal memperbarui profil: ${profileError.message}` };
+    }
+
+    revalidatePath('/admin/users');
+    return { success: true };
+}
+
+export async function adminUpdateUserStatusAction(userId: string, status: 'active' | 'blocked') {
+    const supabase = createSupabaseServerClient();
+    const { data: { user: adminUser }, error: adminAuthError } = await supabase.auth.getUser();
+    if (adminAuthError || !adminUser) return { success: false, error: "Admin tidak terautentikasi." };
+
+    const { error } = await supabase.from('profiles').update({ status, updated_at: new Date().toISOString() }).eq('id', userId);
+
+    if (error) {
+        return { success: false, error: `Gagal mengubah status: ${error.message}` };
+    }
+
+    revalidatePath('/admin/users');
+    return { success: true };
 }

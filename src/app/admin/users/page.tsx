@@ -1,5 +1,4 @@
 
-
 "use client"
 
 import { useState, useEffect } from "react"
@@ -36,7 +35,6 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 
 type UserProfile = Database['public']['Tables']['profiles']['Row'];
@@ -62,6 +60,7 @@ export default function UsersPage() {
   
   const [detailModalOpen, setDetailModalOpen] = useState(false)
   const [formModalOpen, setFormModalOpen] = useState(false)
+  const [deleteAlertOpen, setDeleteAlertOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null)
   
   const { toast } = useToast();
@@ -103,14 +102,16 @@ export default function UsersPage() {
     setFormModalOpen(true)
   }
   
-  const handleDeleteUser = async (user: UserProfile) => {
-    const result = await adminUpdateUserStatusAction(user.id, 'deleted');
+  const handleDeleteUser = async () => {
+    if (!selectedUser) return;
+    const result = await adminUpdateUserStatusAction(selectedUser.id, 'deleted');
     if (result.success) {
-      toast({ title: `Pengguna Dihapus`, description: `${user.full_name} telah ditandai sebagai dihapus.` });
+      toast({ title: `Pengguna Dihapus`, description: `${selectedUser.full_name} telah ditandai sebagai dihapus.` });
       fetchUsers(); // Refresh user list
     } else {
       toast({ variant: "destructive", title: "Gagal Menghapus Pengguna", description: result.error });
     }
+    setDeleteAlertOpen(false);
   };
 
 
@@ -130,6 +131,22 @@ export default function UsersPage() {
             fetchUsers();
         }}
        />
+      <AlertDialog open={deleteAlertOpen} onOpenChange={setDeleteAlertOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Anda yakin ingin menghapus pengguna ini?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tindakan ini akan menandai pengguna <strong>{selectedUser?.full_name}</strong> sebagai &quot;dihapus&quot; dan mereka tidak akan bisa login. Data mereka tidak akan dihapus permanen.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Batal</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteUser} className="bg-destructive text-destructive-foreground">
+              Ya, Hapus
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <Card>
         <CardHeader>
@@ -215,28 +232,16 @@ export default function UsersPage() {
                             <Edit className="mr-2 h-4 w-4" />
                             Edit Pengguna
                           </DropdownMenuItem>
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-red-600">
-                                <Trash2 className="mr-2 h-4 w-4" />
-                                Hapus Pengguna
-                              </DropdownMenuItem>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>Anda yakin ingin menghapus pengguna ini?</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  Tindakan ini akan menandai pengguna sebagai "dihapus" dan mereka tidak akan bisa login. Data mereka tidak akan dihapus permanen.
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>Batal</AlertDialogCancel>
-                                <AlertDialogAction onClick={() => handleDeleteUser(user)} className="bg-destructive text-destructive-foreground">
-                                  Ya, Hapus
-                                </AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
+                          <DropdownMenuItem
+                            onSelect={() => {
+                              setSelectedUser(user);
+                              setDeleteAlertOpen(true);
+                            }}
+                            className="text-red-600 focus:bg-red-50 focus:text-red-700"
+                          >
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Hapus Pengguna
+                          </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </TableCell>

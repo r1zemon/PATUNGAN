@@ -173,9 +173,11 @@ export async function loginUserAction(formData: FormData) {
 
   revalidatePath('/', 'layout');
   revalidatePath('/', 'page');
-  if (role === 'admin') {
-    router.push('/admin');
-  }
+  
+  // No longer redirecting from here, handled by page/middleware now
+  // if (role === 'admin') {
+  //   router.push('/admin');
+  // }
 
   return { success: true, user: loginData.user, role };
 }

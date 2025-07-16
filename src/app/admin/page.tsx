@@ -65,7 +65,7 @@ export default function Dashboard() {
       description: "Terdaftar dalam 7 hari",
     },
     {
-      title: "Total Grup Dibuat",
+      title: "Total Sesi Tagihan",
       value: data.totalBills.toString(),
       change: `+${data.billsLastWeekCount} minggu lalu`,
       icon: Users2,
@@ -88,14 +88,14 @@ export default function Dashboard() {
     );
   }
 
-  if (error) {
+  if (error || !data) {
     return (
       <Card className="bg-destructive/10 border-destructive">
         <CardHeader>
           <CardTitle className="text-destructive flex items-center gap-2"><AlertTriangle/>Gagal Memuat Data</CardTitle>
         </CardHeader>
         <CardContent>
-          <p>{error}</p>
+          <p>{error || "Data tidak ditemukan atau terjadi kesalahan."}</p>
           <Button onClick={fetchData} variant="secondary" className="mt-4">
             <RefreshCw className="mr-2 h-4 w-4" /> Coba Lagi
           </Button>

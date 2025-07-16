@@ -1205,7 +1205,6 @@ export async function getRevenueDataAction(): Promise<{ success: boolean; data?:
     }
 
     if (!settlements || settlements.length === 0) {
-      // It's not an error if there's no revenue yet, just return empty state.
       return { success: false, error: "Tidak ada data settlement." };
     }
 
@@ -1249,6 +1248,9 @@ export async function getSpendingAnalysisAction(): Promise<{ success: boolean; d
     if (billsError) throw billsError;
     if (!bills) return { success: false, error: "Tidak ada data tagihan." };
 
+    const allCategories = (await supabase.from('bill_categories').select('name')).data?.map(c => c.name) || [];
+    allCategories.push('Lainnya'); // Ensure 'Lainnya' is included
+
     const totalSpending = bills.reduce((acc, b) => acc + (b.grand_total || 0), 0);
     const totalBills = bills.length;
     const averagePerBill = totalBills > 0 ? totalSpending / totalBills : 0;
@@ -1267,17 +1269,22 @@ export async function getSpendingAnalysisAction(): Promise<{ success: boolean; d
     const mostPopularCategory = spendingByCategory.sort((a, b) => b.billCount - a.billCount)[0] || { categoryName: '-', billCount: 0 };
     const topCategories = spendingByCategory.sort((a, b) => b.totalAmount - a.totalAmount).slice(0, 5);
     
-    let spendingTrendMap: Record<string, Record<string, number>> = {};
+    let spendingTrendMap: Record<string, { month: string, [key: string]: number | string }> = {};
     for (let i = 5; i >= 0; i--) {
         const month = subMonths(new Date(), i);
         const monthStr = format(month, 'MMM');
         spendingTrendMap[monthStr] = { month: monthStr };
+        // Initialize all categories with 0 for this month to ensure they appear in the chart
+        allCategories.forEach(cat => {
+          spendingTrendMap[monthStr][cat] = 0;
+        });
     }
+
     bills.forEach(b => {
         const monthStr = format(parseISO(b.created_at), 'MMM');
         if (spendingTrendMap[monthStr]) {
             const categoryName = b.bill_categories?.name || 'Lainnya';
-            spendingTrendMap[monthStr][categoryName] = (spendingTrendMap[monthStr][categoryName] || 0) + (b.grand_total || 0);
+            spendingTrendMap[monthStr][categoryName] = (spendingTrendMap[monthStr][categoryName] as number || 0) + (b.grand_total || 0);
         }
     });
     const spendingTrend = Object.values(spendingTrendMap);

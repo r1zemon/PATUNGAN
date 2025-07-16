@@ -11,11 +11,11 @@ import { logoutUserAction } from "@/lib/actions"
 
 const navItems = [
   { href: "/admin", label: "Dashboard", icon: Home },
-  { href: "/admin/users", label: "Users", icon: Users },
-  { href: "/admin/revenue", label: "Revenue", icon: DollarSign },
+  { href: "/admin/users", label: "Pengguna", icon: Users },
+  { href: "/admin/revenue", label: "Keuntungan", icon: DollarSign },
   {
     href: "/admin/spending-analysis",
-    label: "Spending Analysis",
+    label: "Analisis Pengeluaran",
     icon: BarChart2,
   },
 ]
@@ -73,7 +73,7 @@ export function Sidebar() {
           className="w-full justify-start text-gray-600 hover:bg-gray-100"
         >
           <LogOut className="mr-3 h-5 w-5" />
-          <span>Logout</span>
+          <span>Keluar</span>
         </Button>
       </div>
     </div>

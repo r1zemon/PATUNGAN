@@ -2,7 +2,7 @@
 "use client"
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { DollarSign, TrendingUp, Users, CreditCard, RefreshCw, AlertTriangle } from "lucide-react"
+import { DollarSign, TrendingUp, CreditCard, RefreshCw, AlertTriangle } from "lucide-react"
 import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis, Bar, BarChart as RechartsBarChart } from "recharts"
 import { useEffect, useState } from "react"
 import { getRevenueDataAction } from "@/lib/actions"
@@ -42,8 +42,8 @@ export default function RevenuePage() {
     return (
        <div className="space-y-6">
         <Skeleton className="h-12 w-2/3" />
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-32" />)}
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-32" />)}
         </div>
         <div className="grid gap-6 md:grid-cols-2">
           <Skeleton className="h-80" />
@@ -92,13 +92,6 @@ export default function RevenuePage() {
       icon: CreditCard,
       description: "Split bill berhasil",
     },
-    {
-      title: "Pengguna Bertransaksi",
-      value: data.totalPayingUsers.toString(),
-      change: "+15.8%", // Dummy
-      icon: Users,
-      description: "User yang bertransaksi",
-    },
   ];
 
   return (
@@ -109,7 +102,7 @@ export default function RevenuePage() {
           <p className="text-slate-600">Analisis pendapatan dari fee transaksi split bill</p>
         </div>
       </div>
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {revenueMetrics.map((metric) => (
           <Card key={metric.title} className="card-hover">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">

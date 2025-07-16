@@ -235,7 +235,7 @@ export type Database = {
           role: "admin" | "pengguna"
           updated_at: string | null
           username: string
-          status: 'active' | 'pending' | 'blocked';
+          status: string
           created_at: string;
         }
         Insert: {
@@ -247,7 +247,7 @@ export type Database = {
           role?: "admin" | "pengguna"
           updated_at?: string | null
           username: string
-          status?: 'active' | 'pending' | 'blocked';
+          status?: string
           created_at?: string;
         }
         Update: {
@@ -259,7 +259,7 @@ export type Database = {
           role?: "admin" | "pengguna"
           updated_at?: string | null
           username?: string
-          status?: 'active' | 'pending' | 'blocked';
+          status?: string
           created_at?: string;
         }
         Relationships: [

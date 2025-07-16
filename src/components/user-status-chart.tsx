@@ -8,8 +8,8 @@ interface UserStatusChartProps {
 }
 
 export function UserStatusChart({ data }: UserStatusChartProps) {
-  if (!data || data.length === 0) {
-    return <div className="h-[300px] flex items-center justify-center text-muted-foreground">Tidak ada data status.</div>
+  if (!data || data.length === 0 || data.every(d => d.value === 0)) {
+    return <div className="h-[300px] flex items-center justify-center text-muted-foreground">Tidak ada data status untuk ditampilkan.</div>
   }
 
   return (
@@ -21,7 +21,7 @@ export function UserStatusChart({ data }: UserStatusChartProps) {
               <Cell key={`cell-${index}`} fill={entry.color} />
             ))}
           </Pie>
-          <Tooltip />
+          <Tooltip formatter={(value, name) => [value, name]} />
         </PieChart>
       </ResponsiveContainer>
       <div className="mt-4 flex justify-center space-x-4">

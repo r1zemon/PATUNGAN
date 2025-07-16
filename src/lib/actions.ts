@@ -1,4 +1,5 @@
 
+
 "use server";
 
 import { scanReceipt, ScanReceiptOutput, ReceiptItem as AiReceiptItem } from "@/ai/flows/scan-receipt";
@@ -173,10 +174,7 @@ export async function loginUserAction(formData: FormData) {
   revalidatePath('/', 'layout');
   revalidatePath('/', 'page');
   if (role === 'admin') {
-    revalidatePath('/admin', 'layout');
-    revalidatePath('/admin', 'page');
-  } else {
-    revalidatePath('/app', 'layout');
+    router.push('/admin');
   }
 
   return { success: true, user: loginData.user, role };
@@ -1050,7 +1048,8 @@ export async function getAllUsersAction() {
     const { data, error } = await supabase
         .from('profiles')
         .select('*')
-        .neq('role', 'admin'); // Exclude admins from the user list
+        .neq('role', 'admin')
+        .neq('status', 'deleted'); // Exclude deleted users
 
     if (error) {
         return { success: false, error: error.message };
@@ -1168,13 +1167,15 @@ export async function getAdminDashboardDataAction(): Promise<{ success: boolean;
     const oneMonthAgo = subMonths(today, 1).toISOString();
 
     const { count: totalUsers } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).neq('role', 'admin');
-    const { count: activeUsers } = await supabase.from('profiles').select('id', { count: 'exact', head: true }).gt('updated_at', thirtyDaysAgo).neq('role', 'admin');
+    const { count: activeUsers } = await supabase.from('profiles').select('id', { count: 'exact', head: true }).gt('updated_at', thirtyDaysAgo).neq('role', 'admin').neq('status', 'deleted');
     const { count: newUserWeekCount } = await supabase.from('profiles').select('id', { count: 'exact', head: true }).gt('created_at', oneWeekAgo).neq('role', 'admin');
     const { count: newUserMonthCount } = await supabase.from('profiles').select('id', { count: 'exact', head: true }).gt('created_at', oneMonthAgo).neq('role', 'admin');
     const { count: totalBills } = await supabase.from('bills').select('*', { count: 'exact', head: true });
     const { count: billsLastWeekCount } = await supabase.from('bills').select('id', { count: 'exact', head: true }).gt('created_at', oneWeekAgo);
-    const { count: unverifiedUsers } = await supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('status', 'pending').neq('role', 'admin');
-    const { count: blockedUsers } = await supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('status', 'blocked').neq('role', 'admin');
+    
+    // Updated for new pie chart
+    const { count: activeChartUsers } = await supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('status', 'active').neq('role', 'admin');
+    const { count: deletedUsers } = await supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('status', 'deleted').neq('role', 'admin');
 
     let userGrowthData = [];
     for (let i = 5; i >= 0; i--) {
@@ -1184,9 +1185,8 @@ export async function getAdminDashboardDataAction(): Promise<{ success: boolean;
     }
 
     const userStatusData = [
-        { name: 'Aktif', value: activeUsers || 0, color: '#10b981' },
-        { name: 'Belum Verifikasi', value: unverifiedUsers || 0, color: '#64748b' },
-        { name: 'Diblokir', value: blockedUsers || 0, color: '#dc2626' },
+        { name: 'Aktif', value: activeChartUsers || 0, color: '#10b981' },
+        { name: 'Dihapus', value: deletedUsers || 0, color: '#dc2626' },
     ];
     
     let dailyActivityData = [];
@@ -1388,7 +1388,7 @@ export async function adminUpdateUserAction(userId: string, formData: FormData) 
     return { success: true };
 }
 
-export async function adminUpdateUserStatusAction(userId: string, status: 'active' | 'blocked') {
+export async function adminUpdateUserStatusAction(userId: string, status: 'active' | 'blocked' | 'deleted') {
     const supabase = createSupabaseServerClient();
     const { data: { user: adminUser }, error: adminAuthError } = await supabase.auth.getUser();
     if (adminAuthError || !adminUser) return { success: false, error: "Admin tidak terautentikasi." };
@@ -1400,5 +1400,6 @@ export async function adminUpdateUserStatusAction(userId: string, status: 'activ
     }
 
     revalidatePath('/admin/users');
+    revalidatePath('/admin'); // Revalidate dashboard for pie chart
     return { success: true };
 }

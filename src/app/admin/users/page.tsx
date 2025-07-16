@@ -1,4 +1,5 @@
 
+
 "use client"
 
 import { useState, useEffect } from "react"
@@ -16,7 +17,7 @@ import {
   Download,
   Eye,
   Edit,
-  Ban,
+  Trash2,
   MoreHorizontal,
   UserPlus,
 } from "lucide-react"
@@ -26,6 +27,17 @@ import { ProfileModal } from "@/components/admin/profile-modal"
 import { UserFormModal } from "@/components/admin/user-form-modal"
 import type { Database } from "@/lib/database.types"
 import { useToast } from "@/hooks/use-toast"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 
 type UserProfile = Database['public']['Tables']['profiles']['Row'];
 
@@ -38,7 +50,7 @@ const getStatusBadge = (status: string) => {
     case "blocked":
       return <Badge className="bg-red-100 text-red-800">Diblokir</Badge>
     default:
-      return <Badge>Unknown</Badge>
+      return <Badge>{status}</Badge>
   }
 }
 
@@ -91,14 +103,13 @@ export default function UsersPage() {
     setFormModalOpen(true)
   }
   
-  const handleToggleBlock = async (user: UserProfile) => {
-    const newStatus = user.status === 'blocked' ? 'active' : 'blocked';
-    const result = await adminUpdateUserStatusAction(user.id, newStatus);
+  const handleDeleteUser = async (user: UserProfile) => {
+    const result = await adminUpdateUserStatusAction(user.id, 'deleted');
     if (result.success) {
-      toast({ title: `Pengguna ${newStatus === 'blocked' ? 'Diblokir' : 'Diaktifkan'}` });
+      toast({ title: `Pengguna Dihapus`, description: `${user.full_name} telah ditandai sebagai dihapus.` });
       fetchUsers(); // Refresh user list
     } else {
-      toast({ variant: "destructive", title: "Gagal Mengubah Status", description: result.error });
+      toast({ variant: "destructive", title: "Gagal Menghapus Pengguna", description: result.error });
     }
   };
 
@@ -204,10 +215,28 @@ export default function UsersPage() {
                             <Edit className="mr-2 h-4 w-4" />
                             Edit Pengguna
                           </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleToggleBlock(user)} className={user.status === 'blocked' ? 'text-green-600' : 'text-red-600'}>
-                            <Ban className="mr-2 h-4 w-4" />
-                            {user.status === 'blocked' ? 'Unblock Pengguna' : 'Block Pengguna'}
-                          </DropdownMenuItem>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-red-600">
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                Hapus Pengguna
+                              </DropdownMenuItem>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Anda yakin ingin menghapus pengguna ini?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Tindakan ini akan menandai pengguna sebagai "dihapus" dan mereka tidak akan bisa login. Data mereka tidak akan dihapus permanen.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Batal</AlertDialogCancel>
+                                <AlertDialogAction onClick={() => handleDeleteUser(user)} className="bg-destructive text-destructive-foreground">
+                                  Ya, Hapus
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </TableCell>

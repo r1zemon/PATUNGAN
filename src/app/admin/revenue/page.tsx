@@ -86,11 +86,11 @@ export default function RevenuePage() {
       description: "Fee rata-rata per split",
     },
     {
-      title: "Total Transaksi",
+      title: "Total Transaksi Berbayar",
       value: data.totalTransactions.toString(),
       change: "+22.5%", // Dummy
       icon: CreditCard,
-      description: "Split bill berhasil",
+      description: "Split bill dengan service fee",
     },
   ];
 
@@ -145,7 +145,7 @@ export default function RevenuePage() {
         </Card>
         <Card>
           <CardHeader>
-            <CardTitle className="text-slate-800">Jumlah Transaksi</CardTitle>
+            <CardTitle className="text-slate-800">Jumlah Transaksi Berbayar</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="h-[300px]">
@@ -176,6 +176,9 @@ export default function RevenuePage() {
                 </div>
               ))}
             </div>
+             {data.revenueByCategory.length === 0 && (
+              <p className="text-center text-sm text-muted-foreground py-4">Belum ada pendapatan yang tercatat dari kategori manapun.</p>
+            )}
           </div>
         </CardContent>
       </Card>

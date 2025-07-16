@@ -94,6 +94,7 @@ export interface UserProfileBasic {
   username: string | null;
   full_name: string | null;
   avatar_url: string | null;
+  role?: 'admin' | 'pengguna';
 }
 
 
@@ -163,7 +164,6 @@ export interface AdminDashboardData {
 export interface RevenueData {
     totalRevenue: number;
     totalTransactions: number;
-    totalPayingUsers: number;
     averageFeePerTransaction: number;
     revenueTrend: { month: string; revenue: number }[];
     transactionTrend: { month: string; transactions: number }[];

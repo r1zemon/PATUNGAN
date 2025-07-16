@@ -168,11 +168,17 @@ export async function loginUserAction(formData: FormData) {
     return { success: false, error: "Login berhasil, tetapi gagal mengambil profil pengguna." };
   }
 
+  const role = profileData.role;
+
   revalidatePath('/', 'layout');
   revalidatePath('/', 'page');
-  revalidatePath('/admin', 'layout'); // Revalidate admin path as well
+  if (role === 'admin') {
+    revalidatePath('/admin', 'layout');
+  } else {
+    revalidatePath('/app', 'layout');
+  }
 
-  return { success: true, user: loginData.user, role: profileData.role };
+  return { success: true, user: loginData.user, role };
 }
 
 
@@ -191,7 +197,7 @@ export async function getCurrentUserAction(): Promise<{ user: SupabaseUser | nul
   try {
     const { data: profileData, error: profileError } = await supabase
       .from('profiles')
-      .select('id, username, full_name, avatar_url')
+      .select('id, username, full_name, avatar_url, role')
       .eq('id', user.id)
       .single();
 
@@ -1043,6 +1049,7 @@ export async function getAllUsersAction() {
     const { data, error } = await supabase
         .from('profiles')
         .select('*')
+        .neq('role', 'admin'); // Exclude admins from the user list
 
     if (error) {
         return { success: false, error: error.message }
@@ -1157,19 +1164,19 @@ export async function getAdminDashboardDataAction(): Promise<{ success: boolean;
     const thirtyDaysAgo = subDays(today, 30).toISOString();
     const oneMonthAgo = subMonths(today, 1).toISOString();
 
-    const { count: totalUsers } = await supabase.from('profiles').select('*', { count: 'exact', head: true });
-    const { count: activeUsers } = await supabase.from('profiles').select('id', { count: 'exact', head: true }).gt('updated_at', thirtyDaysAgo);
-    const { count: newUserWeekCount } = await supabase.from('profiles').select('id', { count: 'exact', head: true }).gt('created_at', oneWeekAgo);
-    const { count: newUserMonthCount } = await supabase.from('profiles').select('id', { count: 'exact', head: true }).gt('created_at', oneMonthAgo);
+    const { count: totalUsers } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).neq('role', 'admin');
+    const { count: activeUsers } = await supabase.from('profiles').select('id', { count: 'exact', head: true }).gt('updated_at', thirtyDaysAgo).neq('role', 'admin');
+    const { count: newUserWeekCount } = await supabase.from('profiles').select('id', { count: 'exact', head: true }).gt('created_at', oneWeekAgo).neq('role', 'admin');
+    const { count: newUserMonthCount } = await supabase.from('profiles').select('id', { count: 'exact', head: true }).gt('created_at', oneMonthAgo).neq('role', 'admin');
     const { count: totalBills } = await supabase.from('bills').select('*', { count: 'exact', head: true });
     const { count: billsLastWeekCount } = await supabase.from('bills').select('id', { count: 'exact', head: true }).gt('created_at', oneWeekAgo);
-    const { count: unverifiedUsers } = await supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('status', 'pending');
-    const { count: blockedUsers } = await supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('status', 'blocked');
+    const { count: unverifiedUsers } = await supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('status', 'pending').neq('role', 'admin');
+    const { count: blockedUsers } = await supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('status', 'blocked').neq('role', 'admin');
 
     let userGrowthData = [];
     for (let i = 5; i >= 0; i--) {
         const month = subMonths(today, i);
-        const { count } = await supabase.from('profiles').select('id', { count: 'exact', head: true }).lte('created_at', endOfMonth(month).toISOString());
+        const { count } = await supabase.from('profiles').select('id', { count: 'exact', head: true }).lte('created_at', endOfMonth(month).toISOString()).neq('role', 'admin');
         userGrowthData.push({ month: format(month, 'MMM'), users: count || 0 });
     }
 
@@ -1205,12 +1212,11 @@ export async function getRevenueDataAction(): Promise<{ success: boolean; data?:
     }
 
     if (!settlements || settlements.length === 0) {
-      return { success: false, error: "Tidak ada data settlement." };
+      return { success: true, data: { totalRevenue: 0, totalTransactions: 0, averageFeePerTransaction: 0, revenueTrend: [], transactionTrend: [], revenueByCategory: [] } };
     }
 
     const totalRevenue = settlements.reduce((acc, s) => acc + (s.service_fee || 0), 0);
     const totalTransactions = new Set(settlements.map(s => s.bill_id)).size;
-    const { count: totalPayingUsers } = await supabase.rpc('count_distinct_paying_users');
     const averageFeePerTransaction = totalTransactions > 0 ? totalRevenue / totalTransactions : 0;
 
     let revenueTrend = [];
@@ -1234,7 +1240,7 @@ export async function getRevenueDataAction(): Promise<{ success: boolean; data?:
     });
     const revenueByCategory = Object.entries(revenueByCategoryMap).map(([key, value]) => ({ categoryName: key, revenue: value }));
 
-    return { success: true, data: { totalRevenue, totalTransactions, totalPayingUsers: totalPayingUsers || 0, averageFeePerTransaction, revenueTrend, transactionTrend, revenueByCategory } };
+    return { success: true, data: { totalRevenue, totalTransactions, averageFeePerTransaction, revenueTrend, transactionTrend, revenueByCategory } };
   } catch (e: any) {
     return { success: false, error: e.message };
   }

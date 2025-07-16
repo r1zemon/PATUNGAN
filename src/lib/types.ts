@@ -141,6 +141,7 @@ export interface FetchedBillDetails {
   summaryData: DetailedBillSummaryData | null;
   participants: Person[];
   ownerId: string | null;
+  scheduledAt: string | null;
 }
 
 export interface FetchedBillDetailsWithItems extends FetchedBillDetails {

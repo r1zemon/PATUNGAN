@@ -69,7 +69,7 @@ export function LandingPageContent() {
                   lalu ubah 'src' di bawah ini menjadi nama file Anda (contoh: src="/nama-file-anda.png").
                 */}
                 <Image 
-                    src="https://placehold.co/280x560.png" 
+                    src="/ss.jpg" 
                     alt="Patungan App Screenshot on Phone" 
                     width={280} 
                     height={560} 

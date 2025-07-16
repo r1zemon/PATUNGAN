@@ -146,13 +146,24 @@ export default function SplitBillAppPage() {
         const result = await getBillDetailsAction(billId);
 
         if (result.success && result.data) {
-        const { billName, summaryData, participants, items } = result.data;
+        const { billName, summaryData, participants, items, scheduledAt } = result.data;
 
         // Authorization check: is current user part of this bill?
         if (!participants.some(p => p.profile_id === authUser?.id) && result.data.ownerId !== authUser?.id) {
             setError("Anda tidak memiliki akses ke tagihan ini.");
             toast({ variant: "destructive", title: "Akses Ditolak", description: "Anda bukan bagian dari sesi tagihan ini." });
             router.push('/app');
+            return;
+        }
+
+        // Check if a scheduled bill is being accessed before its time
+        if (scheduledAt && new Date(scheduledAt) > new Date()) {
+            toast({
+                variant: "destructive",
+                title: "Tagihan Belum Aktif",
+                description: `Tagihan ini dijadwalkan untuk ${format(new Date(scheduledAt), "dd MMM yyyy 'pukul' HH:mm", { locale: IndonesianLocale })}.`,
+            });
+            router.push('/'); // Redirect to dashboard
             return;
         }
 
@@ -254,7 +265,7 @@ export default function SplitBillAppPage() {
         }
     }
 
-    if (!finalCategoryId && billTimingOption === 'now') {
+    if (!finalCategoryId) {
         toast({ variant: "destructive", title: "Kategori Belum Dipilih" });
         return;
     }
@@ -363,7 +374,7 @@ export default function SplitBillAppPage() {
     setPeople(prev => prev.filter(p => p.id !== personIdToRemove));
     toast({ title: "Partisipan Dihapus"});
 
-    const result = await removeParticipantAction(personIdToRemove);
+    const result = await removeParticipantAction(participantIdToRemove);
     if (!result.success) {
        toast({ variant: "destructive", title: "Gagal Menghapus Partisipan", description: result.error });
        setPeople(originalPeople); // Revert on failure
@@ -645,7 +656,7 @@ export default function SplitBillAppPage() {
                                 value={scheduledAt}
                                 onChange={(e) => setScheduledAt(e.target.value)}
                                 className="pl-10"
-                                min={new Date().toISOString().slice(0, 16)} 
+                                min={new Date(new Date().getTime() + 5 * 60000).toISOString().slice(0, 16)} 
                             />
                         </div>
                         <p className="text-xs text-muted-foreground">Pilih tanggal dan waktu di masa mendatang untuk tagihan ini.</p>

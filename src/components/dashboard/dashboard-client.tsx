@@ -11,7 +11,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { BarChart, CalendarClock, ChevronRight, Info, ListChecks, Loader2, PieChart, TrendingUp, Users, Wallet, XCircle, Tag, Clock, Shapes, Utensils, Car, Gamepad2, BedDouble, ShoppingBag, Power } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils';
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, isFuture } from 'date-fns';
 import { id as IndonesianLocale } from 'date-fns/locale';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -56,6 +56,9 @@ export function DashboardClient({ authUser }: DashboardClientProps) {
   const [isLoadingBillDetail, setIsLoadingBillDetail] = useState(false);
   const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
+  
+  const [selectedScheduledBill, setSelectedScheduledBill] = useState<ScheduledBillDisplayItem | null>(null);
+  const [isScheduledDetailOpen, setIsScheduledDetailOpen] = useState(false);
 
 
   useEffect(() => {
@@ -104,6 +107,18 @@ export function DashboardClient({ authUser }: DashboardClientProps) {
       toast({ variant: "destructive", title: "Gagal Detail", description: result.error });
     }
     setIsLoadingBillDetail(false);
+  };
+  
+  const handleScheduledBillClick = (bill: ScheduledBillDisplayItem) => {
+    const scheduledTime = new Date(bill.scheduled_at);
+    const now = new Date();
+
+    if (now >= scheduledTime) {
+      router.push(`/app?billId=${bill.id}`);
+    } else {
+      setSelectedScheduledBill(bill);
+      setIsScheduledDetailOpen(true);
+    }
   };
 
 
@@ -243,8 +258,8 @@ export function DashboardClient({ authUser }: DashboardClientProps) {
                         <div className="flex items-center text-muted-foreground">
                             <Users className="mr-1.5 h-3 w-3"/> {bill.participantCount > 0 ? `${bill.participantCount} orang` : "Belum ada partisipan"}
                         </div>
-                         <Button variant="outline" size="xs" onClick={() => toast({title: "Info", description: "Fitur edit/isi tagihan terjadwal belum diimplementasikan."})}>
-                            Isi Detail <ChevronRight className="h-3 w-3 ml-1"/>
+                         <Button variant="outline" size="xs" onClick={() => handleScheduledBillClick(bill)}>
+                            Lihat Detail <ChevronRight className="h-3 w-3 ml-1"/>
                          </Button>
                     </div>
                   </div>
@@ -255,8 +270,8 @@ export function DashboardClient({ authUser }: DashboardClientProps) {
             </CardContent>
             {dashboardData.recentBills.length > 0 && ( 
                 <CardFooter>
-                    <Button variant="ghost" className="w-full text-primary" onClick={() => router.push('/app/history?tab=scheduled')}>
-                        Lihat Semua Terjadwal <ChevronRight className="ml-1 h-4 w-4"/>
+                    <Button variant="ghost" className="w-full text-primary" asChild>
+                       <Link href="/app/history?tab=scheduled">Lihat Semua Terjadwal <ChevronRight className="ml-1 h-4 w-4"/></Link>
                     </Button>
                 </CardFooter>
             )}
@@ -296,8 +311,8 @@ export function DashboardClient({ authUser }: DashboardClientProps) {
             </CardContent>
              {dashboardData.recentBills.length > 0 && ( 
                 <CardFooter>
-                     <Button variant="ghost" className="w-full text-primary" onClick={() => router.push('/app/history')}>
-                        Lihat Semua Riwayat <ChevronRight className="ml-1 h-4 w-4"/>
+                     <Button variant="ghost" className="w-full text-primary" asChild>
+                        <Link href="/app/history">Lihat Semua Riwayat <ChevronRight className="ml-1 h-4 w-4"/></Link>
                     </Button>
                 </CardFooter>
             )}
@@ -306,8 +321,10 @@ export function DashboardClient({ authUser }: DashboardClientProps) {
       </section>
       
       <div className="mt-8 text-center">
-        <Button size="lg" onClick={() => router.push('/app')}>
-            <TrendingUp className="mr-2 h-5 w-5"/> Buat Sesi Tagihan Baru
+        <Button size="lg" asChild>
+            <Link href="/app">
+              <TrendingUp className="mr-2 h-5 w-5"/> Buat Sesi Tagihan Baru
+            </Link>
         </Button>
       </div>
 
@@ -356,6 +373,48 @@ export function DashboardClient({ authUser }: DashboardClientProps) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      
+      <Dialog open={isScheduledDetailOpen} onOpenChange={setIsScheduledDetailOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center">
+              <CalendarClock className="mr-3 h-6 w-6 text-primary flex-shrink-0"/>
+                <span className="truncate">
+                  Detail Tagihan Terjadwal
+                </span>
+            </DialogTitle>
+            <DialogDescription>
+              Tagihan ini dijadwalkan dan belum bisa diisi.
+            </DialogDescription>
+          </DialogHeader>
+          {selectedScheduledBill && (
+            <div className="py-4 space-y-3">
+              <div className="flex justify-between items-center">
+                  <span className="text-sm font-medium text-muted-foreground">Nama Tagihan:</span>
+                  <span className="text-sm font-semibold">{selectedScheduledBill.name}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                  <span className="text-sm font-medium text-muted-foreground">Kategori:</span>
+                  <Badge variant="outline">{selectedScheduledBill.categoryName || 'Tidak ada'}</Badge>
+              </div>
+              <div className="flex justify-between items-center">
+                  <span className="text-sm font-medium text-muted-foreground">Akan Aktif Pada:</span>
+                  <span className="text-sm font-semibold">{format(parseISO(selectedScheduledBill.scheduled_at), "dd MMM yyyy, HH:mm", { locale: IndonesianLocale })}</span>
+              </div>
+               <div className="flex justify-between items-center">
+                  <span className="text-sm font-medium text-muted-foreground">Jumlah Partisipan Awal:</span>
+                  <span className="text-sm font-semibold">{selectedScheduledBill.participantCount}</span>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button type="button" variant="default" onClick={() => setIsScheduledDetailOpen(false)}>
+              Tutup
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
 
     </div>
   );

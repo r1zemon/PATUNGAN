@@ -174,11 +174,6 @@ export async function loginUserAction(formData: FormData) {
   revalidatePath('/', 'layout');
   revalidatePath('/', 'page');
   
-  // No longer redirecting from here, handled by page/middleware now
-  // if (role === 'admin') {
-  //   router.push('/admin');
-  // }
-
   return { success: true, user: loginData.user, role };
 }
 
@@ -390,7 +385,7 @@ export async function addParticipantAction(billId: string, personName: string, p
     const { data, error } = await supabase
       .from('bill_participants')
       .insert([insertData])
-      .select('id, name, profile_id, created_at')
+      .select('id, name, profile_id, created_at, profiles(avatar_url)')
       .single();
 
     if (error) {
@@ -407,6 +402,7 @@ export async function addParticipantAction(billId: string, personName: string, p
       id: data.id, 
       name: data.name,
       profile_id: data.profile_id,
+      avatar_url: (data.profiles as any)?.avatar_url || null,
     };
 
     return { success: true, person };
@@ -1039,7 +1035,7 @@ export async function getBillDetailsAction(billId: string): Promise<{ success: b
         };
     }
 
-    return { success: true, data: { billName: bill.name, createdAt: bill.created_at!, participants, items, summaryData, ownerId: bill.user_id } };
+    return { success: true, data: { billName: bill.name, createdAt: bill.created_at!, participants, items, summaryData, ownerId: bill.user_id, scheduledAt: bill.scheduled_at } };
   } catch (e: any) {
     return { success: false, error: e.message || "Kesalahan server saat mengambil detail." };
   }
@@ -1051,7 +1047,7 @@ export async function getAllUsersAction() {
         .from('profiles')
         .select('*')
         .neq('role', 'admin')
-        .neq('status', 'deleted'); // Exclude deleted users
+        .neq('status', 'deleted');
 
     if (error) {
         return { success: false, error: error.message };
@@ -1175,7 +1171,6 @@ export async function getAdminDashboardDataAction(): Promise<{ success: boolean;
     const { count: totalBills } = await supabase.from('bills').select('*', { count: 'exact', head: true });
     const { count: billsLastWeekCount } = await supabase.from('bills').select('id', { count: 'exact', head: true }).gt('created_at', oneWeekAgo);
     
-    // Updated for new pie chart
     const { count: activeChartUsers } = await supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('status', 'active').neq('role', 'admin');
     const { count: deletedUsers } = await supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('status', 'deleted').neq('role', 'admin');
 

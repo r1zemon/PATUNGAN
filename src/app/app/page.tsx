@@ -146,47 +146,45 @@ export default function SplitBillAppPage() {
         const result = await getBillDetailsAction(billId);
 
         if (result.success && result.data) {
-        const { billName, summaryData, participants, items, scheduledAt: loadedScheduledAt, categoryId: loadedCategoryId } = result.data;
+          const { billName, summaryData, participants, items, scheduledAt: loadedScheduledAt, categoryId: loadedCategoryId, ownerId } = result.data;
 
-        // Authorization check: is current user part of this bill?
-        if (!participants.some(p => p.profile_id === authUser?.id) && result.data.ownerId !== authUser?.id) {
-            setError("Anda tidak memiliki akses ke tagihan ini.");
-            toast({ variant: "destructive", title: "Akses Ditolak", description: "Anda bukan bagian dari sesi tagihan ini." });
-            router.push('/app');
-            return;
-        }
+          // Authorization check: is current user part of this bill?
+          if (!participants.some(p => p.profile_id === authUser?.id) && ownerId !== authUser?.id) {
+              setError("Anda tidak memiliki akses ke tagihan ini.");
+              toast({ variant: "destructive", title: "Akses Ditolak", description: "Anda bukan bagian dari sesi tagihan ini." });
+              router.push('/app');
+              return;
+          }
         
-        // Handle if this is a scheduled bill
-        if (loadedScheduledAt && isFuture(parseISO(loadedScheduledAt))) {
-            setCurrentBillId(billId);
-            setBillNameInput(billName || "");
-            setSelectedCategoryId(loadedCategoryId || null);
-            setBillTimingOption('schedule');
-            setScheduledAt(format(parseISO(loadedScheduledAt), "yyyy-MM-dd'T'HH:mm"));
-            setCurrentStep(0); // Stay on creation form
-            setIsLoading(false);
-            return;
-        }
+          setCurrentBillId(billId);
+          setCurrentBillName(billName || "");
+          
+          if (loadedScheduledAt && isFuture(parseISO(loadedScheduledAt))) {
+              setBillNameInput(billName || "");
+              setSelectedCategoryId(loadedCategoryId || null);
+              setBillTimingOption('schedule');
+              setScheduledAt(format(parseISO(loadedScheduledAt), "yyyy-MM-dd'T'HH:mm"));
+              setCurrentStep(0); 
+              setIsLoading(false);
+              return;
+          }
 
+          setPeople(participants);
+          setSplitItems(items);
+          setDetailedBillSummary(summaryData);
+          setBillDetails({
+              payerId: summaryData?.payerId || null,
+              taxAmount: summaryData?.taxAmount || 0,
+              tipAmount: summaryData?.tipAmount || 0,
+              taxTipSplitStrategy: summaryData?.taxTipSplitStrategy || "SPLIT_EQUALLY",
+          });
 
-        setCurrentBillId(billId);
-        setCurrentBillName(billName || "");
-        setPeople(participants);
-        setSplitItems(items);
-        setDetailedBillSummary(summaryData);
-        setBillDetails({
-            payerId: summaryData?.payerId || null,
-            taxAmount: summaryData?.taxAmount || 0,
-            tipAmount: summaryData?.tipAmount || 0,
-            taxTipSplitStrategy: summaryData?.taxTipSplitStrategy || "SPLIT_EQUALLY",
-        });
-
-        // Determine step based on whether the bill has been summarized (grandTotal > 0)
-        if (summaryData && summaryData.grandTotal > 0) {
-            setCurrentStep(2);
-        } else {
-            setCurrentStep(1);
-        }
+          // Determine step based on whether the bill has been summarized (grandTotal > 0)
+          if (summaryData && summaryData.grandTotal > 0) {
+              setCurrentStep(2);
+          } else {
+              setCurrentStep(1);
+          }
         } else {
         setError(result.error || "Gagal memuat sesi tagihan.");
         toast({ variant: "destructive", title: "Gagal Memuat Sesi", description: result.error });
@@ -530,15 +528,12 @@ export default function SplitBillAppPage() {
     setIsPaymentDialogOpen(true);
   };
 
-  const isScheduledBillActive = useMemo(() => {
-    if (billTimingOption === 'schedule' && scheduledAt) {
-        return !isFuture(parseISO(scheduledAt));
+  const isFormDisabledForScheduling = useMemo(() => {
+    if (currentBillId && billTimingOption === 'schedule' && scheduledAt) {
+        return isFuture(parseISO(scheduledAt));
     }
-    return true; // Not a scheduled bill, so it's active
-  }, [billTimingOption, scheduledAt]);
-
-  const isFormDisabledForScheduling = billTimingOption === 'schedule' && !isScheduledBillActive;
-
+    return false;
+  }, [currentBillId, billTimingOption, scheduledAt]);
 
   if (isLoading || !authUser) {
     return (
@@ -675,34 +670,36 @@ export default function SplitBillAppPage() {
                 )}
               </CardContent>
               <CardFooter className="p-6">
-                <div className="w-full flex flex-col items-center">
-                    <Button 
-                        onClick={startNewBillSession} 
-                        disabled={
-                            (!selectedCategoryId && !showNewCategoryInput) ||
-                            (showNewCategoryInput && !newCategoryInput.trim()) ||
-                            !billNameInput.trim() || 
-                            isCalculating || 
-                            (billTimingOption === 'schedule' && !scheduledAt) ||
-                            isFormDisabledForScheduling
+                  <div className="w-full flex flex-col items-center">
+                      <Button 
+                          onClick={startNewBillSession} 
+                          disabled={
+                              (!selectedCategoryId && !showNewCategoryInput) ||
+                              (showNewCategoryInput && !newCategoryInput.trim()) ||
+                              !billNameInput.trim() || 
+                              isCalculating || 
+                              (billTimingOption === 'schedule' && !scheduledAt) ||
+                              (currentBillId && isFormDisabledForScheduling)
+                          } 
+                          className="w-full" 
+                          size="lg"
+                      >
+                        {isCalculating ? <Loader2 className="animate-spin mr-2"/> : 
+                          currentBillId ? <ArrowRight className="mr-2 h-4 w-4" /> :
+                          billTimingOption === 'now' ? <ArrowRight className="mr-2 h-4 w-4" /> : <CalendarClock className="mr-2 h-4 w-4" />
+                        }
+                        {isCalculating ? "Memproses..." : 
+                          currentBillId ? "Lanjut & Isi Detail Tagihan" :
+                          billTimingOption === 'now' ? "Lanjut & Isi Detail Tagihan" : "Jadwalkan Tagihan"
                         } 
-                        className="w-full" 
-                        size="lg"
-                    >
-                      {isCalculating ? <Loader2 className="animate-spin mr-2"/> : 
-                        billTimingOption === 'now' ? <ArrowRight className="mr-2 h-4 w-4" /> : <CalendarClock className="mr-2 h-4 w-4" />
-                      }
-                      {isCalculating ? "Memproses..." : 
-                        billTimingOption === 'now' ? "Lanjut & Isi Detail Tagihan" : "Jadwalkan Tagihan"
-                      } 
-                    </Button>
-                    {isFormDisabledForScheduling && scheduledAt && (
-                         <p className="text-xs text-amber-600 dark:text-amber-500 mt-3 text-center">
-                            Tagihan ini belum aktif. Anda bisa melanjutkan pada <br/>
-                            <span className="font-semibold">{format(parseISO(scheduledAt), "dd MMMM yyyy, HH:mm", { locale: IndonesianLocale })}</span>
-                        </p>
-                    )}
-                </div>
+                      </Button>
+                      {currentBillId && isFormDisabledForScheduling && scheduledAt && (
+                          <p className="text-xs text-amber-600 dark:text-amber-500 mt-3 text-center">
+                              Tagihan ini belum aktif. Anda bisa melanjutkan pada <br/>
+                              <span className="font-semibold">{format(parseISO(scheduledAt), "dd MMMM yyyy, HH:mm", { locale: IndonesianLocale })}</span>
+                          </p>
+                      )}
+                  </div>
               </CardFooter>
             </Card>
           )}

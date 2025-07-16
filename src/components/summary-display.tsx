@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { formatCurrency } from "@/lib/utils";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { Users, Landmark, Percent, ArrowRight, Wallet, ShoppingBasket, FileText, Hash, Tag, CheckCircle, CreditCard, ShieldCheck, HandCoins, QrCode } from "lucide-react";
+import { Users, Landmark, Percent, ArrowRight, Wallet, ShoppingBasket, FileText, Hash, Tag, CheckCircle, CreditCard, ShieldCheck, HandCoins, QrCode, Home } from "lucide-react";
 import {
   Accordion,
   AccordionContent,
@@ -29,12 +29,13 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import Link from "next/link";
 
 interface SummaryDisplayProps {
   summary: DetailedBillSummaryData | null;
   people: Person[];
-  onPayWithQris: (settlement: Settlement) => void;
-  onMarkAsPaidOffline: (settlementId: string, method: 'offline') => void;
+  onPayWithQris?: (settlement: Settlement) => void;
+  onMarkAsPaidOffline?: (settlementId: string, method: 'offline') => void;
 }
 
 export function SummaryDisplay({ summary, people, onPayWithQris, onMarkAsPaidOffline }: SummaryDisplayProps) {
@@ -136,7 +137,7 @@ export function SummaryDisplay({ summary, people, onPayWithQris, onMarkAsPaidOff
                         </Badge>
                       ) : (
                         <>
-                          <Button variant="default" className="flex-1" onClick={() => onPayWithQris(settlement)}>
+                          <Button variant="default" className="flex-1" onClick={() => onPayWithQris?.(settlement)}>
                             <QrCode className="mr-2 h-4 w-4"/>QRIS
                           </Button>
                           <AlertDialog>
@@ -154,7 +155,7 @@ export function SummaryDisplay({ summary, people, onPayWithQris, onMarkAsPaidOff
                               </AlertDialogHeader>
                               <AlertDialogFooter>
                                 <AlertDialogCancel>Batal</AlertDialogCancel>
-                                <AlertDialogAction onClick={() => onMarkAsPaidOffline(settlement.id, 'offline')}>
+                                <AlertDialogAction onClick={() => onMarkAsPaidOffline?.(settlement.id, 'offline')}>
                                   Ya, Tandai Lunas
                                 </AlertDialogAction>
                               </AlertDialogFooter>
@@ -239,6 +240,14 @@ export function SummaryDisplay({ summary, people, onPayWithQris, onMarkAsPaidOff
             </CardContent>
         </Card>
       )}
+       <CardFooter className="flex justify-center mt-4">
+          <Button asChild variant="outline">
+            <Link href="/app">
+              <Home className="mr-2 h-4 w-4" />
+              Kembali ke Beranda
+            </Link>
+          </Button>
+       </CardFooter>
     </div>
   );
 }

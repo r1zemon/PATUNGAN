@@ -8,14 +8,14 @@ import { useRouter } from "next/navigation";
 import { format, parseISO } from 'date-fns';
 import { id as IndonesianLocale } from 'date-fns/locale';
 
-import type { BillHistoryEntry, DetailedBillSummaryData, Person, FetchedBillDetails } from "@/lib/types";
+import type { BillHistoryEntry, DetailedBillSummaryData, Person, FetchedBillDetails, Settlement } from "@/lib/types";
 import type { User as SupabaseUser } from "@supabase/supabase-js";
-import { getCurrentUserAction, getBillsHistoryAction, getBillDetailsAction } from "@/lib/actions";
+import { getCurrentUserAction, getBillsHistoryAction, getBillDetailsAction, markSettlementPaidAction } from "@/lib/actions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
-import { Power, FilePlus, Loader2, History as HistoryIconLucide, Users, Coins, CalendarDays, BarChart2, Star, Zap, ShoppingBag, Tag, ListChecks, ChevronRight, Clock } from "lucide-react"; 
+import { Power, FilePlus, Loader2, History as HistoryIconLucide, Users, Coins, CalendarDays, BarChart2, Star, Zap, ShoppingBag, Tag, ListChecks, ChevronRight, Clock, QrCode } from "lucide-react"; 
 import {
   Dialog,
   DialogContent,
@@ -50,6 +50,9 @@ export default function HistoryPage() {
   const [isLoadingBillDetail, setIsLoadingBillDetail] = useState(false);
   const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
+  const [isPaying, setIsPaying] = useState(false);
+  const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false);
+  const [selectedSettlementForPayment, setSelectedSettlementForPayment] = useState<Settlement | null>(null);
 
 
   const { toast } = useToast();
@@ -100,6 +103,39 @@ export default function HistoryPage() {
     setIsLoadingBillDetail(false);
   };
   
+  const handleMarkSettlementAsPaid = async (settlementId: string, method: 'qris' | 'offline') => {
+    setIsPaying(true);
+    const result = await markSettlementPaidAction(settlementId, method);
+    if (result.success) {
+      toast({ title: "Pembayaran Berhasil", description: `Tagihan telah ditandai lunas (${method}).` });
+      
+      // Update local state to reflect the change without a full reload
+      setSelectedBillForDetail(prev => {
+        if (!prev || !prev.summaryData) return null;
+        return {
+          ...prev,
+          summaryData: {
+            ...prev.summaryData,
+            settlements: prev.summaryData.settlements.map(s => s.id === settlementId ? { ...s, status: 'paid' } : s)
+          }
+        }
+      });
+
+      if (isPaymentDialogOpen) {
+        setIsPaymentDialogOpen(false);
+        setSelectedSettlementForPayment(null);
+      }
+    } else {
+      toast({ variant: "destructive", title: "Pembayaran Gagal", description: result.error });
+    }
+    setIsPaying(false);
+  };
+  
+  const handleOpenPaymentDialog = (settlement: Settlement) => {
+    setSelectedSettlementForPayment(settlement);
+    setIsPaymentDialogOpen(true);
+  };
+
   if (isLoadingUser || isLoadingHistory) {
     return (
       <div className="relative flex flex-col min-h-screen bg-background bg-money-pattern bg-[length:120px_auto] before:content-[''] before:absolute before:inset-0 before:bg-white/[.90] before:dark:bg-black/[.90] before:z-0">
@@ -232,8 +268,8 @@ export default function HistoryPage() {
                 <SummaryDisplay 
                   summary={selectedBillForDetail.summaryData} 
                   people={selectedBillForDetail.participants} 
-                  onPayWithQris={() => {}} // Dummy functions for now
-                  onMarkAsPaidOffline={() => {}}
+                  onPayWithQris={handleOpenPaymentDialog}
+                  onMarkAsPaidOffline={handleMarkSettlementAsPaid}
                 />
               </div>
             ) : (
@@ -246,6 +282,53 @@ export default function HistoryPage() {
             </Button>
           </DialogFooter>
         </DialogContent>
+      </Dialog>
+      
+      {/* Payment Dialog for History Page */}
+      <Dialog open={isPaymentDialogOpen} onOpenChange={setIsPaymentDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="flex items-center"><QrCode className="mr-2"/>Bayar dengan QRIS</DialogTitle>
+              <DialogDescription>
+                Pindai QR code di bawah ini untuk membayar bagian Anda.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="py-4 text-center">
+              <div className="flex justify-center mb-4">
+                <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/d/d0/QR_code_for_mobile_English_Wikipedia.svg/375px-QR_code_for_mobile_English_Wikipedia.svg.png" alt="QR Code" width="250" height="250" data-ai-hint="qr code" />
+              </div>
+              {selectedSettlementForPayment && (
+                <div className="space-y-2 text-sm max-w-xs mx-auto">
+                    <div className="flex justify-between">
+                        <span className="text-muted-foreground">Tagihan untuk:</span>
+                        <span className="font-medium">{selectedSettlementForPayment.from}</span>
+                    </div>
+                     <div className="flex justify-between">
+                        <span className="text-muted-foreground">Jumlah Tagihan:</span>
+                        <span className="font-medium">{formatCurrency(selectedSettlementForPayment.amount)}</span>
+                    </div>
+                     <div className="flex justify-between">
+                        <span className="text-muted-foreground">Biaya Layanan (1%):</span>
+                        <span className="font-medium">{formatCurrency(selectedSettlementForPayment.serviceFee)}</span>
+                    </div>
+                     <div className="flex justify-between font-bold text-base border-t pt-2 mt-2">
+                        <span>Total Pembayaran:</span>
+                        <span>{formatCurrency(selectedSettlementForPayment.amount + selectedSettlementForPayment.serviceFee)}</span>
+                    </div>
+                </div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsPaymentDialogOpen(false)}>Batal</Button>
+              <Button 
+                onClick={() => selectedSettlementForPayment && handleMarkSettlementAsPaid(selectedSettlementForPayment.id, 'qris')}
+                disabled={isPaying || !selectedSettlementForPayment}
+              >
+                {isPaying ? <Loader2 className="animate-spin mr-2"/> : null}
+                Konfirmasi Pembayaran
+              </Button>
+            </DialogFooter>
+          </DialogContent>
       </Dialog>
 
 

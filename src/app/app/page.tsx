@@ -35,7 +35,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Separator } from "@/components/ui/separator";
 import { UserCheck, Loader2, UserPlus, ArrowRight, Trash2, Users, ScanLine, PlusCircle, Edit2, ListChecks, FilePlus, FileText, CalendarClock, FolderPlus, Tag, Percent, Landmark, Power, User, Clock, QrCode, CreditCard, HandCoins } from "lucide-react"; 
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
-import { format } from 'date-fns';
+import { format, isFuture, parseISO } from 'date-fns';
 import { id as IndonesianLocale } from 'date-fns/locale';
 import { LandingHeader } from "@/components/landing-header";
 import { Badge } from "@/components/ui/badge";
@@ -146,7 +146,7 @@ export default function SplitBillAppPage() {
         const result = await getBillDetailsAction(billId);
 
         if (result.success && result.data) {
-        const { billName, summaryData, participants, items, scheduledAt } = result.data;
+        const { billName, summaryData, participants, items, scheduledAt: loadedScheduledAt, categoryId: loadedCategoryId } = result.data;
 
         // Authorization check: is current user part of this bill?
         if (!participants.some(p => p.profile_id === authUser?.id) && result.data.ownerId !== authUser?.id) {
@@ -155,17 +155,19 @@ export default function SplitBillAppPage() {
             router.push('/app');
             return;
         }
-
-        // Check if a scheduled bill is being accessed before its time
-        if (scheduledAt && new Date(scheduledAt) > new Date()) {
-            toast({
-                variant: "destructive",
-                title: "Tagihan Belum Aktif",
-                description: `Tagihan ini dijadwalkan untuk ${format(new Date(scheduledAt), "dd MMM yyyy 'pukul' HH:mm", { locale: IndonesianLocale })}.`,
-            });
-            router.push('/'); // Redirect to dashboard
+        
+        // Handle if this is a scheduled bill
+        if (loadedScheduledAt && isFuture(parseISO(loadedScheduledAt))) {
+            setCurrentBillId(billId);
+            setBillNameInput(billName || "");
+            setSelectedCategoryId(loadedCategoryId || null);
+            setBillTimingOption('schedule');
+            setScheduledAt(format(parseISO(loadedScheduledAt), "yyyy-MM-dd'T'HH:mm"));
+            setCurrentStep(0); // Stay on creation form
+            setIsLoading(false);
             return;
         }
+
 
         setCurrentBillId(billId);
         setCurrentBillName(billName || "");
@@ -298,7 +300,7 @@ export default function SplitBillAppPage() {
     if (result.success && result.billId) {
         if (isScheduling) {
             toast({ title: "Tagihan Dijadwalkan", description: `Tagihan "${billNameInput.trim()}" berhasil dijadwalkan.`});
-            resetAppToStart(false);
+            router.push('/');
         } else {
             toast({ title: "Sesi Tagihan Dimulai", description: `Tagihan "${billNameInput.trim()}" siap untuk diisi.`});
             router.push(`/app?billId=${result.billId}`, { scroll: false });
@@ -374,7 +376,7 @@ export default function SplitBillAppPage() {
     setPeople(prev => prev.filter(p => p.id !== personIdToRemove));
     toast({ title: "Partisipan Dihapus"});
 
-    const result = await removeParticipantAction(participantIdToRemove);
+    const result = await removeParticipantAction(personIdToRemove);
     if (!result.success) {
        toast({ variant: "destructive", title: "Gagal Menghapus Partisipan", description: result.error });
        setPeople(originalPeople); // Revert on failure
@@ -528,6 +530,15 @@ export default function SplitBillAppPage() {
     setIsPaymentDialogOpen(true);
   };
 
+  const isScheduledBillActive = useMemo(() => {
+    if (billTimingOption === 'schedule' && scheduledAt) {
+        return !isFuture(parseISO(scheduledAt));
+    }
+    return true; // Not a scheduled bill, so it's active
+  }, [billTimingOption, scheduledAt]);
+
+  const isFormDisabledForScheduling = billTimingOption === 'schedule' && !isScheduledBillActive;
+
 
   if (isLoading || !authUser) {
     return (
@@ -664,25 +675,34 @@ export default function SplitBillAppPage() {
                 )}
               </CardContent>
               <CardFooter className="p-6">
-                <Button 
-                    onClick={startNewBillSession} 
-                    disabled={
-                        (!selectedCategoryId && !showNewCategoryInput) ||
-                        (showNewCategoryInput && !newCategoryInput.trim()) ||
-                        !billNameInput.trim() || 
-                        isCalculating || 
-                        (billTimingOption === 'schedule' && !scheduledAt)
-                    } 
-                    className="w-full" 
-                    size="lg"
-                >
-                  {isCalculating ? <Loader2 className="animate-spin mr-2"/> : 
-                    billTimingOption === 'now' ? <ArrowRight className="mr-2 h-4 w-4" /> : <CalendarClock className="mr-2 h-4 w-4" />
-                  }
-                  {isCalculating ? "Memproses..." : 
-                    billTimingOption === 'now' ? "Lanjut & Isi Detail Tagihan" : "Jadwalkan Tagihan"
-                  } 
-                </Button>
+                <div className="w-full flex flex-col items-center">
+                    <Button 
+                        onClick={startNewBillSession} 
+                        disabled={
+                            (!selectedCategoryId && !showNewCategoryInput) ||
+                            (showNewCategoryInput && !newCategoryInput.trim()) ||
+                            !billNameInput.trim() || 
+                            isCalculating || 
+                            (billTimingOption === 'schedule' && !scheduledAt) ||
+                            isFormDisabledForScheduling
+                        } 
+                        className="w-full" 
+                        size="lg"
+                    >
+                      {isCalculating ? <Loader2 className="animate-spin mr-2"/> : 
+                        billTimingOption === 'now' ? <ArrowRight className="mr-2 h-4 w-4" /> : <CalendarClock className="mr-2 h-4 w-4" />
+                      }
+                      {isCalculating ? "Memproses..." : 
+                        billTimingOption === 'now' ? "Lanjut & Isi Detail Tagihan" : "Jadwalkan Tagihan"
+                      } 
+                    </Button>
+                    {isFormDisabledForScheduling && scheduledAt && (
+                         <p className="text-xs text-amber-600 dark:text-amber-500 mt-3 text-center">
+                            Tagihan ini belum aktif. Anda bisa melanjutkan pada <br/>
+                            <span className="font-semibold">{format(parseISO(scheduledAt), "dd MMMM yyyy, HH:mm", { locale: IndonesianLocale })}</span>
+                        </p>
+                    )}
+                </div>
               </CardFooter>
             </Card>
           )}

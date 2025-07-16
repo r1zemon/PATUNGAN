@@ -142,6 +142,7 @@ export interface FetchedBillDetails {
   participants: Person[];
   ownerId: string | null;
   scheduledAt: string | null;
+  categoryId: string | null;
 }
 
 export interface FetchedBillDetailsWithItems extends FetchedBillDetails {

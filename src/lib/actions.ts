@@ -921,7 +921,7 @@ export async function getBillDetailsAction(billId: string): Promise<{ success: b
   try {
     const { data: bill, error: billError } = await supabase
       .from('bills')
-      .select('id, name, user_id, created_at, grand_total, tax_amount, tip_amount, payer_participant_id, tax_tip_split_strategy, scheduled_at')
+      .select('id, name, user_id, created_at, grand_total, tax_amount, tip_amount, payer_participant_id, tax_tip_split_strategy, scheduled_at, category_id')
       .eq('id', billId)
       .single();
     if (billError) return { success: false, error: "Gagal mengambil detail tagihan: " + billError.message };
@@ -1035,7 +1035,7 @@ export async function getBillDetailsAction(billId: string): Promise<{ success: b
         };
     }
 
-    return { success: true, data: { billName: bill.name, createdAt: bill.created_at!, participants, items, summaryData, ownerId: bill.user_id, scheduledAt: bill.scheduled_at } };
+    return { success: true, data: { billName: bill.name, createdAt: bill.created_at!, participants, items, summaryData, ownerId: bill.user_id, scheduledAt: bill.scheduled_at, categoryId: bill.category_id } };
   } catch (e: any) {
     return { success: false, error: e.message || "Kesalahan server saat mengambil detail." };
   }
